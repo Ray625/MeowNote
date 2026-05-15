@@ -75,7 +75,15 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const todayEvents = computed(() =>
     events.value
       .filter((event) => isSameLocalDate(event.occurredAt))
-      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
+      .sort((a, b) => {
+        const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
+
+        if (occurredAtOrder !== 0) {
+          return occurredAtOrder
+        }
+
+        return a.createdAt.localeCompare(b.createdAt)
+      }),
   )
 
   const eventsById = computed(() => new Map(events.value.map((event) => [event.id, event])))

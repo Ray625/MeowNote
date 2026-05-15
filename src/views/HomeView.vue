@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { CatEvent, EventCategory } from '@/types'
 
@@ -9,6 +10,10 @@ const { catsById, categoriesById, quickActionCategories, selectedCat, todayEvent
   storeToRefs(catTrackerStore)
 
 const lastCreatedEventId = ref<string>()
+const editingEventId = ref<string>()
+const editingOccurredAt = ref('')
+const editingNote = ref('')
+const deleteConfirmEventId = ref<string>()
 let successMessageTimeout: ReturnType<typeof window.setTimeout> | undefined
 
 interface EventListItem {
@@ -38,6 +43,18 @@ const successMessage = computed(() => {
   return category ? `已記錄：${category.name}` : '已記錄'
 })
 
+const editingEvent = computed(() =>
+  editingEventId.value ? catTrackerStore.eventsById.get(editingEventId.value) : undefined,
+)
+
+const editingCategory = computed(() =>
+  editingEvent.value ? categoriesById.value.get(editingEvent.value.categoryId) : undefined,
+)
+
+const deleteConfirmEvent = computed(() =>
+  deleteConfirmEventId.value ? catTrackerStore.eventsById.get(deleteConfirmEventId.value) : undefined,
+)
+
 function recordQuickEvent(categoryId: string): void {
   const event = catTrackerStore.quickRecord(categoryId)
 
@@ -62,12 +79,80 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   }
 }
 
+function openEditEvent(event: CatEvent): void {
+  editingEventId.value = event.id
+  editingOccurredAt.value = toDateTimeLocalValue(event.occurredAt)
+  editingNote.value = event.note ?? ''
+}
+
+function closeEditEvent(): void {
+  editingEventId.value = undefined
+  editingOccurredAt.value = ''
+  editingNote.value = ''
+  deleteConfirmEventId.value = undefined
+}
+
+function saveEditingEvent(): void {
+  if (!editingEvent.value || !editingOccurredAt.value) {
+    return
+  }
+
+  catTrackerStore.updateEvent(editingEvent.value.id, {
+    occurredAt: fromDateTimeLocalValue(editingOccurredAt.value),
+    note: editingNote.value.trim() || undefined,
+  })
+
+  closeEditEvent()
+}
+
+function deleteEditingEvent(): void {
+  if (!editingEvent.value) {
+    return
+  }
+
+  openDeleteConfirm(editingEvent.value)
+}
+
+function openDeleteConfirm(event: CatEvent): void {
+  deleteConfirmEventId.value = event.id
+}
+
+function confirmDeleteEvent(): void {
+  if (!deleteConfirmEvent.value) {
+    return
+  }
+
+  const deletedEventId = deleteConfirmEvent.value.id
+
+  catTrackerStore.deleteEvent(deletedEventId)
+  deleteConfirmEventId.value = undefined
+
+  if (editingEventId.value === deletedEventId) {
+    closeEditEvent()
+  }
+}
+
+function cancelDeleteEvent(): void {
+  deleteConfirmEventId.value = undefined
+}
+
 function formatEventTime(dateTime: string): string {
   return new Intl.DateTimeFormat('zh-TW', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   }).format(new Date(dateTime))
+}
+
+function toDateTimeLocalValue(dateTime: string): string {
+  const date = new Date(dateTime)
+  const timezoneOffsetMs = date.getTimezoneOffset() * 60_000
+
+  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16)
+}
+
+function fromDateTimeLocalValue(value: string): string {
+  return new Date(value).toISOString()
 }
 </script>
 
@@ -91,18 +176,28 @@ function formatEventTime(dateTime: string): string {
           class="event-item"
           :style="getCategoryStyle(item.category)"
         >
-          <time class="event-item__time" :datetime="item.event.occurredAt">{{ item.time }}</time>
-          <div class="event-item__content">
-            <strong class="event-item__category">
-              <span class="category-dot" aria-hidden="true"></span>
-              <span>{{ item.category?.name ?? '未分類' }}</span>
-            </strong>
-            <span class="event-item__meta">{{ item.catName }}</span>
-            <span v-if="item.event.severity" class="event-item__meta">
-              嚴重度 {{ item.event.severity }}
-            </span>
-            <p v-if="item.event.note" class="event-item__note">{{ item.event.note }}</p>
-          </div>
+          <button class="event-item__button" type="button" @click="openEditEvent(item.event)">
+            <time class="event-item__time" :datetime="item.event.occurredAt">{{ item.time }}</time>
+            <div class="event-item__content">
+              <strong class="event-item__category">
+                <span class="category-dot" aria-hidden="true"></span>
+                <span>{{ item.category?.name ?? '未分類' }}</span>
+              </strong>
+              <span class="event-item__meta">{{ item.catName }}</span>
+              <span v-if="item.event.severity" class="event-item__meta">
+                嚴重度 {{ item.event.severity }}
+              </span>
+              <p v-if="item.event.note" class="event-item__note">{{ item.event.note }}</p>
+            </div>
+          </button>
+          <button
+            class="event-item__delete"
+            type="button"
+            :aria-label="`刪除 ${item.category?.name ?? '未分類'} 紀錄`"
+            @click="openDeleteConfirm(item.event)"
+          >
+            ×
+          </button>
         </li>
       </ol>
 
@@ -133,6 +228,74 @@ function formatEventTime(dateTime: string): string {
         </div>
       </div>
     </section>
+
+    <div
+      v-if="editingEvent"
+      class="modal-backdrop"
+      role="presentation"
+      @click.self="closeEditEvent"
+    >
+      <section
+        class="event-modal"
+        aria-labelledby="event-modal-title"
+        role="dialog"
+        aria-modal="true"
+        :style="getCategoryStyle(editingCategory)"
+      >
+        <div class="event-modal__header">
+          <div>
+            <span class="event-modal__eyebrow">編輯紀錄</span>
+            <h2 id="event-modal-title" class="event-modal__title">
+              <span class="category-dot" aria-hidden="true"></span>
+              <span>{{ editingCategory?.name ?? '未分類' }}</span>
+            </h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="關閉編輯視窗"
+            @click="closeEditEvent"
+          >
+            ×
+          </button>
+        </div>
+
+        <form class="event-form" @submit.prevent="saveEditingEvent">
+          <label class="field">
+            <span class="field__label">發生時間</span>
+            <input v-model="editingOccurredAt" class="field__control" type="datetime-local" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">備註</span>
+            <textarea
+              v-model="editingNote"
+              class="field__control field__control--textarea"
+              placeholder="補充症狀、狀態或其他觀察"
+              rows="5"
+            ></textarea>
+          </label>
+
+          <button class="danger-button" type="button" @click="deleteEditingEvent">刪除紀錄</button>
+
+          <div class="event-form__actions">
+            <button class="secondary-button" type="button" @click="closeEditEvent">取消</button>
+            <button class="primary-button" type="submit">儲存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <ConfirmDialog
+      v-if="deleteConfirmEvent"
+      title="刪除這筆紀錄？"
+      message="刪除後無法復原，這筆今日紀錄會從列表中移除。"
+      confirm-label="刪除"
+      cancel-label="保留"
+      tone="danger"
+      @cancel="cancelDeleteEvent"
+      @confirm="confirmDeleteEvent"
+    />
   </main>
 </template>
 
@@ -277,13 +440,59 @@ h2 {
 
 .event-item {
   display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 14px;
-  padding: 14px;
+  grid-template-columns: 1fr 48px;
+  align-items: stretch;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--category-color) 34%, #d8e0d8);
   border-left: 5px solid var(--category-color);
   border-radius: 8px;
   background: color-mix(in srgb, var(--category-color) 7%, #ffffff);
+}
+
+.event-item__button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 64px 1fr;
+  gap: 14px;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.event-item__delete {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--category-color) 24%, #d8e0d8);
+  background: transparent;
+  color: color-mix(in srgb, var(--category-color) 82%, #17201b);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.event-item__button:hover {
+  background: color-mix(in srgb, var(--category-color) 10%, transparent);
+}
+
+.event-item__delete:hover {
+  background: color-mix(in srgb, #b33a2b 10%, transparent);
+  color: #a83224;
+}
+
+.event-item__button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--category-color) 62%, #ffffff);
+  outline-offset: 2px;
+}
+
+.event-item__delete:focus-visible {
+  outline: 3px solid #e6a097;
+  outline-offset: 2px;
 }
 
 .event-item__time {
@@ -333,6 +542,133 @@ h2 {
   padding: 24px 0;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(23, 32, 27, 0.34);
+}
+
+.event-modal {
+  width: min(100%, 520px);
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--category-color) 34%, #d8e0d8);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(23, 32, 27, 0.24);
+}
+
+.event-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.event-modal__eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #65736a;
+  font-size: 0.8125rem;
+}
+
+.event-modal__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: color-mix(in srgb, var(--category-color) 82%, #17201b);
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d8e0d8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #34423a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.event-form {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field__label {
+  color: #34423a;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.field__control {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd8cf;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #ffffff;
+  color: #17201b;
+  font: inherit;
+}
+
+.field__control:focus {
+  border-color: var(--category-color);
+  outline: 3px solid color-mix(in srgb, var(--category-color) 22%, transparent);
+}
+
+.field__control--textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.event-form__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  min-height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.primary-button {
+  border: 1px solid var(--category-color);
+  background: var(--category-color);
+  color: #ffffff;
+}
+
+.secondary-button {
+  border: 1px solid #cbd8cf;
+  background: #ffffff;
+  color: #34423a;
+}
+
+.danger-button {
+  border: 1px solid #d8aaa3;
+  background: #fff5f3;
+  color: #a83224;
+}
+
 @media (max-width: 560px) {
   .home-view {
     padding: 22px 16px 214px;
@@ -353,8 +689,21 @@ h2 {
   }
 
   .event-item {
+    grid-template-columns: 1fr 44px;
+    border-radius: 8px;
+  }
+
+  .event-item__button {
     grid-template-columns: 56px 1fr;
     padding: 12px;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+  }
+
+  .event-modal {
+    padding: 16px;
   }
 }
 </style>
