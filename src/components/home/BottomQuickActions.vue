@@ -41,7 +41,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
       <div class="quick-record-panel__heading">
         <h2 id="quick-record-title">快速記錄</h2>
         <button
-          class="panel-close"
+          class="ui-button ui-button--icon panel-close"
           type="button"
           aria-label="關閉快速記錄"
           @click="catTrackerStore.closeQuickRecord"
@@ -54,7 +54,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
         <button
           v-for="category in quickActionCategories"
           :key="category.id"
-          class="quick-action"
+          class="ui-button ui-button--category quick-action"
           :style="getCategoryStyle(category)"
           type="button"
           @click="recordQuickEvent(category.id)"
@@ -70,8 +70,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
     <div class="bottom-navigation__inner">
       <span class="bottom-navigation__item">月曆</span>
       <button
-        class="add-button"
-        :class="{ 'add-button--active': isQuickRecordOpen }"
+        class="ui-button ui-button--primary add-button"
         type="button"
         aria-label="新增快速紀錄"
         @click="catTrackerStore.toggleQuickRecord"
@@ -119,12 +118,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 .panel-close {
   width: 36px;
   height: 36px;
-  border: 1px solid #d8e0d8;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #34423a;
-  cursor: pointer;
-  font: inherit;
   font-size: 1.35rem;
   line-height: 1;
 }
@@ -143,18 +136,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   gap: 8px;
   min-height: 52px;
   padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--category-color) 48%, #cbd8cf);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--category-color) 12%, #ffffff);
-  color: #17201b;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
-}
-
-.quick-action:hover {
-  border-color: var(--category-color);
-  background: color-mix(in srgb, var(--category-color) 18%, #ffffff);
 }
 
 .category-dot {
@@ -196,30 +177,15 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 .add-button {
+  --button-color: #557563;
+  --button-hover-color: #3f614d;
+
   width: 62px;
   height: 62px;
   place-self: center;
-  border: 1px solid #557563;
   border-radius: 999px;
-  background: #557563;
-  color: #ffffff;
-  cursor: pointer;
-  font: inherit;
   font-size: 2rem;
-  font-weight: 700;
   line-height: 1;
-  box-shadow: 0 12px 28px rgba(85, 117, 99, 0.34);
-}
-
-.add-button--active {
-  transform: rotate(45deg);
-}
-
-.quick-action:focus-visible,
-.add-button:focus-visible,
-.panel-close:focus-visible {
-  outline: 3px solid #8fc7a0;
-  outline-offset: 2px;
 }
 
 @media (max-width: 560px) {

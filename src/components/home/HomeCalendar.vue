@@ -19,7 +19,7 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
     <div class="calendar-header">
       <button
-        class="month-button"
+        class="ui-button ui-button--icon month-button"
         type="button"
         aria-label="上一個月"
         @click="catTrackerStore.showPreviousMonth"
@@ -28,7 +28,7 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
       </button>
       <h1 id="calendar-title" class="month-title">{{ monthTitle }}</h1>
       <button
-        class="month-button"
+        class="ui-button ui-button--icon month-button"
         type="button"
         aria-label="下一個月"
         @click="catTrackerStore.showNextMonth"
@@ -110,12 +110,6 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 .month-button {
   width: 36px;
   height: 36px;
-  border: 1px solid #d8e0d8;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #34423a;
-  cursor: pointer;
-  font: inherit;
   font-size: 1.35rem;
   line-height: 1;
 }
@@ -187,7 +181,6 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
   line-height: 14px;
 }
 
-.month-button:focus-visible,
 .calendar-day:focus-visible {
   outline: 3px solid #8fc7a0;
   outline-offset: 2px;

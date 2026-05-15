@@ -80,7 +80,7 @@ function fromDateTimeLocalValue(value: string): string {
           </h2>
         </div>
         <button
-          class="icon-button"
+          class="ui-button ui-button--icon icon-button"
           type="button"
           aria-label="關閉編輯視窗"
           @click="closeEditEvent"
@@ -105,11 +105,15 @@ function fromDateTimeLocalValue(value: string): string {
           ></textarea>
         </label>
 
-        <button class="danger-button" type="button" @click="deleteEditingEvent">刪除紀錄</button>
+        <button class="ui-button ui-button--danger danger-button" type="button" @click="deleteEditingEvent">
+          刪除紀錄
+        </button>
 
         <div class="event-form__actions">
-          <button class="secondary-button" type="button" @click="closeEditEvent">取消</button>
-          <button class="primary-button" type="submit">儲存</button>
+          <button class="ui-button ui-button--secondary secondary-button" type="button" @click="closeEditEvent">
+            取消
+          </button>
+          <button class="ui-button ui-button--primary primary-button" type="submit">儲存</button>
         </div>
       </form>
     </section>
@@ -172,12 +176,6 @@ function fromDateTimeLocalValue(value: string): string {
 .icon-button {
   width: 36px;
   height: 36px;
-  border: 1px solid #d8e0d8;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #34423a;
-  cursor: pointer;
-  font: inherit;
   font-size: 1.35rem;
   line-height: 1;
 }
@@ -230,33 +228,11 @@ function fromDateTimeLocalValue(value: string): string {
 .secondary-button,
 .danger-button {
   min-height: 44px;
-  border-radius: 8px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
 }
 
 .primary-button {
-  border: 1px solid var(--category-color);
-  background: var(--category-color);
-  color: #ffffff;
-}
-
-.secondary-button {
-  border: 1px solid #cbd8cf;
-  background: #ffffff;
-  color: #34423a;
-}
-
-.danger-button {
-  border: 1px solid #d8aaa3;
-  background: #fff5f3;
-  color: #a83224;
-}
-
-.icon-button:focus-visible {
-  outline: 3px solid #8fc7a0;
-  outline-offset: 2px;
+  --button-color: var(--category-color);
+  --button-hover-color: color-mix(in srgb, var(--category-color) 88%, #17201b);
 }
 
 @media (max-width: 560px) {

@@ -36,10 +36,23 @@ const emit = defineEmits<{
       </div>
 
       <div class="confirm-dialog__actions">
-        <button class="confirm-dialog__button confirm-dialog__button--cancel" type="button" @click="emit('cancel')">
+        <button
+          class="ui-button ui-button--secondary confirm-dialog__button"
+          type="button"
+          @click="emit('cancel')"
+        >
           {{ cancelLabel }}
         </button>
-        <button class="confirm-dialog__button confirm-dialog__button--confirm" type="button" @click="emit('confirm')">
+        <button
+          class="ui-button confirm-dialog__button"
+          :class="
+            tone === 'danger'
+              ? 'ui-button--primary confirm-dialog__button--danger'
+              : 'ui-button--primary'
+          "
+          type="button"
+          @click="emit('confirm')"
+        >
           {{ confirmLabel }}
         </button>
       </div>
@@ -99,35 +112,14 @@ const emit = defineEmits<{
 
 .confirm-dialog__button {
   min-height: 42px;
-  border-radius: 8px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
 }
 
-.confirm-dialog__button--cancel {
-  border: 1px solid #cbd8cf;
-  background: #ffffff;
-  color: #34423a;
+.confirm-dialog__button--danger {
+  --button-color: #b33a2b;
+  --button-hover-color: #932f24;
 }
 
-.confirm-dialog__button--confirm {
-  border: 1px solid #557563;
-  background: #557563;
-  color: #ffffff;
-}
-
-.confirm-dialog--danger .confirm-dialog__button--confirm {
-  border-color: #b33a2b;
-  background: #b33a2b;
-}
-
-.confirm-dialog__button:focus-visible {
-  outline: 3px solid #8fc7a0;
-  outline-offset: 2px;
-}
-
-.confirm-dialog--danger .confirm-dialog__button--confirm:focus-visible {
+.confirm-dialog__button--danger:focus-visible {
   outline-color: #e6a097;
 }
 </style>
