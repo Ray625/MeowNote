@@ -34,8 +34,25 @@ function createInitialState(): CatTrackerState {
   }
 }
 
+function normalizeState(state: CatTrackerState): CatTrackerState {
+  const fallbackState = createInitialState()
+  const cats = state.cats.length > 0 ? state.cats : fallbackState.cats
+  const categories =
+    state.categories.length > 0 ? state.categories : fallbackState.categories
+  const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
+    ? state.selectedCatId
+    : cats[0]?.id ?? DEFAULT_CAT_ID
+
+  return {
+    cats,
+    categories,
+    events: state.events,
+    selectedCatId,
+  }
+}
+
 export const useCatTrackerStore = defineStore('catTracker', () => {
-  const initialState = readJson<CatTrackerState>(STORAGE_KEY, createInitialState())
+  const initialState = normalizeState(readJson<CatTrackerState>(STORAGE_KEY, createInitialState()))
 
   const cats = ref<Cat[]>(initialState.cats)
   const categories = ref<EventCategory[]>(initialState.categories)
@@ -70,7 +87,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         selectedCatId: selectedCatId.value,
       })
     },
-    { deep: true },
+    { deep: true, immediate: true },
   )
 
   function selectCat(catId: string): void {
