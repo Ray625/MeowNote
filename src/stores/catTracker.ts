@@ -28,6 +28,22 @@ interface CatTrackerState {
   selectedCatId: string
 }
 
+export interface CalendarDay {
+  date: Date
+  key: string
+  dayNumber: number
+  eventCount: number
+  isCurrentMonth: boolean
+  isSelected: boolean
+  isToday: boolean
+}
+
+export interface EventListItem {
+  event: CatEvent
+  category?: EventCategory
+  time: string
+}
+
 function createInitialState(): CatTrackerState {
   const now = getIsoNow()
 
@@ -37,6 +53,46 @@ function createInitialState(): CatTrackerState {
     events: [],
     selectedCatId: DEFAULT_CAT_ID,
   }
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+function addMonths(date: Date, months: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1)
+}
+
+function isSameDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function formatEventTime(dateTime: string): string {
+  return new Intl.DateTimeFormat('zh-TW', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(dateTime))
 }
 
 function normalizeState(state: CatTrackerState): CatTrackerState {
@@ -60,11 +116,18 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
 
 export const useCatTrackerStore = defineStore('catTracker', () => {
   const initialState = normalizeState(readJson<CatTrackerState>(STORAGE_KEY, createInitialState()))
+  const today = new Date()
 
   const cats = ref<Cat[]>(initialState.cats)
   const categories = ref<EventCategory[]>(initialState.categories)
   const events = ref<CatEvent[]>(initialState.events)
   const selectedCatId = ref(initialState.selectedCatId)
+  const selectedDate = ref(startOfDay(today))
+  const visibleMonth = ref(startOfMonth(today))
+  const isQuickRecordOpen = ref(false)
+  const lastCreatedEventId = ref<string>()
+  const editingEventId = ref<string>()
+  const deleteConfirmEventId = ref<string>()
 
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
 
@@ -91,6 +154,87 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     () => new Map(categories.value.map((category) => [category.id, category])),
   )
   const catsById = computed(() => new Map(cats.value.map((cat) => [cat.id, cat])))
+  const monthTitle = computed(() =>
+    new Intl.DateTimeFormat('zh-TW', {
+      month: 'long',
+      year: 'numeric',
+    }).format(visibleMonth.value),
+  )
+  const selectedDateTitle = computed(() =>
+    new Intl.DateTimeFormat('zh-TW', {
+      month: 'long',
+      day: 'numeric',
+      weekday: 'short',
+    }).format(selectedDate.value),
+  )
+  const eventCountByDate = computed(() => {
+    const counts = new Map<string, number>()
+
+    for (const event of events.value) {
+      const key = toDateKey(new Date(event.occurredAt))
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+
+    return counts
+  })
+  const calendarDays = computed<CalendarDay[]>(() => {
+    const firstDay = startOfMonth(visibleMonth.value)
+    const calendarStart = addDays(firstDay, -firstDay.getDay())
+
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = addDays(calendarStart, index)
+      const key = toDateKey(date)
+
+      return {
+        date,
+        key,
+        dayNumber: date.getDate(),
+        eventCount: eventCountByDate.value.get(key) ?? 0,
+        isCurrentMonth: date.getMonth() === visibleMonth.value.getMonth(),
+        isSelected: isSameDate(date, selectedDate.value),
+        isToday: isSameDate(date, today),
+      }
+    })
+  })
+  const selectedDateEvents = computed(() =>
+    events.value
+      .filter((event) => isSameDate(new Date(event.occurredAt), selectedDate.value))
+      .sort((a, b) => {
+        const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
+
+        if (occurredAtOrder !== 0) {
+          return occurredAtOrder
+        }
+
+        return a.createdAt.localeCompare(b.createdAt)
+      }),
+  )
+  const selectedDateEventListItems = computed<EventListItem[]>(() =>
+    selectedDateEvents.value.map((event) => ({
+      event,
+      category: categoriesById.value.get(event.categoryId),
+      time: formatEventTime(event.occurredAt),
+    })),
+  )
+  const successMessage = computed(() => {
+    if (!lastCreatedEventId.value) {
+      return ''
+    }
+
+    const event = selectedDateEvents.value.find((item) => item.id === lastCreatedEventId.value)
+    const category = event ? categoriesById.value.get(event.categoryId) : undefined
+
+    return category ? `已記錄：${category.name}` : '已記錄'
+  })
+  const editingEvent = computed(() =>
+    editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined,
+  )
+  const editingCategory = computed(() =>
+    editingEvent.value ? categoriesById.value.get(editingEvent.value.categoryId) : undefined,
+  )
+  const deleteConfirmEvent = computed(() =>
+    deleteConfirmEventId.value ? eventsById.value.get(deleteConfirmEventId.value) : undefined,
+  )
 
   watch(
     [cats, categories, events, selectedCatId],
@@ -111,6 +255,96 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     selectedCatId.value = catId
+  }
+
+  function selectCalendarDate(date: Date): void {
+    selectedDate.value = startOfDay(date)
+
+    if (date.getMonth() !== visibleMonth.value.getMonth()) {
+      visibleMonth.value = startOfMonth(date)
+    }
+  }
+
+  function showPreviousMonth(): void {
+    visibleMonth.value = addMonths(visibleMonth.value, -1)
+  }
+
+  function showNextMonth(): void {
+    visibleMonth.value = addMonths(visibleMonth.value, 1)
+  }
+
+  function toggleQuickRecord(): void {
+    isQuickRecordOpen.value = !isQuickRecordOpen.value
+  }
+
+  function closeQuickRecord(): void {
+    isQuickRecordOpen.value = false
+  }
+
+  function clearLastCreatedEvent(): void {
+    lastCreatedEventId.value = undefined
+  }
+
+  function getQuickRecordOccurredAt(): string {
+    const now = new Date()
+    const occurredAt = new Date(selectedDate.value)
+
+    occurredAt.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
+
+    return occurredAt.toISOString()
+  }
+
+  function quickRecordForSelectedDate(categoryId: string): CatEvent | undefined {
+    const event = quickRecord(categoryId, getQuickRecordOccurredAt())
+
+    if (!event) {
+      return undefined
+    }
+
+    lastCreatedEventId.value = event.id
+    isQuickRecordOpen.value = false
+
+    return event
+  }
+
+  function openEditEvent(eventId: string): void {
+    if (!eventsById.value.has(eventId)) {
+      return
+    }
+
+    editingEventId.value = eventId
+  }
+
+  function closeEditEvent(): void {
+    editingEventId.value = undefined
+    deleteConfirmEventId.value = undefined
+  }
+
+  function openDeleteConfirm(eventId: string): void {
+    if (!eventsById.value.has(eventId)) {
+      return
+    }
+
+    deleteConfirmEventId.value = eventId
+  }
+
+  function cancelDeleteEvent(): void {
+    deleteConfirmEventId.value = undefined
+  }
+
+  function confirmDeleteEvent(): void {
+    if (!deleteConfirmEvent.value) {
+      return
+    }
+
+    const deletedEventId = deleteConfirmEvent.value.id
+
+    deleteEvent(deletedEventId)
+    deleteConfirmEventId.value = undefined
+
+    if (editingEventId.value === deletedEventId) {
+      closeEditEvent()
+    }
   }
 
   function createCat(input: CreateCatInput): Cat {
@@ -166,7 +400,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return event
   }
 
-  function quickRecord(categoryId: string): CatEvent | undefined {
+  function quickRecord(categoryId: string, occurredAt?: string): CatEvent | undefined {
     if (!selectedCat.value || !categoriesById.value.has(categoryId)) {
       return undefined
     }
@@ -174,6 +408,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return createEvent({
       catId: selectedCat.value.id,
       categoryId,
+      occurredAt,
     })
   }
 
@@ -201,18 +436,45 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     categories,
     events,
     selectedCatId,
+    selectedDate,
+    visibleMonth,
+    isQuickRecordOpen,
+    lastCreatedEventId,
+    editingEventId,
+    deleteConfirmEventId,
     selectedCat,
     quickActionCategories,
     todayEvents,
     catsById,
     categoriesById,
     eventsById,
+    monthTitle,
+    selectedDateTitle,
+    calendarDays,
+    selectedDateEvents,
+    selectedDateEventListItems,
+    successMessage,
+    editingEvent,
+    editingCategory,
+    deleteConfirmEvent,
     selectCat,
+    selectCalendarDate,
+    showPreviousMonth,
+    showNextMonth,
+    toggleQuickRecord,
+    closeQuickRecord,
+    clearLastCreatedEvent,
     createCat,
     createCategory,
     createEvent,
     quickRecord,
+    quickRecordForSelectedDate,
     updateEvent,
     deleteEvent,
+    openEditEvent,
+    closeEditEvent,
+    openDeleteConfirm,
+    cancelDeleteEvent,
+    confirmDeleteEvent,
   }
 })

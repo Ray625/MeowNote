@@ -1,0 +1,205 @@
+<script setup lang="ts">
+import { storeToRefs } from 'pinia'
+import { useCatTrackerStore } from '@/stores/catTracker'
+
+const catTrackerStore = useCatTrackerStore()
+const { calendarDays, monthTitle, selectedCat, successMessage } = storeToRefs(catTrackerStore)
+
+const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+</script>
+
+<template>
+  <section class="calendar-section" aria-labelledby="calendar-title">
+    <div class="calendar-section__top">
+      <strong class="cat-name">{{ selectedCat?.name ?? '我的貓' }}</strong>
+      <p v-if="successMessage" class="success-message" role="status">
+        {{ successMessage }}
+      </p>
+    </div>
+
+    <div class="calendar-header">
+      <button
+        class="month-button"
+        type="button"
+        aria-label="上一個月"
+        @click="catTrackerStore.showPreviousMonth"
+      >
+        ‹
+      </button>
+      <h1 id="calendar-title" class="month-title">{{ monthTitle }}</h1>
+      <button
+        class="month-button"
+        type="button"
+        aria-label="下一個月"
+        @click="catTrackerStore.showNextMonth"
+      >
+        ›
+      </button>
+    </div>
+
+    <div class="weekday-grid" aria-hidden="true">
+      <span v-for="weekDay in weekDays" :key="weekDay">{{ weekDay }}</span>
+    </div>
+
+    <div class="calendar-grid" aria-label="月份日期">
+      <button
+        v-for="day in calendarDays"
+        :key="day.key"
+        class="calendar-day"
+        :class="{
+          'calendar-day--muted': !day.isCurrentMonth,
+          'calendar-day--selected': day.isSelected,
+          'calendar-day--today': day.isToday,
+        }"
+        type="button"
+        @click="catTrackerStore.selectCalendarDate(day.date)"
+      >
+        <span class="calendar-day__number">{{ day.dayNumber }}</span>
+        <span v-if="day.eventCount > 0" class="calendar-day__marker">
+          {{ day.eventCount }}
+        </span>
+      </button>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.calendar-section {
+  width: var(--content-width);
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid #d8e0d8;
+  border-radius: 10px;
+  margin: 0 auto;
+  background: #ffffff;
+}
+
+.calendar-section__top,
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cat-name {
+  font-size: 1.125rem;
+}
+
+.success-message {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #9ac7a3;
+  border-radius: 8px;
+  margin: 0;
+  background: #edf8ef;
+  color: #276134;
+  font-size: 0.875rem;
+}
+
+.calendar-header {
+  margin-top: 12px;
+}
+
+.month-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.month-button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d8e0d8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #34423a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.weekday-grid,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.weekday-grid {
+  margin-top: 12px;
+  color: #65736a;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.calendar-grid {
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  aspect-ratio: 7 / 6;
+  margin-top: 8px;
+}
+
+.calendar-day {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f8faf7;
+  color: #17201b;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.calendar-day:hover {
+  background: color-mix(in srgb, #557563 10%, #ffffff);
+}
+
+.calendar-day--muted {
+  color: #9aa59e;
+}
+
+.calendar-day--today {
+  border-color: #8fc7a0;
+}
+
+.calendar-day--selected {
+  border-color: #557563;
+  background: #e8f1eb;
+  color: #17201b;
+}
+
+.calendar-day__marker {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #557563;
+  color: #ffffff;
+  font-size: 0.625rem;
+  line-height: 14px;
+}
+
+.month-button:focus-visible,
+.calendar-day:focus-visible {
+  outline: 3px solid #8fc7a0;
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .calendar-section {
+    padding: 10px;
+  }
+
+  .calendar-header {
+    margin-top: 10px;
+  }
+}
+</style>
