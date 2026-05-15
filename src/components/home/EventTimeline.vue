@@ -115,7 +115,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 
 .event-item {
   display: grid;
-  grid-template-columns: 1fr 48px;
+  grid-template-columns: 1fr 40px;
   align-items: stretch;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--category-color) 34%, #d8e0d8);
@@ -127,9 +127,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 .event-item__button {
   display: grid;
   width: 100%;
-  grid-template-columns: 64px 1fr;
-  gap: 14px;
-  padding: 14px;
+  grid-template-columns: 50px 1fr;
+  gap: 8px;
+  padding: 10px 12px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -176,7 +176,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px 10px;
+  gap: 3px 8px;
   min-width: 0;
 }
 
@@ -204,6 +204,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   overflow: hidden;
   color: #34423a;
   font-size: 0.9375rem;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -226,12 +227,12 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   }
 
   .event-item {
-    grid-template-columns: 1fr 44px;
+    grid-template-columns: 1fr 38px;
   }
 
   .event-item__button {
-    grid-template-columns: 56px 1fr;
-    padding: 12px;
+    grid-template-columns: 48px 1fr;
+    padding: 10px;
   }
 }
 </style>
