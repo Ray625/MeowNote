@@ -683,8 +683,13 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       role="presentation"
       @click.self="closeCatModal"
     >
-      <section class="category-modal" aria-labelledby="cat-modal-title" role="dialog" aria-modal="true">
-        <form class="category-form" @submit.prevent="saveCat">
+      <section
+        class="category-modal cat-modal"
+        aria-labelledby="cat-modal-title"
+        role="dialog"
+        aria-modal="true"
+      >
+        <form class="category-form cat-form" @submit.prevent="saveCat">
           <div class="category-form__header">
             <h2 id="cat-modal-title">{{ catFormTitle }}</h2>
             <button
@@ -697,68 +702,70 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             </button>
           </div>
 
-          <label class="field">
-            <span class="field__label">名字</span>
-            <input v-model="catName" class="field__control" type="text" required />
-          </label>
+          <div class="cat-form__body">
+            <label class="field">
+              <span class="field__label">名字</span>
+              <input v-model="catName" class="field__control" type="text" required />
+            </label>
 
-          <label class="field">
-            <span class="field__label">生日</span>
-            <input v-model="catBirthday" class="field__control" type="date" />
-          </label>
+            <label class="field">
+              <span class="field__label">生日</span>
+              <input v-model="catBirthday" class="field__control" type="date" />
+            </label>
 
-          <label class="field">
-            <span class="field__label">性別</span>
-            <select v-model="catSex" class="field__control">
-              <option value="">未設定</option>
-              <option value="male">男生</option>
-              <option value="female">女生</option>
-            </select>
-          </label>
+            <label class="field">
+              <span class="field__label">性別</span>
+              <select v-model="catSex" class="field__control">
+                <option value="">未設定</option>
+                <option value="male">男生</option>
+                <option value="female">女生</option>
+              </select>
+            </label>
 
-          <label class="field">
-            <span class="field__label">體重 kg</span>
-            <input v-model="catWeightKg" class="field__control" type="number" min="0" step="0.1" />
-          </label>
+            <label class="field">
+              <span class="field__label">體重 kg</span>
+              <input v-model="catWeightKg" class="field__control" type="number" min="0" step="0.1" />
+            </label>
 
-          <div class="field">
-            <span class="field__label">頭貼</span>
-            <div class="cat-avatar-options" role="radiogroup" aria-label="寵物頭貼">
-              <button
-                v-for="avatar in CAT_AVATAR_OPTIONS"
-                :key="avatar.id"
-                class="cat-avatar-option"
-                :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
-                type="button"
-                role="radio"
-                :aria-checked="catAvatarId === avatar.id"
-                :aria-label="avatar.label"
-                :title="avatar.label"
-                @click="selectCatAvatar(avatar.id)"
-              >
-                <span class="pet-avatar pet-avatar--option" aria-hidden="true">
-                  <img :src="avatar.image" :alt="avatar.label" />
-                </span>
-                <span>{{ avatar.label }}</span>
-              </button>
+            <div class="field">
+              <span class="field__label">頭貼</span>
+              <div class="cat-avatar-options" role="radiogroup" aria-label="寵物頭貼">
+                <button
+                  v-for="avatar in CAT_AVATAR_OPTIONS"
+                  :key="avatar.id"
+                  class="cat-avatar-option"
+                  :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
+                  type="button"
+                  role="radio"
+                  :aria-checked="catAvatarId === avatar.id"
+                  :aria-label="avatar.label"
+                  :title="avatar.label"
+                  @click="selectCatAvatar(avatar.id)"
+                >
+                  <span class="pet-avatar pet-avatar--option" aria-hidden="true">
+                    <img :src="avatar.image" :alt="avatar.label" />
+                  </span>
+                  <span>{{ avatar.label }}</span>
+                </button>
+              </div>
             </div>
+
+            <label class="field">
+              <span class="field__label">絕育狀態</span>
+              <select v-model="catIsNeutered" class="field__control">
+                <option value="">未設定</option>
+                <option value="yes">已絕育</option>
+                <option value="no">未絕育</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field__label">備註</span>
+              <textarea v-model="catNote" class="field__control pet-note" rows="4"></textarea>
+            </label>
           </div>
 
-          <label class="field">
-            <span class="field__label">絕育狀態</span>
-            <select v-model="catIsNeutered" class="field__control">
-              <option value="">未設定</option>
-              <option value="yes">已絕育</option>
-              <option value="no">未絕育</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span class="field__label">備註</span>
-            <textarea v-model="catNote" class="field__control pet-note" rows="4"></textarea>
-          </label>
-
-          <div class="category-form__actions">
+          <div class="category-form__actions cat-form__actions">
             <button class="ui-button ui-button--secondary save-button" type="button" @click="closeCatModal">
               取消
             </button>
@@ -1162,6 +1169,33 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   border-radius: 12px;
   background: var(--color-surface);
   box-shadow: 0 22px 60px var(--shadow-color);
+}
+
+.cat-modal {
+  display: flex;
+  max-height: 75vh;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.cat-form {
+  min-height: 0;
+}
+
+.cat-form__body {
+  display: grid;
+  min-height: 0;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.cat-form__actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
+  background: var(--color-surface);
 }
 
 .modal-close {
