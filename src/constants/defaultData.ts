@@ -18,7 +18,7 @@ export const DEFAULT_CATEGORY_DEFINITIONS = [
   { name: '刷牙', group: '日常', color: '#6fa7b8' },
   { name: '剪指甲', group: '日常', color: '#4f9f8f' },
   { name: '外出', group: '日常', color: '#5f8f78' },
-  { name: '叫床', group: '日常', color: '#8a7cc5' },
+  { name: '夜擾', group: '日常', color: '#8a7cc5' },
   { name: '體外驅蟲', group: '用藥', color: '#2f9b63' },
   { name: '皮下點滴', group: '用藥', color: '#4ca56a' },
 ] as const satisfies ReadonlyArray<{
