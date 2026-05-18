@@ -1,8 +1,33 @@
-import type { Cat, CategoryColorId, EventCategory, EventCategoryGroup } from '@/types'
+import catBlackImage from '@/assets/cat-avatars/cat-black.png'
+import catCalicoImage from '@/assets/cat-avatars/cat-calico.png'
+import catGrayImage from '@/assets/cat-avatars/cat-gary.png'
+import catOrangeImage from '@/assets/cat-avatars/cat-orange.png'
+import catTabbyImage from '@/assets/cat-avatars/cat-tabby.png'
+import catTortoiseshellImage from '@/assets/cat-avatars/cat-tortoiseshell.png'
+import catTuxedoImage from '@/assets/cat-avatars/cat-tuxedo.png'
+import catWhiteImage from '@/assets/cat-avatars/cat-white.png'
+import type { Cat, CatAvatarId, CategoryColorId, EventCategory, EventCategoryGroup } from '@/types'
 
 export const DEFAULT_CAT_ID = 'default-cat'
 
 export const CATEGORY_GROUP_ORDER: EventCategoryGroup[] = ['攝取', '排泄', '行為', '日常', '用藥']
+
+export const CAT_AVATAR_OPTIONS = [
+  { id: 'orange', label: '橘貓', image: catOrangeImage },
+  { id: 'tabby', label: '虎斑', image: catTabbyImage },
+  { id: 'calico', label: '三花', image: catCalicoImage },
+  { id: 'tortoiseshell', label: '玳瑁', image: catTortoiseshellImage },
+  { id: 'black', label: '黑貓', image: catBlackImage },
+  { id: 'white', label: '白貓', image: catWhiteImage },
+  { id: 'gray', label: '灰貓', image: catGrayImage },
+  { id: 'tuxedo', label: '賓士', image: catTuxedoImage },
+] as const satisfies ReadonlyArray<{
+  id: CatAvatarId
+  label: string
+  image: string
+}>
+
+export const DEFAULT_CAT_AVATAR_ID = 'orange' satisfies CatAvatarId
 
 export const CATEGORY_COLOR_OPTIONS = [
   {
@@ -107,6 +132,7 @@ export function createDefaultCat(now: string): Cat {
   return {
     id: DEFAULT_CAT_ID,
     name: '我的貓',
+    avatarId: DEFAULT_CAT_AVATAR_ID,
     createdAt: now,
     updatedAt: now,
   }
@@ -201,4 +227,12 @@ export function getCategoryColorId(
   }
 
   return fallbackColorId
+}
+
+export function getCatAvatarOption(avatarId?: CatAvatarId | string) {
+  return CAT_AVATAR_OPTIONS.find((option) => option.id === avatarId) ?? getDefaultCatAvatarOption()
+}
+
+export function getDefaultCatAvatarOption() {
+  return CAT_AVATAR_OPTIONS.find((option) => option.id === DEFAULT_CAT_AVATAR_ID) ?? CAT_AVATAR_OPTIONS[0]
 }

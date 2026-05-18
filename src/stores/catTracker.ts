@@ -15,6 +15,7 @@ import type {
   CreateCategoryInput,
   EventCategory,
   EventCategoryGroup,
+  UpdateCatInput,
   UpdateCategoryInput,
   UpdateCatEventInput,
 } from '@/types'
@@ -179,6 +180,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   const todayEvents = computed(() =>
     events.value
+      .filter((event) => event.catId === selectedCatId.value)
       .filter((event) => isSameLocalDate(event.occurredAt))
       .sort((a, b) => {
         const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
@@ -213,6 +215,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const counts = new Map<string, number>()
 
     for (const event of events.value) {
+      if (event.catId !== selectedCatId.value) {
+        continue
+      }
+
       const key = toDateKey(new Date(event.occurredAt))
       counts.set(key, (counts.get(key) ?? 0) + 1)
     }
@@ -240,6 +246,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   })
   const selectedDateEvents = computed(() =>
     events.value
+      .filter((event) => event.catId === selectedCatId.value)
       .filter((event) => isSameDate(new Date(event.occurredAt), selectedDate.value))
       .sort((a, b) => {
         const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
@@ -287,6 +294,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     selectedCatId.value = catId
+    isQuickRecordOpen.value = false
+    editingEventId.value = undefined
+    deleteConfirmEventId.value = undefined
   }
 
   function selectCalendarDate(date: Date): void {
@@ -384,7 +394,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const cat: Cat = {
       id: createId('cat'),
       name: input.name,
-      avatarUrl: input.avatarUrl,
+      avatarId: input.avatarId,
+      birthday: input.birthday,
+      sex: input.sex,
+      weightKg: input.weightKg,
+      isNeutered: input.isNeutered,
       note: input.note,
       createdAt: now,
       updatedAt: now,
@@ -392,6 +406,21 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     cats.value.push(cat)
     selectedCatId.value = cat.id
+
+    return cat
+  }
+
+  function updateCat(catId: string, input: UpdateCatInput): Cat | undefined {
+    const cat = catsById.value.get(catId)
+
+    if (!cat) {
+      return undefined
+    }
+
+    Object.assign(cat, {
+      ...input,
+      updatedAt: getIsoNow(),
+    })
 
     return cat
   }
@@ -637,6 +666,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     closeQuickRecord,
     setActiveTab,
     createCat,
+    updateCat,
     createCategory,
     updateCategory,
     getCategoryUsageCount,

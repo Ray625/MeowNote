@@ -1,7 +1,11 @@
 export interface Cat {
   id: string
   name: string
-  avatarUrl?: string
+  avatarId?: CatAvatarId
+  birthday?: string
+  sex?: CatSex
+  weightKg?: number
+  isNeutered?: boolean
   note?: string
   createdAt: string
   updatedAt: string
@@ -36,6 +40,18 @@ export interface CatEvent {
 
 export type EventCategoryGroup = '攝取' | '排泄' | '行為' | '日常' | '用藥'
 
+export type CatSex = 'male' | 'female'
+
+export type CatAvatarId =
+  | 'orange'
+  | 'tabby'
+  | 'calico'
+  | 'tortoiseshell'
+  | 'black'
+  | 'white'
+  | 'gray'
+  | 'tuxedo'
+
 export type CategoryColorId =
   | 'red'
   | 'orange'
@@ -48,7 +64,12 @@ export type CategoryColorId =
 
 export type EventSeverity = NonNullable<CatEvent['severity']>
 
-export type CreateCatInput = Pick<Cat, 'name'> & Partial<Pick<Cat, 'avatarUrl' | 'note'>>
+export type CreateCatInput = Pick<Cat, 'name'> &
+  Partial<Pick<Cat, 'avatarId' | 'birthday' | 'sex' | 'weightKg' | 'isNeutered' | 'note'>>
+
+export type UpdateCatInput = Partial<
+  Pick<Cat, 'name' | 'avatarId' | 'birthday' | 'sex' | 'weightKg' | 'isNeutered' | 'note'>
+>
 
 export type CreateCategoryInput = Pick<EventCategory, 'name'> &
   Partial<

@@ -1,6 +1,8 @@
 export type {
   Cat,
+  CatAvatarId,
   CatEvent,
+  CatSex,
   CategoryColorId,
   CreateCatEventInput,
   CreateCatInput,
@@ -9,5 +11,6 @@ export type {
   EventCategoryGroup,
   EventSeverity,
   UpdateCategoryInput,
+  UpdateCatInput,
   UpdateCatEventInput,
 } from './cat'
