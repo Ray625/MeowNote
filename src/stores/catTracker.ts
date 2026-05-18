@@ -28,7 +28,6 @@ interface CatTrackerState {
   categories: EventCategory[]
   events: CatEvent[]
   selectedCatId: string
-  deletedDefaultCategoryNames?: string[]
 }
 
 type MainTab = 'calendar' | 'settings'
@@ -57,7 +56,6 @@ function createInitialState(): CatTrackerState {
     categories: createDefaultCategories(now),
     events: [],
     selectedCatId: DEFAULT_CAT_ID,
-    deletedDefaultCategoryNames: [],
   }
 }
 
@@ -104,13 +102,8 @@ function formatEventTime(dateTime: string): string {
 function normalizeState(state: CatTrackerState): CatTrackerState {
   const fallbackState = createInitialState()
   const cats = state.cats.length > 0 ? state.cats : fallbackState.cats
-  const deletedDefaultCategoryNames = state.deletedDefaultCategoryNames ?? []
   const categories =
-    state.categories.length > 0
-      ? ensureDefaultCategories(state.categories, getIsoNow()).filter(
-          (category) => !deletedDefaultCategoryNames.includes(category.name),
-        )
-      : fallbackState.categories
+    state.categories.length > 0 ? ensureDefaultCategories(state.categories, getIsoNow()) : fallbackState.categories
   const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
     ? state.selectedCatId
     : cats[0]?.id ?? DEFAULT_CAT_ID
@@ -120,7 +113,6 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
     categories,
     events: state.events,
     selectedCatId,
-    deletedDefaultCategoryNames,
   }
 }
 
@@ -132,7 +124,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const categories = ref<EventCategory[]>(initialState.categories)
   const events = ref<CatEvent[]>(initialState.events)
   const selectedCatId = ref(initialState.selectedCatId)
-  const deletedDefaultCategoryNames = ref<string[]>(initialState.deletedDefaultCategoryNames ?? [])
   const activeTab = ref<MainTab>('calendar')
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
@@ -144,14 +135,17 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
 
   const quickActionCategories = computed(() =>
-    categories.value.filter((category) => category.isQuickAction),
+    categories.value.filter((category) => category.isQuickAction && !category.isArchived),
   )
   const categoriesByGroup = computed(() =>
     CATEGORY_GROUP_ORDER.map((group) => ({
       group,
-      categories: categories.value.filter((category) => category.group === group),
+      categories: categories.value
+        .filter((category) => category.group === group)
+        .sort((a, b) => Number(a.isArchived) - Number(b.isArchived)),
     })),
   )
+  const archivedCategories = computed(() => categories.value.filter((category) => category.isArchived))
   const categoryUsageCounts = computed(() => {
     const usageCounts = new Map<string, number>()
 
@@ -264,14 +258,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   )
 
   watch(
-    [cats, categories, events, selectedCatId, deletedDefaultCategoryNames],
+    [cats, categories, events, selectedCatId],
     () => {
       writeJson<CatTrackerState>(STORAGE_KEY, {
         cats: cats.value,
         categories: categories.value,
         events: events.value,
         selectedCatId: selectedCatId.value,
-        deletedDefaultCategoryNames: deletedDefaultCategoryNames.value,
       })
     },
     { deep: true, immediate: true },
@@ -407,6 +400,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       icon: input.icon,
       isDefault: false,
       isQuickAction: input.isQuickAction ?? false,
+      isArchived: input.isArchived ?? false,
       createdAt: now,
       updatedAt: now,
     }
@@ -454,7 +448,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function quickRecord(categoryId: string, occurredAt?: string): CatEvent | undefined {
-    if (!selectedCat.value || !categoriesById.value.has(categoryId)) {
+    const category = categoriesById.value.get(categoryId)
+
+    if (!selectedCat.value || !category || category.isArchived) {
       return undefined
     }
 
@@ -491,11 +487,33 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    categories.value = categories.value.filter((item) => item.id !== categoryId)
+    if (getCategoryUsageCount(categoryId) > 0) {
+      Object.assign(category, {
+        isArchived: true,
+        isQuickAction: false,
+        updatedAt: getIsoNow(),
+      })
 
-    if (category.isDefault && !deletedDefaultCategoryNames.value.includes(category.name)) {
-      deletedDefaultCategoryNames.value.push(category.name)
+      return
     }
+
+    categories.value = categories.value.filter((item) => item.id !== categoryId)
+  }
+
+  function restoreCategory(categoryId: string): EventCategory | undefined {
+    const category = categoriesById.value.get(categoryId)
+
+    if (!category) {
+      return undefined
+    }
+
+    Object.assign(category, {
+      isArchived: false,
+      isQuickAction: true,
+      updatedAt: getIsoNow(),
+    })
+
+    return category
   }
 
   return {
@@ -503,7 +521,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     categories,
     events,
     selectedCatId,
-    deletedDefaultCategoryNames,
     activeTab,
     selectedDate,
     visibleMonth,
@@ -514,6 +531,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     selectedCat,
     quickActionCategories,
     categoriesByGroup,
+    archivedCategories,
     categoryUsageCounts,
     todayEvents,
     catsById,
@@ -546,6 +564,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     updateEvent,
     deleteEvent,
     deleteCategory,
+    restoreCategory,
     openEditEvent,
     closeEditEvent,
     openDeleteConfirm,

@@ -63,6 +63,7 @@ export function createDefaultCategories(now: string): EventCategory[] {
     color: category.color,
     isDefault: true,
     isQuickAction: true,
+    isArchived: false,
     createdAt: now,
     updatedAt: now,
   }))
@@ -80,7 +81,10 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
     group: defaultCategory.group,
     color: category.color ?? defaultCategory.color,
     isDefault: category.isDefault || category.id === `default-category-${category.name}`,
-    isQuickAction: category.isQuickAction || category.id === `default-category-${category.name}`,
+    isArchived: category.isArchived ?? false,
+    isQuickAction:
+      (category.isQuickAction || category.id === `default-category-${category.name}`) &&
+      !(category.isArchived ?? false),
   }
 }
 

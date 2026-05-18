@@ -15,6 +15,7 @@ export interface EventCategory {
   icon?: string
   isDefault: boolean
   isQuickAction: boolean
+  isArchived: boolean
   createdAt: string
   updatedAt: string
 }
@@ -37,10 +38,10 @@ export type EventSeverity = NonNullable<CatEvent['severity']>
 export type CreateCatInput = Pick<Cat, 'name'> & Partial<Pick<Cat, 'avatarUrl' | 'note'>>
 
 export type CreateCategoryInput = Pick<EventCategory, 'name'> &
-  Partial<Pick<EventCategory, 'color' | 'group' | 'icon' | 'isQuickAction'>>
+  Partial<Pick<EventCategory, 'color' | 'group' | 'icon' | 'isArchived' | 'isQuickAction'>>
 
 export type UpdateCategoryInput = Partial<
-  Pick<EventCategory, 'color' | 'group' | 'icon' | 'isQuickAction' | 'name'>
+  Pick<EventCategory, 'color' | 'group' | 'icon' | 'isArchived' | 'isQuickAction' | 'name'>
 >
 
 export type CreateCatEventInput = Pick<CatEvent, 'catId' | 'categoryId'> &
