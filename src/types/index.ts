@@ -5,6 +5,7 @@ export type {
   CreateCatInput,
   CreateCategoryInput,
   EventCategory,
+  EventCategoryGroup,
   EventSeverity,
   UpdateCatEventInput,
 } from './cat'

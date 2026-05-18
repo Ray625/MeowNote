@@ -1,10 +1,10 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import {
-  applyDefaultCategoryColor,
   createDefaultCat,
   createDefaultCategories,
   DEFAULT_CAT_ID,
+  ensureDefaultCategories,
 } from '@/constants/defaultData'
 import type {
   Cat,
@@ -100,7 +100,7 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
   const cats = state.cats.length > 0 ? state.cats : fallbackState.cats
   const categories =
     state.categories.length > 0
-      ? state.categories.map((category) => applyDefaultCategoryColor(category))
+      ? ensureDefaultCategories(state.categories, getIsoNow())
       : fallbackState.categories
   const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
     ? state.selectedCatId
@@ -369,6 +369,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const category: EventCategory = {
       id: createId('category'),
       name: input.name,
+      group: input.group,
       color: input.color,
       icon: input.icon,
       isDefault: false,

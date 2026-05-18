@@ -1,12 +1,30 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
-import type { EventCategory } from '@/types'
+import type { EventCategory, EventCategoryGroup } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
 const { isQuickRecordOpen, quickActionCategories } = storeToRefs(catTrackerStore)
+const activeGroup = ref<EventCategoryGroup>('攝取')
 
 let successMessageTimeout: ReturnType<typeof window.setTimeout> | undefined
+
+const groupedQuickActionCategories = computed(() =>
+  CATEGORY_GROUP_ORDER.map((group) => ({
+    group,
+    categories: quickActionCategories.value.filter((category) => category.group === group),
+  })).filter((item) => item.categories.length > 0),
+)
+
+const activeGroupCategories = computed(
+  () =>
+    groupedQuickActionCategories.value.find((item) => item.group === activeGroup.value)
+      ?.categories ??
+    groupedQuickActionCategories.value[0]?.categories ??
+    [],
+)
 
 function recordQuickEvent(categoryId: string): void {
   const event = catTrackerStore.quickRecordForSelectedDate(categoryId)
@@ -29,14 +47,14 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
     '--category-color': category?.color ?? '#65736a',
   }
 }
+
+function selectGroup(group: EventCategoryGroup): void {
+  activeGroup.value = group
+}
 </script>
 
 <template>
-  <section
-    v-if="isQuickRecordOpen"
-    class="quick-record-panel"
-    aria-labelledby="quick-record-title"
-  >
+  <section v-if="isQuickRecordOpen" class="quick-record-panel" aria-labelledby="quick-record-title">
     <div class="quick-record-panel__inner">
       <div class="quick-record-panel__heading">
         <h2 id="quick-record-title">快速記錄</h2>
@@ -50,9 +68,22 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
         </button>
       </div>
 
+      <div class="quick-groups" aria-label="快速記錄群組">
+        <button
+          v-for="item in groupedQuickActionCategories"
+          :key="item.group"
+          class="ui-button quick-group"
+          :class="item.group === activeGroup ? 'ui-button--primary' : 'ui-button--secondary'"
+          type="button"
+          @click="selectGroup(item.group)"
+        >
+          {{ item.group }}
+        </button>
+      </div>
+
       <div class="quick-actions" aria-label="快速記錄分類">
         <button
-          v-for="category in quickActionCategories"
+          v-for="category in activeGroupCategories"
           :key="category.id"
           class="ui-button ui-button--category quick-action"
           :style="getCategoryStyle(category)"
@@ -122,11 +153,26 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   line-height: 1;
 }
 
+.quick-groups,
 .quick-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.quick-groups {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-top: 12px;
+}
+
+.quick-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.quick-group {
+  min-height: 40px;
+  padding: 0 8px;
+  font-size: 0.875rem;
 }
 
 .quick-action {
@@ -189,6 +235,10 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 @media (max-width: 560px) {
+  .quick-groups {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .quick-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

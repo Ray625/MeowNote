@@ -10,6 +10,7 @@ export interface Cat {
 export interface EventCategory {
   id: string
   name: string
+  group?: EventCategoryGroup
   color?: string
   icon?: string
   isDefault: boolean
@@ -29,12 +30,14 @@ export interface CatEvent {
   updatedAt: string
 }
 
+export type EventCategoryGroup = '攝取' | '排泄' | '行為' | '日常' | '用藥'
+
 export type EventSeverity = NonNullable<CatEvent['severity']>
 
 export type CreateCatInput = Pick<Cat, 'name'> & Partial<Pick<Cat, 'avatarUrl' | 'note'>>
 
 export type CreateCategoryInput = Pick<EventCategory, 'name'> &
-  Partial<Pick<EventCategory, 'color' | 'icon' | 'isQuickAction'>>
+  Partial<Pick<EventCategory, 'color' | 'group' | 'icon' | 'isQuickAction'>>
 
 export type CreateCatEventInput = Pick<CatEvent, 'catId' | 'categoryId'> &
   Partial<Pick<CatEvent, 'occurredAt' | 'severity' | 'note'>>

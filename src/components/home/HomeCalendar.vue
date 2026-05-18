@@ -118,10 +118,10 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
 }
 
 .weekday-grid {
+  gap: 6px;
   margin-top: 12px;
   color: #65736a;
   font-size: 0.8125rem;
@@ -131,7 +131,10 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 .calendar-grid {
   grid-template-rows: repeat(6, minmax(0, 1fr));
   aspect-ratio: 7 / 6;
+  border: 0.5px solid #d8e0d8;
+  border-radius: 8px;
   margin-top: 8px;
+  overflow: hidden;
 }
 
 .calendar-day {
@@ -140,8 +143,10 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
   min-width: 0;
   min-height: 0;
   place-items: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: 0;
+  border-right: 0.5px solid #d8e0d8;
+  border-bottom: 0.5px solid #d8e0d8;
+  border-radius: 0;
   background: #f8faf7;
   color: #17201b;
   cursor: pointer;
@@ -158,12 +163,12 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 }
 
 .calendar-day--today {
-  border-color: #8fc7a0;
+  box-shadow: inset 0 0 0 1px #8fc7a0;
 }
 
 .calendar-day--selected {
-  border-color: #557563;
   background: #e8f1eb;
+  box-shadow: inset 0 0 0 1px #557563;
   color: #17201b;
 }
 
