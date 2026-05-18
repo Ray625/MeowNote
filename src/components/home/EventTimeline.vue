@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
+import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -8,7 +9,7 @@ const { selectedDateEventListItems, selectedDateTitle } = storeToRefs(catTracker
 
 function getCategoryStyle(category?: EventCategory): Record<string, string> {
   return {
-    '--category-color': category?.color ?? '#65736a',
+    '--category-color': getCategoryColorValue(category),
   }
 }
 </script>
@@ -16,8 +17,8 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 <template>
   <section class="timeline-section" aria-labelledby="timeline-title">
     <div class="timeline-heading">
-      <div>
-        <h2 id="timeline-title">紀錄時間軸</h2>
+      <div class="timeline-heading__title">
+        <h2 id="timeline-title">紀錄</h2>
         <p class="selected-date">{{ selectedDateTitle }}</p>
       </div>
       <span class="event-count">{{ selectedDateEventListItems.length }} 筆</span>
@@ -87,6 +88,13 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   margin: 0;
 }
 
+.timeline-heading__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .timeline-heading h2 {
   font-size: 1.25rem;
 }
@@ -99,7 +107,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 .selected-date {
-  margin-top: 4px;
   font-size: 0.875rem;
 }
 

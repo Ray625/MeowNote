@@ -2,9 +2,15 @@
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
+import {
+  CATEGORY_COLOR_OPTIONS,
+  CATEGORY_GROUP_ORDER,
+  DEFAULT_CATEGORY_COLOR_ID,
+  getCategoryColorId,
+  getCategoryColorValue,
+} from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
-import type { EventCategory, EventCategoryGroup } from '@/types'
+import type { CategoryColorId, EventCategory, EventCategoryGroup } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
 const { categoriesByGroup } = storeToRefs(catTrackerStore)
@@ -12,9 +18,12 @@ const { categoriesByGroup } = storeToRefs(catTrackerStore)
 const editingCategoryId = ref<string>()
 const categoryName = ref('')
 const categoryGroup = ref<EventCategoryGroup>('攝取')
-const categoryColor = ref('#557563')
+const categoryColorId = ref<CategoryColorId>(DEFAULT_CATEGORY_COLOR_ID)
 const isQuickAction = ref(true)
 const isCategoryModalOpen = ref(false)
+const draggingCategoryId = ref<string>()
+const dragTargetCategoryId = ref<string>()
+const dragTargetPosition = ref<'before' | 'after'>('before')
 const pendingDeleteCategoryId = ref<string>()
 
 const isEditing = computed(() => Boolean(editingCategoryId.value))
@@ -38,7 +47,7 @@ function startCreateCategory(): void {
   editingCategoryId.value = undefined
   categoryName.value = ''
   categoryGroup.value = '攝取'
-  categoryColor.value = '#557563'
+  categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   isQuickAction.value = true
   isCategoryModalOpen.value = true
 }
@@ -47,7 +56,7 @@ function startEditCategory(category: EventCategory): void {
   editingCategoryId.value = category.id
   categoryName.value = category.name
   categoryGroup.value = category.group ?? '攝取'
-  categoryColor.value = category.color ?? '#557563'
+  categoryColorId.value = getCategoryColorId(category.colorId)
   isQuickAction.value = category.isQuickAction
   isCategoryModalOpen.value = true
 }
@@ -57,7 +66,7 @@ function closeCategoryModal(): void {
   editingCategoryId.value = undefined
   categoryName.value = ''
   categoryGroup.value = '攝取'
-  categoryColor.value = '#557563'
+  categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   isQuickAction.value = true
 }
 
@@ -72,14 +81,14 @@ function saveCategory(): void {
     catTrackerStore.updateCategory(editingCategoryId.value, {
       name: trimmedName,
       group: categoryGroup.value,
-      color: categoryColor.value,
+      colorId: categoryColorId.value,
       isQuickAction: isQuickAction.value,
     })
   } else {
     catTrackerStore.createCategory({
       name: trimmedName,
       group: categoryGroup.value,
-      color: categoryColor.value,
+      colorId: categoryColorId.value,
       isQuickAction: isQuickAction.value,
       isArchived: false,
     })
@@ -114,6 +123,125 @@ function confirmDeleteCategory(): void {
 function restoreCategory(category: EventCategory): void {
   catTrackerStore.restoreCategory(category.id)
 }
+
+function selectCategoryColor(colorId: CategoryColorId): void {
+  categoryColorId.value = colorId
+}
+
+function startDragCategory(category: EventCategory, event: DragEvent): void {
+  if (category.isArchived) {
+    return
+  }
+
+  draggingCategoryId.value = category.id
+  dragTargetCategoryId.value = undefined
+  event.dataTransfer?.setData('text/plain', category.id)
+  event.dataTransfer?.setDragImage(event.currentTarget as Element, 16, 16)
+}
+
+function dragOverCategory(targetCategory: EventCategory, event: DragEvent): void {
+  if (!draggingCategoryId.value) {
+    clearDropTarget()
+    return
+  }
+
+  const draggingCategory = catTrackerStore.categoriesById.get(draggingCategoryId.value)
+  const targetGroup = targetCategory.group
+
+  if (!draggingCategory || draggingCategory.isArchived || !targetGroup || draggingCategory.group !== targetGroup) {
+    clearDropTarget()
+    return
+  }
+
+  if (targetCategory.isArchived) {
+    const lastActiveCategory = getActiveCategories(targetGroup).at(-1)
+
+    if (lastActiveCategory) {
+      dragTargetCategoryId.value = lastActiveCategory.id
+      dragTargetPosition.value = 'after'
+    }
+
+    return
+  }
+
+  const targetElement = event.currentTarget as HTMLElement
+  const targetBounds = targetElement.getBoundingClientRect()
+  const isUpperHalf = event.clientY < targetBounds.top + targetBounds.height / 2
+
+  dragTargetCategoryId.value = targetCategory.id
+  dragTargetPosition.value = isUpperHalf ? 'before' : 'after'
+}
+
+function canDropOnCategory(targetCategory: EventCategory): boolean {
+  if (!draggingCategoryId.value || targetCategory.isArchived) {
+    return false
+  }
+
+  const draggingCategory = catTrackerStore.categoriesById.get(draggingCategoryId.value)
+
+  return Boolean(draggingCategory && !draggingCategory.isArchived && draggingCategory.group === targetCategory.group)
+}
+
+function dropCategory(targetCategory: EventCategory): void {
+  if (!draggingCategoryId.value) {
+    clearDragState()
+    return
+  }
+
+  const targetCategoryId = targetCategory.isArchived ? dragTargetCategoryId.value : targetCategory.id
+
+  if (!targetCategoryId) {
+    clearDragState()
+    return
+  }
+
+  const dropTargetCategory = catTrackerStore.categoriesById.get(targetCategoryId)
+
+  if (!dropTargetCategory || !canDropOnCategory(dropTargetCategory)) {
+    clearDragState()
+    return
+  }
+
+  catTrackerStore.reorderCategory(draggingCategoryId.value, targetCategoryId, dragTargetPosition.value)
+  clearDragState()
+}
+
+function dropCategoryAtGroupEnd(group: EventCategoryGroup, categories: EventCategory[]): void {
+  if (!draggingCategoryId.value) {
+    return
+  }
+
+  const draggingCategory = catTrackerStore.categoriesById.get(draggingCategoryId.value)
+  const activeCategories = categories.filter((category) => !category.isArchived)
+  const lastCategory = activeCategories.at(-1)
+
+  if (!draggingCategory || draggingCategory.isArchived || draggingCategory.group !== group || !lastCategory) {
+    clearDragState()
+    return
+  }
+
+  catTrackerStore.reorderCategory(draggingCategory.id, lastCategory.id, 'after')
+  clearDragState()
+}
+
+function endDragCategory(): void {
+  clearDragState()
+}
+
+function clearDragState(): void {
+  draggingCategoryId.value = undefined
+  clearDropTarget()
+}
+
+function clearDropTarget(): void {
+  dragTargetCategoryId.value = undefined
+}
+
+function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
+  return categoriesByGroup.value.find((categoryGroup) => categoryGroup.group === group)?.categories.filter(
+    (category) => !category.isArchived,
+  ) ?? []
+}
 </script>
 
 <template>
@@ -137,16 +265,41 @@ function restoreCategory(category: EventCategory): void {
       >
         <h2 :id="`category-group-${group.group}`">{{ group.group }}</h2>
 
-        <ul v-if="group.categories.length > 0" class="category-list">
+        <ul
+          v-if="group.categories.length > 0"
+          class="category-list"
+          @dragover.prevent
+          @drop.self="dropCategoryAtGroupEnd(group.group, group.categories)"
+        >
           <li
             v-for="category in group.categories"
             :key="category.id"
             class="category-item"
-            :class="{ 'category-item--archived': category.isArchived }"
+            :class="{
+              'category-item--archived': category.isArchived,
+              'category-item--dragging': draggingCategoryId === category.id,
+              'category-item--drop-before':
+                dragTargetCategoryId === category.id && dragTargetPosition === 'before',
+              'category-item--drop-after':
+                dragTargetCategoryId === category.id && dragTargetPosition === 'after',
+            }"
+            @dragover.prevent="dragOverCategory(category, $event)"
+            @dragend="endDragCategory"
+            @drop="dropCategory(category)"
           >
             <span
+              v-if="!category.isArchived"
+              class="drag-handle"
+              draggable="true"
+              aria-label="拖曳排序"
+              title="拖曳排序"
+              @dragstart="startDragCategory(category, $event)"
+            >
+              ⋮⋮
+            </span>
+            <span
               class="category-color"
-              :style="{ '--category-color': category.color ?? '#65736a' }"
+              :style="{ '--category-color': getCategoryColorValue(category) }"
               aria-hidden="true"
             ></span>
             <div class="category-item__content">
@@ -156,8 +309,8 @@ function restoreCategory(category: EventCategory): void {
                 {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
               </span>
               <span v-else>
-                {{ category.isQuickAction ? '快速紀錄' : '未顯示於快速紀錄' }}
-                · {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
+                <template v-if="!category.isQuickAction">未顯示於快速紀錄 · </template>
+                {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
               </span>
             </div>
             <div v-if="category.isArchived" class="category-item__actions">
@@ -233,11 +386,27 @@ function restoreCategory(category: EventCategory): void {
 
           <label class="field">
             <span class="field__label">顏色</span>
-            <input
-              v-model="categoryColor"
-              class="field__control field__control--color"
-              type="color"
-            />
+            <div class="color-palette" role="radiogroup" aria-label="分類顏色">
+              <button
+                v-for="colorOption in CATEGORY_COLOR_OPTIONS"
+                :key="colorOption.id"
+                class="color-swatch"
+                :class="{ 'color-swatch--selected': categoryColorId === colorOption.id }"
+                :style="{
+                  '--swatch-color': colorOption.value,
+                  '--swatch-background': colorOption.background,
+                  '--swatch-border': colorOption.border,
+                }"
+                type="button"
+                role="radio"
+                :aria-checked="categoryColorId === colorOption.id"
+                :aria-label="colorOption.label"
+                :title="colorOption.label"
+                @click="selectCategoryColor(colorOption.id)"
+              >
+                <span class="color-swatch__dot" aria-hidden="true"></span>
+              </button>
+            </div>
           </label>
 
           <label class="toggle-field">
@@ -347,16 +516,47 @@ function restoreCategory(category: EventCategory): void {
   color: #17201b;
 }
 
-.field__control--color {
-  padding: 4px;
-}
-
 .toggle-field {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: #34423a;
   font-weight: 700;
+}
+
+.color-palette {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.color-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 40px;
+  border: 1px solid #cbd8cf;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.color-swatch:hover {
+  border-color: var(--swatch-border);
+  background: var(--swatch-background);
+}
+
+.color-swatch--selected {
+  border-color: var(--swatch-color);
+  background: var(--swatch-background);
+}
+
+.color-swatch__dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--swatch-color);
 }
 
 .save-button {
@@ -383,7 +583,7 @@ function restoreCategory(category: EventCategory): void {
 
 .category-item {
   display: grid;
-  grid-template-columns: 14px 1fr auto;
+  grid-template-columns: 18px 14px 1fr auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -393,7 +593,49 @@ function restoreCategory(category: EventCategory): void {
   background: #f8faf7;
 }
 
+.category-item--dragging {
+  opacity: 0.55;
+}
+
+.category-item--drop-before,
+.category-item--drop-after {
+  position: relative;
+}
+
+.category-item--drop-before::before,
+.category-item--drop-after::after {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  z-index: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: #557563;
+  content: '';
+}
+
+.category-item--drop-before::before {
+  top: -6px;
+}
+
+.category-item--drop-after::after {
+  bottom: -6px;
+}
+
+.drag-handle {
+  color: #9aa59e;
+  cursor: grab;
+  font-size: 0.875rem;
+  letter-spacing: -0.18em;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 .category-item--archived {
+  grid-template-columns: 14px 1fr auto;
   border-style: dashed;
   background: #f1f4f2;
 }
@@ -463,10 +705,18 @@ function restoreCategory(category: EventCategory): void {
 
 @media (max-width: 560px) {
   .category-item {
+    grid-template-columns: 18px 14px 1fr;
+  }
+
+  .category-item--archived {
     grid-template-columns: 14px 1fr;
   }
 
   .category-item__actions {
+    grid-column: 3;
+  }
+
+  .category-item--archived .category-item__actions {
     grid-column: 2;
   }
 

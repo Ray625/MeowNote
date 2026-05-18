@@ -1,6 +1,7 @@
 export type {
   Cat,
   CatEvent,
+  CategoryColorId,
   CreateCatEventInput,
   CreateCatInput,
   CreateCategoryInput,

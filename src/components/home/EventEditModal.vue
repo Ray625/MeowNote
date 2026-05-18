@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -46,7 +47,7 @@ function deleteEditingEvent(): void {
 
 function getCategoryStyle(category?: EventCategory): Record<string, string> {
   return {
-    '--category-color': category?.color ?? '#65736a',
+    '--category-color': getCategoryColorValue(category),
   }
 }
 
@@ -231,8 +232,8 @@ function fromDateTimeLocalValue(value: string): string {
 }
 
 .primary-button {
-  --button-color: var(--category-color);
-  --button-hover-color: color-mix(in srgb, var(--category-color) 88%, #17201b);
+  --button-color: #557563;
+  --button-hover-color: #3f614d;
 }
 
 @media (max-width: 560px) {

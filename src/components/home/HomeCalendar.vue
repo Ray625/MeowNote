@@ -130,7 +130,7 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
 .calendar-grid {
   grid-template-rows: repeat(6, minmax(0, 1fr));
-  aspect-ratio: 7 / 6;
+  aspect-ratio: 6 / 5.4;
   border: 0.5px solid #d8e0d8;
   border-radius: 8px;
   margin-top: 8px;
@@ -151,6 +151,7 @@ const weekDays = ['日', '一', '二', '三', '四', '五', '六']
   color: #17201b;
   cursor: pointer;
   font: inherit;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 

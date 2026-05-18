@@ -14,6 +14,7 @@ import type {
   CreateCatInput,
   CreateCategoryInput,
   EventCategory,
+  EventCategoryGroup,
   UpdateCategoryInput,
   UpdateCatEventInput,
 } from '@/types'
@@ -99,6 +100,24 @@ function formatEventTime(dateTime: string): string {
   }).format(new Date(dateTime))
 }
 
+function sortCategories(categories: EventCategory[]): EventCategory[] {
+  return [...categories].sort((a, b) => {
+    const archivedOrder = Number(a.isArchived) - Number(b.isArchived)
+
+    if (archivedOrder !== 0) {
+      return archivedOrder
+    }
+
+    const sortOrder = a.sortOrder - b.sortOrder
+
+    if (sortOrder !== 0) {
+      return sortOrder
+    }
+
+    return a.createdAt.localeCompare(b.createdAt)
+  })
+}
+
 function normalizeState(state: CatTrackerState): CatTrackerState {
   const fallbackState = createInitialState()
   const cats = state.cats.length > 0 ? state.cats : fallbackState.cats
@@ -135,14 +154,14 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
 
   const quickActionCategories = computed(() =>
-    categories.value.filter((category) => category.isQuickAction && !category.isArchived),
+    sortCategories(
+      categories.value.filter((category) => category.isQuickAction && !category.isArchived),
+    ),
   )
   const categoriesByGroup = computed(() =>
     CATEGORY_GROUP_ORDER.map((group) => ({
       group,
-      categories: categories.value
-        .filter((category) => category.group === group)
-        .sort((a, b) => Number(a.isArchived) - Number(b.isArchived)),
+      categories: sortCategories(categories.value.filter((category) => category.group === group)),
     })),
   )
   const archivedCategories = computed(() => categories.value.filter((category) => category.isArchived))
@@ -392,15 +411,17 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function createCategory(input: CreateCategoryInput): EventCategory {
     const now = getIsoNow()
+    const group = input.group ?? '攝取'
     const category: EventCategory = {
       id: createId('category'),
       name: input.name,
-      group: input.group,
-      color: input.color,
+      group,
+      colorId: input.colorId,
       icon: input.icon,
       isDefault: false,
       isQuickAction: input.isQuickAction ?? false,
       isArchived: input.isArchived ?? false,
+      sortOrder: input.sortOrder ?? getNextCategorySortOrder(group),
       createdAt: now,
       updatedAt: now,
     }
@@ -417,8 +438,16 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    Object.assign(category, {
+    const nextInput = {
       ...input,
+    }
+
+    if (input.group && input.group !== category.group && typeof input.sortOrder !== 'number') {
+      nextInput.sortOrder = getNextCategorySortOrder(input.group)
+    }
+
+    Object.assign(category, {
+      ...nextInput,
       updatedAt: getIsoNow(),
     })
 
@@ -516,6 +545,72 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return category
   }
 
+  function reorderCategory(
+    categoryId: string,
+    targetCategoryId: string,
+    position: 'before' | 'after' = 'before',
+  ): void {
+    if (categoryId === targetCategoryId) {
+      return
+    }
+
+    const category = categoriesById.value.get(categoryId)
+    const targetCategory = categoriesById.value.get(targetCategoryId)
+
+    if (
+      !category ||
+      !targetCategory ||
+      category.isArchived ||
+      targetCategory.isArchived ||
+      category.group !== targetCategory.group
+    ) {
+      return
+    }
+
+    const group = category.group
+    const groupCategories = sortCategories(
+      categories.value.filter((item) => item.group === group && !item.isArchived),
+    )
+    const fromIndex = groupCategories.findIndex((item) => item.id === categoryId)
+    const toIndex = groupCategories.findIndex((item) => item.id === targetCategoryId)
+
+    if (fromIndex < 0 || toIndex < 0) {
+      return
+    }
+
+    const [movedCategory] = groupCategories.splice(fromIndex, 1)
+
+    if (!movedCategory) {
+      return
+    }
+
+    const targetIndex = groupCategories.findIndex((item) => item.id === targetCategoryId)
+
+    if (targetIndex < 0) {
+      return
+    }
+
+    groupCategories.splice(position === 'after' ? targetIndex + 1 : targetIndex, 0, movedCategory)
+
+    const now = getIsoNow()
+    groupCategories.forEach((item, index) => {
+      Object.assign(item, {
+        sortOrder: index,
+        updatedAt: now,
+      })
+    })
+  }
+
+  function getNextCategorySortOrder(group: EventCategoryGroup): number {
+    const groupCategories = categories.value.filter((category) => category.group === group)
+
+    if (groupCategories.length === 0) {
+      return 0
+    }
+
+    return Math.max(...groupCategories.map((category) => category.sortOrder)) + 1
+  }
+
   return {
     cats,
     categories,
@@ -565,6 +660,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     deleteEvent,
     deleteCategory,
     restoreCategory,
+    reorderCategory,
     openEditEvent,
     closeEditEvent,
     openDeleteConfirm,

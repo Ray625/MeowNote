@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
+import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory, EventCategoryGroup } from '@/types'
 
@@ -44,7 +44,7 @@ function recordQuickEvent(categoryId: string): void {
 
 function getCategoryStyle(category?: EventCategory): Record<string, string> {
   return {
-    '--category-color': category?.color ?? '#65736a',
+    '--category-color': getCategoryColorValue(category),
   }
 }
 
@@ -131,7 +131,7 @@ function selectGroup(group: EventCategoryGroup): void {
 .quick-record-panel {
   position: fixed;
   right: 0;
-  bottom: 84px;
+  bottom: 68px;
   left: 0;
   z-index: 12;
   padding: 0 16px;
@@ -212,7 +212,7 @@ function selectGroup(group: EventCategoryGroup): void {
   bottom: 0;
   left: 0;
   z-index: 11;
-  padding: 10px 16px max(10px, env(safe-area-inset-bottom));
+  padding: 6px 16px max(6px, env(safe-area-inset-bottom));
   border-top: 1px solid #d8e0d8;
   background: rgba(248, 250, 247, 0.96);
   box-shadow: 0 -12px 32px rgba(23, 32, 27, 0.08);
@@ -223,8 +223,8 @@ function selectGroup(group: EventCategoryGroup): void {
   position: relative;
   display: grid;
   width: var(--content-width);
-  min-height: 56px;
-  grid-template-columns: 1fr 76px 1fr;
+  min-height: 48px;
+  grid-template-columns: 1fr 64px 1fr;
   align-items: center;
   margin: 0 auto;
   text-align: center;
@@ -255,11 +255,11 @@ function selectGroup(group: EventCategoryGroup): void {
   --button-color: #557563;
   --button-hover-color: #3f614d;
 
-  width: 62px;
-  height: 62px;
+  width: 52px;
+  height: 52px;
   place-self: center;
   border-radius: 999px;
-  font-size: 2rem;
+  font-size: 1.7rem;
   line-height: 1;
 }
 

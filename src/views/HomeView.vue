@@ -48,7 +48,7 @@ const { activeTab, deleteConfirmEvent } = storeToRefs(catTrackerStore)
 }
 
 .home-view {
-  --content-width: min(100%, 430px);
+  --content-width: min(100%, 390px);
 
   display: flex;
   min-height: 100vh;
@@ -56,7 +56,7 @@ const { activeTab, deleteConfirmEvent } = storeToRefs(catTrackerStore)
   flex-direction: column;
   gap: 14px;
   box-sizing: border-box;
-  padding: 14px 14px 96px;
+  padding: 14px 14px 80px;
   background: #f8faf7;
   color: #17201b;
   font-family:
@@ -73,7 +73,7 @@ const { activeTab, deleteConfirmEvent } = storeToRefs(catTrackerStore)
     height: 100dvh;
     gap: 12px;
     overflow: hidden;
-    padding: 10px 10px 94px;
+    padding: 10px 10px 78px;
   }
 
 }
