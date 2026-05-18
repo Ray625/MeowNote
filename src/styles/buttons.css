@@ -12,56 +12,56 @@
 }
 
 .ui-button:focus-visible {
-  outline: 3px solid #8fc7a0;
+  outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
 
 .ui-button--primary {
-  border-color: var(--button-color, #557563);
-  background: var(--button-color, #557563);
-  color: #ffffff;
+  border-color: var(--button-color, var(--color-primary));
+  background: var(--button-color, var(--color-primary));
+  color: var(--color-surface);
 }
 
 .ui-button--secondary,
 .ui-button--icon {
-  border-color: #cbd8cf;
-  background: #ffffff;
-  color: #34423a;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .ui-button--danger {
-  border-color: #d8aaa3;
-  background: #fff5f3;
-  color: #a83224;
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-surface);
+  color: var(--color-danger);
 }
 
 .ui-button--category {
-  border-color: color-mix(in srgb, var(--category-color) 48%, #cbd8cf);
-  background: color-mix(in srgb, var(--category-color) 12%, #ffffff);
-  color: #17201b;
+  border-color: color-mix(in srgb, var(--category-color) 48%, var(--color-border));
+  background: color-mix(in srgb, var(--category-color) 12%, var(--color-surface));
+  color: var(--color-text);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .ui-button--primary:hover {
-    border-color: var(--button-hover-color, #3f614d);
-    background: var(--button-hover-color, #3f614d);
+    border-color: var(--button-hover-color, var(--color-primary-dark));
+    background: var(--button-hover-color, var(--color-primary-dark));
   }
 
   .ui-button--secondary:hover,
   .ui-button--icon:hover {
-    border-color: #9daaa2;
-    background: #f2f6f3;
-    color: #17201b;
+    border-color: var(--color-border-strong);
+    background: var(--color-primary-light);
+    color: var(--color-text);
   }
 
   .ui-button--danger:hover {
-    border-color: #c95a4a;
-    background: #ffe8e4;
-    color: #8f281d;
+    border-color: var(--color-danger-strong);
+    background: var(--color-danger-surface-hover);
+    color: var(--color-danger-dark);
   }
 
   .ui-button--category:hover {
     border-color: var(--category-color);
-    background: color-mix(in srgb, var(--category-color) 18%, #ffffff);
+    background: color-mix(in srgb, var(--category-color) 18%, var(--color-surface));
   }
 }

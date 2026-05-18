@@ -34,7 +34,9 @@ const pendingDeleteCategory = computed(() =>
     : undefined,
 )
 const pendingDeleteUsageCount = computed(() =>
-  pendingDeleteCategory.value ? catTrackerStore.getCategoryUsageCount(pendingDeleteCategory.value.id) : 0,
+  pendingDeleteCategory.value
+    ? catTrackerStore.getCategoryUsageCount(pendingDeleteCategory.value.id)
+    : 0,
 )
 const deleteActionLabel = computed(() => (pendingDeleteUsageCount.value > 0 ? '停用' : '刪除'))
 const deleteMessage = computed(() =>
@@ -148,7 +150,12 @@ function dragOverCategory(targetCategory: EventCategory, event: DragEvent): void
   const draggingCategory = catTrackerStore.categoriesById.get(draggingCategoryId.value)
   const targetGroup = targetCategory.group
 
-  if (!draggingCategory || draggingCategory.isArchived || !targetGroup || draggingCategory.group !== targetGroup) {
+  if (
+    !draggingCategory ||
+    draggingCategory.isArchived ||
+    !targetGroup ||
+    draggingCategory.group !== targetGroup
+  ) {
     clearDropTarget()
     return
   }
@@ -179,7 +186,11 @@ function canDropOnCategory(targetCategory: EventCategory): boolean {
 
   const draggingCategory = catTrackerStore.categoriesById.get(draggingCategoryId.value)
 
-  return Boolean(draggingCategory && !draggingCategory.isArchived && draggingCategory.group === targetCategory.group)
+  return Boolean(
+    draggingCategory &&
+    !draggingCategory.isArchived &&
+    draggingCategory.group === targetCategory.group,
+  )
 }
 
 function dropCategory(targetCategory: EventCategory): void {
@@ -188,7 +199,9 @@ function dropCategory(targetCategory: EventCategory): void {
     return
   }
 
-  const targetCategoryId = targetCategory.isArchived ? dragTargetCategoryId.value : targetCategory.id
+  const targetCategoryId = targetCategory.isArchived
+    ? dragTargetCategoryId.value
+    : targetCategory.id
 
   if (!targetCategoryId) {
     clearDragState()
@@ -202,7 +215,11 @@ function dropCategory(targetCategory: EventCategory): void {
     return
   }
 
-  catTrackerStore.reorderCategory(draggingCategoryId.value, targetCategoryId, dragTargetPosition.value)
+  catTrackerStore.reorderCategory(
+    draggingCategoryId.value,
+    targetCategoryId,
+    dragTargetPosition.value,
+  )
   clearDragState()
 }
 
@@ -215,7 +232,12 @@ function dropCategoryAtGroupEnd(group: EventCategoryGroup, categories: EventCate
   const activeCategories = categories.filter((category) => !category.isArchived)
   const lastCategory = activeCategories.at(-1)
 
-  if (!draggingCategory || draggingCategory.isArchived || draggingCategory.group !== group || !lastCategory) {
+  if (
+    !draggingCategory ||
+    draggingCategory.isArchived ||
+    draggingCategory.group !== group ||
+    !lastCategory
+  ) {
     clearDragState()
     return
   }
@@ -238,9 +260,11 @@ function clearDropTarget(): void {
 }
 
 function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
-  return categoriesByGroup.value.find((categoryGroup) => categoryGroup.group === group)?.categories.filter(
-    (category) => !category.isArchived,
-  ) ?? []
+  return (
+    categoriesByGroup.value
+      .find((categoryGroup) => categoryGroup.group === group)
+      ?.categories.filter((category) => !category.isArchived) ?? []
+  )
 }
 </script>
 
@@ -251,7 +275,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
         <h1 id="settings-title">設定</h1>
         <p>管理事件分類</p>
       </div>
-      <button class="ui-button ui-button--primary compact-button" type="button" @click="startCreateCategory">
+      <button
+        class="ui-button ui-button--primary compact-button"
+        type="button"
+        @click="startCreateCategory"
+      >
         新增分類
       </button>
     </div>
@@ -415,7 +443,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
           </label>
 
           <div class="category-form__actions">
-            <button class="ui-button ui-button--secondary save-button" type="button" @click="closeCategoryModal">
+            <button
+              class="ui-button ui-button--secondary save-button"
+              type="button"
+              @click="closeCategoryModal"
+            >
               取消
             </button>
             <button class="ui-button ui-button--primary save-button" type="submit">
@@ -468,14 +500,14 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 .settings-header p,
 .category-item__content span,
 .empty-group {
-  color: #65736a;
+  color: var(--color-muted);
 }
 
 .category-group {
   padding: 14px;
-  border: 1px solid #d8e0d8;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--color-surface);
 }
 
 .category-form {
@@ -501,7 +533,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 .field__label {
-  color: #34423a;
+  color: var(--color-text);
   font-size: 0.875rem;
   font-weight: 700;
 }
@@ -509,18 +541,18 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 .field__control {
   width: 100%;
   min-height: 40px;
-  border: 1px solid #cbd8cf;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 10px;
-  background: #ffffff;
-  color: #17201b;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .toggle-field {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #34423a;
+  color: var(--color-text);
   font-weight: 700;
 }
 
@@ -536,9 +568,9 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   justify-content: center;
   min-width: 0;
   height: 40px;
-  border: 1px solid #cbd8cf;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -588,9 +620,9 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   gap: 10px;
   min-width: 0;
   padding: 10px;
-  border: 1px solid #e0e7e1;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: #f8faf7;
+  background: var(--color-background);
 }
 
 .category-item--dragging {
@@ -610,7 +642,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   z-index: 1;
   height: 3px;
   border-radius: 999px;
-  background: #557563;
+  background: var(--color-primary);
   content: '';
 }
 
@@ -623,7 +655,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 .drag-handle {
-  color: #9aa59e;
+  color: var(--color-muted);
   cursor: grab;
   font-size: 0.875rem;
   letter-spacing: -0.18em;
@@ -637,7 +669,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 .category-item--archived {
   grid-template-columns: 14px 1fr auto;
   border-style: dashed;
-  background: #f1f4f2;
+  background: var(--color-disabled-surface);
 }
 
 .category-item--archived .category-color {
@@ -645,7 +677,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 .category-item--archived strong {
-  color: #65736a;
+  color: var(--color-muted);
 }
 
 .category-color {
@@ -672,6 +704,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   font-size: 0.875rem;
 }
 
+.ui-button--primary {
+  --button-color: var(--color-primary);
+  --button-hover-color: var(--color-primary-dark);
+}
+
 .empty-group {
   padding-top: 10px;
 }
@@ -684,16 +721,16 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(23, 32, 27, 0.34);
+  background: var(--overlay-color);
 }
 
 .category-modal {
   width: min(100%, 520px);
   padding: 18px;
-  border: 1px solid #d8e0d8;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 22px 60px rgba(23, 32, 27, 0.24);
+  background: var(--color-surface);
+  box-shadow: 0 22px 60px var(--shadow-color);
 }
 
 .modal-close {

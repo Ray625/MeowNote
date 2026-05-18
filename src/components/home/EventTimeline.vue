@@ -42,6 +42,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
               <span class="category-dot" aria-hidden="true"></span>
               <span>{{ item.category?.name ?? '未分類' }}</span>
             </strong>
+            <strong v-if="item.event.title" class="event-item__title">{{ item.event.title }}</strong>
             <span v-if="item.event.severity" class="event-item__meta">
               嚴重度 {{ item.event.severity }}
             </span>
@@ -103,7 +104,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 .event-count,
 .event-item__meta,
 .empty-state {
-  color: #65736a;
+  color: var(--color-muted);
 }
 
 .selected-date {
@@ -125,10 +126,10 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   grid-template-columns: 1fr 40px;
   align-items: stretch;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--category-color) 34%, #d8e0d8);
+  border: 1px solid color-mix(in srgb, var(--category-color) 34%, var(--color-border));
   border-left: 5px solid var(--category-color);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--category-color) 7%, #ffffff);
+  background: color-mix(in srgb, var(--category-color) 7%, var(--color-surface));
 }
 
 .event-item__button {
@@ -149,9 +150,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   display: grid;
   place-items: center;
   border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--category-color) 24%, #d8e0d8);
+  border-left: 1px solid color-mix(in srgb, var(--category-color) 24%, var(--color-border));
   background: transparent;
-  color: color-mix(in srgb, var(--category-color) 82%, #17201b);
+  color: color-mix(in srgb, var(--category-color) 82%, var(--color-text));
   cursor: pointer;
   font: inherit;
   font-size: 1.35rem;
@@ -159,22 +160,22 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 .event-item__button:hover {
-  background: color-mix(in srgb, var(--category-color) 10%, #ffffff);
+  background: color-mix(in srgb, var(--category-color) 10%, var(--color-surface));
 }
 
 .event-item__delete:hover {
-  background: color-mix(in srgb, #b33a2b 10%, transparent);
-  color: #a83224;
+  background: color-mix(in srgb, var(--color-danger-strong) 10%, transparent);
+  color: var(--color-danger);
 }
 
 .event-item__button:focus-visible,
 .event-item__delete:focus-visible {
-  outline: 3px solid #8fc7a0;
+  outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
 
 .event-item__time {
-  color: #34423a;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -191,7 +192,16 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: color-mix(in srgb, var(--category-color) 82%, #17201b);
+  color: color-mix(in srgb, var(--category-color) 82%, var(--color-text));
+}
+
+.event-item__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .category-dot {
@@ -209,7 +219,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 .event-item__note {
   flex-basis: 100%;
   overflow: hidden;
-  color: #34423a;
+  color: var(--color-text);
   font-size: 0.9375rem;
   line-height: 1.3;
   text-overflow: ellipsis;

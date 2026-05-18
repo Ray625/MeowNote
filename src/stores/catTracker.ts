@@ -147,7 +147,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
-  const lastCreatedEventId = ref<string>()
   const editingEventId = ref<string>()
   const deleteConfirmEventId = ref<string>()
 
@@ -157,6 +156,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     sortCategories(
       categories.value.filter((category) => category.isQuickAction && !category.isArchived),
     ),
+  )
+  const activeCategories = computed(() =>
+    sortCategories(categories.value.filter((category) => !category.isArchived)),
   )
   const categoriesByGroup = computed(() =>
     CATEGORY_GROUP_ORDER.map((group) => ({
@@ -256,16 +258,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       time: formatEventTime(event.occurredAt),
     })),
   )
-  const successMessage = computed(() => {
-    if (!lastCreatedEventId.value) {
-      return ''
-    }
-
-    const event = selectedDateEvents.value.find((item) => item.id === lastCreatedEventId.value)
-    const category = event ? categoriesById.value.get(event.categoryId) : undefined
-
-    return category ? `已記錄：${category.name}` : '已記錄'
-  })
   const editingEvent = computed(() =>
     editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined,
   )
@@ -326,10 +318,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     isQuickRecordOpen.value = false
   }
 
-  function clearLastCreatedEvent(): void {
-    lastCreatedEventId.value = undefined
-  }
-
   function getQuickRecordOccurredAt(): string {
     const now = new Date()
     const occurredAt = new Date(selectedDate.value)
@@ -346,7 +334,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    lastCreatedEventId.value = event.id
     isQuickRecordOpen.value = false
 
     return event
@@ -465,8 +452,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       catId: input.catId,
       categoryId: input.categoryId,
       occurredAt: input.occurredAt ?? now,
+      title: input.title,
       severity: input.severity,
       note: input.note,
+      values: input.values,
       createdAt: now,
       updatedAt: now,
     }
@@ -620,11 +609,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     selectedDate,
     visibleMonth,
     isQuickRecordOpen,
-    lastCreatedEventId,
     editingEventId,
     deleteConfirmEventId,
     selectedCat,
     quickActionCategories,
+    activeCategories,
     categoriesByGroup,
     archivedCategories,
     categoryUsageCounts,
@@ -637,7 +626,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     calendarDays,
     selectedDateEvents,
     selectedDateEventListItems,
-    successMessage,
     editingEvent,
     editingCategory,
     deleteConfirmEvent,
@@ -648,7 +636,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     toggleQuickRecord,
     closeQuickRecord,
     setActiveTab,
-    clearLastCreatedEvent,
     createCat,
     createCategory,
     updateCategory,

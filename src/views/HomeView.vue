@@ -57,8 +57,8 @@ const { activeTab, deleteConfirmEvent } = storeToRefs(catTrackerStore)
   gap: 14px;
   box-sizing: border-box;
   padding: 14px 14px 80px;
-  background: #f8faf7;
-  color: #17201b;
+  background: var(--color-background);
+  color: var(--color-text);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }

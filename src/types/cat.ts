@@ -26,8 +26,10 @@ export interface CatEvent {
   catId: string
   categoryId: string
   occurredAt: string
+  title?: string
   severity?: 1 | 2 | 3 | 4 | 5
   note?: string
+  values?: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }
@@ -61,8 +63,8 @@ export type UpdateCategoryInput = Partial<
 >
 
 export type CreateCatEventInput = Pick<CatEvent, 'catId' | 'categoryId'> &
-  Partial<Pick<CatEvent, 'occurredAt' | 'severity' | 'note'>>
+  Partial<Pick<CatEvent, 'occurredAt' | 'title' | 'severity' | 'note' | 'values'>>
 
 export type UpdateCatEventInput = Partial<
-  Pick<CatEvent, 'catId' | 'categoryId' | 'occurredAt' | 'severity' | 'note'>
+  Pick<CatEvent, 'catId' | 'categoryId' | 'occurredAt' | 'title' | 'severity' | 'note' | 'values'>
 >

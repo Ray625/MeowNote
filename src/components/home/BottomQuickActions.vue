@@ -9,8 +9,6 @@ const catTrackerStore = useCatTrackerStore()
 const { activeTab, isQuickRecordOpen, quickActionCategories } = storeToRefs(catTrackerStore)
 const activeGroup = ref<EventCategoryGroup>('攝取')
 
-let successMessageTimeout: ReturnType<typeof window.setTimeout> | undefined
-
 const groupedQuickActionCategories = computed(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
     group,
@@ -27,19 +25,7 @@ const activeGroupCategories = computed(
 )
 
 function recordQuickEvent(categoryId: string): void {
-  const event = catTrackerStore.quickRecordForSelectedDate(categoryId)
-
-  if (!event) {
-    return
-  }
-
-  if (successMessageTimeout) {
-    window.clearTimeout(successMessageTimeout)
-  }
-
-  successMessageTimeout = window.setTimeout(() => {
-    catTrackerStore.clearLastCreatedEvent()
-  }, 1800)
+  catTrackerStore.quickRecordForSelectedDate(categoryId)
 }
 
 function getCategoryStyle(category?: EventCategory): Record<string, string> {
@@ -140,11 +126,11 @@ function selectGroup(group: EventCategoryGroup): void {
 .quick-record-panel__inner {
   width: var(--content-width);
   padding: 14px;
-  border: 1px solid #d8e0d8;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 48px rgba(23, 32, 27, 0.18);
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  box-shadow: 0 18px 48px var(--shadow-color);
   backdrop-filter: blur(14px);
 }
 
@@ -213,9 +199,9 @@ function selectGroup(group: EventCategoryGroup): void {
   left: 0;
   z-index: 11;
   padding: 6px 16px max(6px, env(safe-area-inset-bottom));
-  border-top: 1px solid #d8e0d8;
-  background: rgba(248, 250, 247, 0.96);
-  box-shadow: 0 -12px 32px rgba(23, 32, 27, 0.08);
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-background) 96%, transparent);
+  box-shadow: 0 -12px 32px var(--shadow-color-soft);
   backdrop-filter: blur(14px);
 }
 
@@ -233,7 +219,7 @@ function selectGroup(group: EventCategoryGroup): void {
 .bottom-navigation__item {
   border: 0;
   background: transparent;
-  color: #65736a;
+  color: var(--color-muted);
   cursor: pointer;
   font: inherit;
   font-size: 0.875rem;
@@ -242,18 +228,18 @@ function selectGroup(group: EventCategoryGroup): void {
 }
 
 .bottom-navigation__item--active {
-  color: #17201b;
+  color: var(--color-text);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .bottom-navigation__item:hover {
-    color: #17201b;
+    color: var(--color-text);
   }
 }
 
 .add-button {
-  --button-color: #557563;
-  --button-hover-color: #3f614d;
+  --button-color: var(--color-primary);
+  --button-hover-color: var(--color-primary-dark);
 
   width: 52px;
   height: 52px;
