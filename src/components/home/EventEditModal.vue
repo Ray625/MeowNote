@@ -217,7 +217,6 @@ function fromDateTimeLocalValue(value: string): string {
             class="field__control"
             type="text"
             maxlength="40"
-            placeholder="例如：未消化飼料、少量、精神正常"
           />
         </label>
 
