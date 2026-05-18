@@ -6,7 +6,7 @@ import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory, EventCategoryGroup } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { isQuickRecordOpen, quickActionCategories } = storeToRefs(catTrackerStore)
+const { activeTab, isQuickRecordOpen, quickActionCategories } = storeToRefs(catTrackerStore)
 const activeGroup = ref<EventCategoryGroup>('攝取')
 
 let successMessageTimeout: ReturnType<typeof window.setTimeout> | undefined
@@ -99,7 +99,14 @@ function selectGroup(group: EventCategoryGroup): void {
 
   <nav class="bottom-navigation" aria-label="主要操作">
     <div class="bottom-navigation__inner">
-      <span class="bottom-navigation__item">月曆</span>
+      <button
+        class="bottom-navigation__item"
+        :class="{ 'bottom-navigation__item--active': activeTab === 'calendar' }"
+        type="button"
+        @click="catTrackerStore.setActiveTab('calendar')"
+      >
+        月曆
+      </button>
       <button
         class="ui-button ui-button--primary add-button"
         type="button"
@@ -108,7 +115,14 @@ function selectGroup(group: EventCategoryGroup): void {
       >
         +
       </button>
-      <span class="bottom-navigation__item">紀錄</span>
+      <button
+        class="bottom-navigation__item"
+        :class="{ 'bottom-navigation__item--active': activeTab === 'settings' }"
+        type="button"
+        @click="catTrackerStore.setActiveTab('settings')"
+      >
+        設定
+      </button>
     </div>
   </nav>
 </template>
@@ -217,9 +231,24 @@ function selectGroup(group: EventCategoryGroup): void {
 }
 
 .bottom-navigation__item {
+  border: 0;
+  background: transparent;
   color: #65736a;
+  cursor: pointer;
+  font: inherit;
   font-size: 0.875rem;
   font-weight: 700;
+  transition: color 160ms ease;
+}
+
+.bottom-navigation__item--active {
+  color: #17201b;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bottom-navigation__item:hover {
+    color: #17201b;
+  }
 }
 
 .add-button {

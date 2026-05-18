@@ -39,6 +39,10 @@ export type CreateCatInput = Pick<Cat, 'name'> & Partial<Pick<Cat, 'avatarUrl' |
 export type CreateCategoryInput = Pick<EventCategory, 'name'> &
   Partial<Pick<EventCategory, 'color' | 'group' | 'icon' | 'isQuickAction'>>
 
+export type UpdateCategoryInput = Partial<
+  Pick<EventCategory, 'color' | 'group' | 'icon' | 'isQuickAction' | 'name'>
+>
+
 export type CreateCatEventInput = Pick<CatEvent, 'catId' | 'categoryId'> &
   Partial<Pick<CatEvent, 'occurredAt' | 'severity' | 'note'>>
 

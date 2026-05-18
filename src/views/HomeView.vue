@@ -5,16 +5,20 @@ import BottomQuickActions from '@/components/home/BottomQuickActions.vue'
 import EventEditModal from '@/components/home/EventEditModal.vue'
 import EventTimeline from '@/components/home/EventTimeline.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
+import SettingsView from '@/components/settings/SettingsView.vue'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 const catTrackerStore = useCatTrackerStore()
-const { deleteConfirmEvent } = storeToRefs(catTrackerStore)
+const { activeTab, deleteConfirmEvent } = storeToRefs(catTrackerStore)
 </script>
 
 <template>
   <main class="home-view" aria-labelledby="timeline-title">
-    <HomeCalendar />
-    <EventTimeline />
+    <template v-if="activeTab === 'calendar'">
+      <HomeCalendar />
+      <EventTimeline />
+    </template>
+    <SettingsView v-else />
     <BottomQuickActions />
     <EventEditModal />
 

@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  CATEGORY_GROUP_ORDER,
   createDefaultCat,
   createDefaultCategories,
   DEFAULT_CAT_ID,
@@ -13,6 +14,7 @@ import type {
   CreateCatInput,
   CreateCategoryInput,
   EventCategory,
+  UpdateCategoryInput,
   UpdateCatEventInput,
 } from '@/types'
 import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
@@ -26,7 +28,10 @@ interface CatTrackerState {
   categories: EventCategory[]
   events: CatEvent[]
   selectedCatId: string
+  deletedDefaultCategoryNames?: string[]
 }
+
+type MainTab = 'calendar' | 'settings'
 
 export interface CalendarDay {
   date: Date
@@ -52,6 +57,7 @@ function createInitialState(): CatTrackerState {
     categories: createDefaultCategories(now),
     events: [],
     selectedCatId: DEFAULT_CAT_ID,
+    deletedDefaultCategoryNames: [],
   }
 }
 
@@ -98,9 +104,12 @@ function formatEventTime(dateTime: string): string {
 function normalizeState(state: CatTrackerState): CatTrackerState {
   const fallbackState = createInitialState()
   const cats = state.cats.length > 0 ? state.cats : fallbackState.cats
+  const deletedDefaultCategoryNames = state.deletedDefaultCategoryNames ?? []
   const categories =
     state.categories.length > 0
-      ? ensureDefaultCategories(state.categories, getIsoNow())
+      ? ensureDefaultCategories(state.categories, getIsoNow()).filter(
+          (category) => !deletedDefaultCategoryNames.includes(category.name),
+        )
       : fallbackState.categories
   const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
     ? state.selectedCatId
@@ -111,6 +120,7 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
     categories,
     events: state.events,
     selectedCatId,
+    deletedDefaultCategoryNames,
   }
 }
 
@@ -122,6 +132,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const categories = ref<EventCategory[]>(initialState.categories)
   const events = ref<CatEvent[]>(initialState.events)
   const selectedCatId = ref(initialState.selectedCatId)
+  const deletedDefaultCategoryNames = ref<string[]>(initialState.deletedDefaultCategoryNames ?? [])
+  const activeTab = ref<MainTab>('calendar')
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
@@ -134,6 +146,21 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const quickActionCategories = computed(() =>
     categories.value.filter((category) => category.isQuickAction),
   )
+  const categoriesByGroup = computed(() =>
+    CATEGORY_GROUP_ORDER.map((group) => ({
+      group,
+      categories: categories.value.filter((category) => category.group === group),
+    })),
+  )
+  const categoryUsageCounts = computed(() => {
+    const usageCounts = new Map<string, number>()
+
+    for (const event of events.value) {
+      usageCounts.set(event.categoryId, (usageCounts.get(event.categoryId) ?? 0) + 1)
+    }
+
+    return usageCounts
+  })
 
   const todayEvents = computed(() =>
     events.value
@@ -237,13 +264,14 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   )
 
   watch(
-    [cats, categories, events, selectedCatId],
+    [cats, categories, events, selectedCatId, deletedDefaultCategoryNames],
     () => {
       writeJson<CatTrackerState>(STORAGE_KEY, {
         cats: cats.value,
         categories: categories.value,
         events: events.value,
         selectedCatId: selectedCatId.value,
+        deletedDefaultCategoryNames: deletedDefaultCategoryNames.value,
       })
     },
     { deep: true, immediate: true },
@@ -278,6 +306,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function closeQuickRecord(): void {
+    isQuickRecordOpen.value = false
+  }
+
+  function setActiveTab(tab: MainTab): void {
+    activeTab.value = tab
     isQuickRecordOpen.value = false
   }
 
@@ -383,6 +416,25 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return category
   }
 
+  function updateCategory(categoryId: string, input: UpdateCategoryInput): EventCategory | undefined {
+    const category = categoriesById.value.get(categoryId)
+
+    if (!category) {
+      return undefined
+    }
+
+    Object.assign(category, {
+      ...input,
+      updatedAt: getIsoNow(),
+    })
+
+    return category
+  }
+
+  function getCategoryUsageCount(categoryId: string): number {
+    return categoryUsageCounts.value.get(categoryId) ?? 0
+  }
+
   function createEvent(input: CreateCatEventInput): CatEvent {
     const now = getIsoNow()
     const event: CatEvent = {
@@ -432,11 +484,27 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     events.value = events.value.filter((event) => event.id !== eventId)
   }
 
+  function deleteCategory(categoryId: string): void {
+    const category = categoriesById.value.get(categoryId)
+
+    if (!category) {
+      return
+    }
+
+    categories.value = categories.value.filter((item) => item.id !== categoryId)
+
+    if (category.isDefault && !deletedDefaultCategoryNames.value.includes(category.name)) {
+      deletedDefaultCategoryNames.value.push(category.name)
+    }
+  }
+
   return {
     cats,
     categories,
     events,
     selectedCatId,
+    deletedDefaultCategoryNames,
+    activeTab,
     selectedDate,
     visibleMonth,
     isQuickRecordOpen,
@@ -445,6 +513,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     deleteConfirmEventId,
     selectedCat,
     quickActionCategories,
+    categoriesByGroup,
+    categoryUsageCounts,
     todayEvents,
     catsById,
     categoriesById,
@@ -464,14 +534,18 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     showNextMonth,
     toggleQuickRecord,
     closeQuickRecord,
+    setActiveTab,
     clearLastCreatedEvent,
     createCat,
     createCategory,
+    updateCategory,
+    getCategoryUsageCount,
     createEvent,
     quickRecord,
     quickRecordForSelectedDate,
     updateEvent,
     deleteEvent,
+    deleteCategory,
     openEditEvent,
     closeEditEvent,
     openDeleteConfirm,

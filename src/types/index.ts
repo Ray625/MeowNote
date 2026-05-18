@@ -7,5 +7,6 @@ export type {
   EventCategory,
   EventCategoryGroup,
   EventSeverity,
+  UpdateCategoryInput,
   UpdateCatEventInput,
 } from './cat'
