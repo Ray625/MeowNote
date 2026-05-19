@@ -13,13 +13,13 @@ export const DEFAULT_CAT_ID = 'default-cat'
 export const CATEGORY_GROUP_ORDER: EventCategoryGroup[] = ['飲食', '健康', '行為', '日常', '醫療']
 
 export const CAT_AVATAR_OPTIONS = [
-  { id: 'orange', label: '橘貓', image: catOrangeImage },
+  { id: 'orange', label: '橘', image: catOrangeImage },
   { id: 'tabby', label: '虎斑', image: catTabbyImage },
   { id: 'calico', label: '三花', image: catCalicoImage },
   { id: 'tortoiseshell', label: '玳瑁', image: catTortoiseshellImage },
-  { id: 'black', label: '黑貓', image: catBlackImage },
-  { id: 'white', label: '白貓', image: catWhiteImage },
-  { id: 'gray', label: '灰貓', image: catGrayImage },
+  { id: 'black', label: '黑', image: catBlackImage },
+  { id: 'white', label: '白', image: catWhiteImage },
+  { id: 'gray', label: '銀灰', image: catGrayImage },
   { id: 'tuxedo', label: '賓士', image: catTuxedoImage },
 ] as const satisfies ReadonlyArray<{
   id: CatAvatarId
