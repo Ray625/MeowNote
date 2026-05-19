@@ -21,7 +21,7 @@ const { categoriesByGroup, cats, selectedCatId } = storeToRefs(catTrackerStore)
 const settingsSection = ref<'categories' | 'pets'>('categories')
 const editingCategoryId = ref<string>()
 const categoryName = ref('')
-const categoryGroup = ref<EventCategoryGroup>('攝取')
+const categoryGroup = ref<EventCategoryGroup>('飲食')
 const categoryColorId = ref<CategoryColorId>(DEFAULT_CATEGORY_COLOR_ID)
 const isQuickAction = ref(true)
 const isCategoryModalOpen = ref(false)
@@ -63,7 +63,7 @@ const deleteMessage = computed(() =>
 function startCreateCategory(): void {
   editingCategoryId.value = undefined
   categoryName.value = ''
-  categoryGroup.value = '攝取'
+  categoryGroup.value = '飲食'
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   isQuickAction.value = true
   isCategoryModalOpen.value = true
@@ -72,7 +72,7 @@ function startCreateCategory(): void {
 function startEditCategory(category: EventCategory): void {
   editingCategoryId.value = category.id
   categoryName.value = category.name
-  categoryGroup.value = category.group ?? '攝取'
+  categoryGroup.value = category.group ?? '飲食'
   categoryColorId.value = getCategoryColorId(category.colorId)
   isQuickAction.value = category.isQuickAction
   isCategoryModalOpen.value = true
@@ -82,7 +82,7 @@ function closeCategoryModal(): void {
   isCategoryModalOpen.value = false
   editingCategoryId.value = undefined
   categoryName.value = ''
-  categoryGroup.value = '攝取'
+  categoryGroup.value = '飲食'
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   isQuickAction.value = true
 }

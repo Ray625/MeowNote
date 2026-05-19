@@ -38,7 +38,7 @@ export interface CatEvent {
   updatedAt: string
 }
 
-export type EventCategoryGroup = '攝取' | '排泄' | '行為' | '日常' | '用藥'
+export type EventCategoryGroup = '飲食' | '健康' | '行為' | '日常' | '醫療'
 
 export type CatSex = 'male' | 'female'
 

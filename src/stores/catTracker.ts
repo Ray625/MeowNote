@@ -2,9 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import {
   CATEGORY_GROUP_ORDER,
-  createDefaultCat,
   createDefaultCategories,
-  DEFAULT_CAT_ID,
   ensureDefaultCategories,
 } from '@/constants/defaultData'
 import type {
@@ -54,10 +52,10 @@ function createInitialState(): CatTrackerState {
   const now = getIsoNow()
 
   return {
-    cats: [createDefaultCat(now)],
+    cats: [],
     categories: createDefaultCategories(now),
     events: [],
-    selectedCatId: DEFAULT_CAT_ID,
+    selectedCatId: '',
   }
 }
 
@@ -121,12 +119,12 @@ function sortCategories(categories: EventCategory[]): EventCategory[] {
 
 function normalizeState(state: CatTrackerState): CatTrackerState {
   const fallbackState = createInitialState()
-  const cats = state.cats.length > 0 ? state.cats : fallbackState.cats
+  const cats = state.cats
   const categories =
     state.categories.length > 0 ? ensureDefaultCategories(state.categories, getIsoNow()) : fallbackState.categories
   const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
     ? state.selectedCatId
-    : cats[0]?.id ?? DEFAULT_CAT_ID
+    : cats[0]?.id ?? ''
 
   return {
     cats,
@@ -151,6 +149,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const editingEventId = ref<string>()
   const deleteConfirmEventId = ref<string>()
 
+  const needsFirstTimeSetup = computed(() => cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
 
   const quickActionCategories = computed(() =>
@@ -427,7 +426,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function createCategory(input: CreateCategoryInput): EventCategory {
     const now = getIsoNow()
-    const group = input.group ?? '攝取'
+    const group = input.group ?? '飲食'
     const category: EventCategory = {
       id: createId('category'),
       name: input.name,
@@ -640,6 +639,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     isQuickRecordOpen,
     editingEventId,
     deleteConfirmEventId,
+    needsFirstTimeSetup,
     selectedCat,
     quickActionCategories,
     activeCategories,

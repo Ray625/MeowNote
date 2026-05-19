@@ -4,23 +4,26 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import BottomQuickActions from '@/components/home/BottomQuickActions.vue'
 import EventEditModal from '@/components/home/EventEditModal.vue'
 import EventTimeline from '@/components/home/EventTimeline.vue'
+import FirstTimeSetup from '@/components/home/FirstTimeSetup.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 const catTrackerStore = useCatTrackerStore()
-const { activeTab, deleteConfirmEvent } = storeToRefs(catTrackerStore)
+const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTrackerStore)
 </script>
 
 <template>
   <main class="home-view" aria-labelledby="timeline-title">
-    <template v-if="activeTab === 'calendar'">
+    <FirstTimeSetup v-if="needsFirstTimeSetup" />
+
+    <template v-else-if="activeTab === 'calendar'">
       <HomeCalendar />
       <EventTimeline />
     </template>
     <SettingsView v-else />
-    <BottomQuickActions />
-    <EventEditModal />
+    <BottomQuickActions v-if="!needsFirstTimeSetup" />
+    <EventEditModal v-if="!needsFirstTimeSetup" />
 
     <ConfirmDialog
       v-if="deleteConfirmEvent"

@@ -7,7 +7,7 @@ import type { EventCategory, EventCategoryGroup } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
 const { activeTab, isQuickRecordOpen, quickActionCategories } = storeToRefs(catTrackerStore)
-const activeGroup = ref<EventCategoryGroup>('攝取')
+const activeGroup = ref<EventCategoryGroup>('飲食')
 
 const groupedQuickActionCategories = computed(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
