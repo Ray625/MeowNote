@@ -317,6 +317,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     visibleMonth.value = addMonths(visibleMonth.value, 1)
   }
 
+  function setVisibleMonth(year: number, monthIndex: number): void {
+    visibleMonth.value = startOfMonth(new Date(year, monthIndex, 1))
+  }
+
   function toggleQuickRecord(): void {
     isQuickRecordOpen.value = !isQuickRecordOpen.value
   }
@@ -665,6 +669,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     selectCalendarDate,
     showPreviousMonth,
     showNextMonth,
+    setVisibleMonth,
     toggleQuickRecord,
     closeQuickRecord,
     setActiveTab,

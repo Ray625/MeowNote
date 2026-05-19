@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getCatAvatarOption } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 const catTrackerStore = useCatTrackerStore()
-const { calendarDays, cats, monthTitle, selectedCat, selectedCatId } = storeToRefs(catTrackerStore)
+const { calendarDays, cats, monthTitle, selectedCat, selectedCatId, visibleMonth } =
+  storeToRefs(catTrackerStore)
 const isCatMenuOpen = ref(false)
+const isMonthPickerOpen = ref(false)
+const pickerYear = ref(visibleMonth.value.getFullYear())
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+  index,
+  label: new Intl.DateTimeFormat('zh-TW', { month: 'long' }).format(new Date(2024, index, 1)),
+}))
+const visibleMonthIndex = computed(() => visibleMonth.value.getMonth())
 
 function toggleCatMenu(): void {
   isCatMenuOpen.value = !isCatMenuOpen.value
@@ -17,6 +25,27 @@ function toggleCatMenu(): void {
 function selectCat(catId: string): void {
   catTrackerStore.selectCat(catId)
   isCatMenuOpen.value = false
+}
+
+function syncMonthPicker(): void {
+  pickerYear.value = visibleMonth.value.getFullYear()
+}
+
+function toggleMonthPicker(): void {
+  if (!isMonthPickerOpen.value) {
+    syncMonthPicker()
+  }
+
+  isMonthPickerOpen.value = !isMonthPickerOpen.value
+}
+
+function changePickerYear(delta: number): void {
+  pickerYear.value += delta
+}
+
+function selectMonth(monthIndex: number): void {
+  catTrackerStore.setVisibleMonth(pickerYear.value, monthIndex)
+  isMonthPickerOpen.value = false
 }
 </script>
 
@@ -78,7 +107,58 @@ function selectCat(catId: string): void {
       >
         ‹
       </button>
-      <h1 id="calendar-title" class="month-title">{{ monthTitle }}</h1>
+      <div class="month-picker">
+        <h1 id="calendar-title" class="month-title">
+          <button
+            class="month-title-button"
+            type="button"
+            :aria-expanded="isMonthPickerOpen"
+            aria-haspopup="dialog"
+            @click="toggleMonthPicker"
+          >
+            <span>{{ monthTitle }}</span>
+            <span class="month-title-button__chevron" aria-hidden="true">⌄</span>
+          </button>
+        </h1>
+
+        <div v-if="isMonthPickerOpen" class="month-picker-menu" role="dialog" aria-label="切換年月">
+          <div class="month-picker-menu__year">
+            <button
+              class="ui-button ui-button--icon month-picker-menu__year-button"
+              type="button"
+              aria-label="上一年"
+              @click="changePickerYear(-1)"
+            >
+              ‹
+            </button>
+            <strong>{{ pickerYear }}年</strong>
+            <button
+              class="ui-button ui-button--icon month-picker-menu__year-button"
+              type="button"
+              aria-label="下一年"
+              @click="changePickerYear(1)"
+            >
+              ›
+            </button>
+          </div>
+
+          <div class="month-picker-menu__months" aria-label="選擇月份">
+            <button
+              v-for="month in monthOptions"
+              :key="month.index"
+              class="month-picker-menu__month"
+              :class="{
+                'month-picker-menu__month--selected':
+                  pickerYear === visibleMonth.getFullYear() && month.index === visibleMonthIndex,
+              }"
+              type="button"
+              @click="selectMonth(month.index)"
+            >
+              {{ month.label }}
+            </button>
+          </div>
+        </div>
+      </div>
       <button
         class="ui-button ui-button--icon month-button"
         type="button"
@@ -259,9 +339,93 @@ function selectCat(catId: string): void {
   margin-top: 12px;
 }
 
+.month-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.month-title-button {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.month-title-button:hover {
+  color: var(--color-primary-dark);
+}
+
 .month-title {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.month-title-button__chevron {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.month-picker-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  width: min(278px, calc(100vw - 28px));
+  gap: 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 18px 44px var(--shadow-color);
+  transform: translateX(-50%);
+}
+
+.month-picker-menu__year {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.month-picker-menu__year-button {
+  width: 36px;
+  height: 36px;
+  font-size: 1.25rem;
+}
+
+.month-picker-menu__months {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.month-picker-menu__month {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.month-picker-menu__month:hover,
+.month-picker-menu__month--selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .month-button {
