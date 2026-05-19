@@ -18,7 +18,7 @@ export default defineConfig({
       manifest: {
         name: 'MeowNote',
         short_name: 'MeowNote',
-        description: 'Quick-first cat health and behavior tracking.',
+        description: 'Quickly track your cat’s health, behavior, and daily care.',
         lang: 'zh-TW',
         start_url: appBase,
         scope: appBase,
