@@ -234,13 +234,13 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 
 @media (max-width: 560px) {
   .timeline-section {
-    flex: 1 1 auto;
-    overflow: hidden;
+    flex: 0 0 auto;
+    overflow: visible;
   }
 
   .event-list {
-    flex: 1 1 auto;
-    overflow: auto;
+    flex: 0 0 auto;
+    overflow: visible;
   }
 
   .event-item {

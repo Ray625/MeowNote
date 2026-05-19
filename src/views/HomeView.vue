@@ -68,16 +68,15 @@ const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTr
 
 @media (max-width: 560px) {
   :global(body) {
-    overflow: hidden;
+    overflow: auto;
   }
 
   .home-view {
-    height: 100vh;
-    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
     gap: 12px;
-    overflow: hidden;
+    overflow: visible;
     padding: 10px 10px 78px;
   }
-
 }
 </style>

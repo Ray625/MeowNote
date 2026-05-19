@@ -427,169 +427,173 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
 <template>
   <section class="settings-view" aria-labelledby="settings-title">
-    <div class="settings-header">
-      <div>
-        <h1 id="settings-title">設定</h1>
-        <p>{{ settingsSection === 'categories' ? '管理事件分類' : '管理寵物資料' }}</p>
+    <div class="settings-topbar">
+      <div class="settings-header">
+        <div>
+          <h1 id="settings-title">設定</h1>
+          <p>{{ settingsSection === 'categories' ? '管理事件分類' : '管理寵物資料' }}</p>
+        </div>
+        <button
+          class="ui-button ui-button--primary compact-button"
+          type="button"
+          @click="startCreatePrimaryItem"
+        >
+          {{ settingsSection === 'categories' ? '新增分類' : '新增寵物' }}
+        </button>
       </div>
-      <button
-        class="ui-button ui-button--primary compact-button"
-        type="button"
-        @click="startCreatePrimaryItem"
-      >
-        {{ settingsSection === 'categories' ? '新增分類' : '新增寵物' }}
-      </button>
-    </div>
 
-    <div class="settings-tabs" role="tablist" aria-label="設定分類">
-      <button
-        class="ui-button settings-tab"
-        :class="settingsSection === 'categories' ? 'ui-button--primary' : 'ui-button--secondary'"
-        type="button"
-        role="tab"
-        :aria-selected="settingsSection === 'categories'"
-        @click="switchSettingsSection('categories')"
-      >
-        事件分類
-      </button>
-      <button
-        class="ui-button settings-tab"
-        :class="settingsSection === 'pets' ? 'ui-button--primary' : 'ui-button--secondary'"
-        type="button"
-        role="tab"
-        :aria-selected="settingsSection === 'pets'"
-        @click="switchSettingsSection('pets')"
-      >
-        寵物管理
-      </button>
-    </div>
-
-    <div v-if="settingsSection === 'categories'" class="category-groups">
-      <section
-        v-for="group in categoriesByGroup"
-        :key="group.group"
-        class="category-group"
-        :aria-labelledby="`category-group-${group.group}`"
-      >
-        <h2 :id="`category-group-${group.group}`">{{ group.group }}</h2>
-
-        <ul
-          v-if="group.categories.length > 0"
-          class="category-list"
-          @dragover.prevent
-          @drop.self="dropCategoryAtGroupEnd(group.group, group.categories)"
+      <div class="settings-tabs" role="tablist" aria-label="設定分類">
+        <button
+          class="ui-button settings-tab"
+          :class="settingsSection === 'categories' ? 'ui-button--primary' : 'ui-button--secondary'"
+          type="button"
+          role="tab"
+          :aria-selected="settingsSection === 'categories'"
+          @click="switchSettingsSection('categories')"
         >
-          <li
-            v-for="category in group.categories"
-            :key="category.id"
-            class="category-item"
-            :class="{
-              'category-item--archived': category.isArchived,
-              'category-item--dragging': draggingCategoryId === category.id,
-              'category-item--drop-before':
-                dragTargetCategoryId === category.id && dragTargetPosition === 'before',
-              'category-item--drop-after':
-                dragTargetCategoryId === category.id && dragTargetPosition === 'after',
-            }"
-            @dragover.prevent="dragOverCategory(category, $event)"
-            @dragend="endDragCategory"
-            @drop="dropCategory(category)"
+          事件分類
+        </button>
+        <button
+          class="ui-button settings-tab"
+          :class="settingsSection === 'pets' ? 'ui-button--primary' : 'ui-button--secondary'"
+          type="button"
+          role="tab"
+          :aria-selected="settingsSection === 'pets'"
+          @click="switchSettingsSection('pets')"
+        >
+          寵物管理
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-content">
+      <div v-if="settingsSection === 'categories'" class="category-groups">
+        <section
+          v-for="group in categoriesByGroup"
+          :key="group.group"
+          class="category-group"
+          :aria-labelledby="`category-group-${group.group}`"
+        >
+          <h2 :id="`category-group-${group.group}`">{{ group.group }}</h2>
+
+          <ul
+            v-if="group.categories.length > 0"
+            class="category-list"
+            @dragover.prevent
+            @drop.self="dropCategoryAtGroupEnd(group.group, group.categories)"
           >
-            <span
-              v-if="!category.isArchived"
-              class="drag-handle"
-              draggable="true"
-              aria-label="拖曳排序"
-              title="拖曳排序"
-              @dragstart="startDragCategory(category, $event)"
+            <li
+              v-for="category in group.categories"
+              :key="category.id"
+              class="category-item"
+              :class="{
+                'category-item--archived': category.isArchived,
+                'category-item--dragging': draggingCategoryId === category.id,
+                'category-item--drop-before':
+                  dragTargetCategoryId === category.id && dragTargetPosition === 'before',
+                'category-item--drop-after':
+                  dragTargetCategoryId === category.id && dragTargetPosition === 'after',
+              }"
+              @dragover.prevent="dragOverCategory(category, $event)"
+              @dragend="endDragCategory"
+              @drop="dropCategory(category)"
             >
-              ⋮⋮
-            </span>
-            <span
-              class="category-color"
-              :style="{ '--category-color': getCategoryColorValue(category) }"
-              aria-hidden="true"
-            ></span>
-            <div class="category-item__content">
-              <strong>{{ category.name }}</strong>
-              <span v-if="category.isArchived">
-                已停用 · 過去紀錄仍會保留 ·
-                {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
+              <span
+                v-if="!category.isArchived"
+                class="drag-handle"
+                draggable="true"
+                aria-label="拖曳排序"
+                title="拖曳排序"
+                @dragstart="startDragCategory(category, $event)"
+              >
+                ⋮⋮
               </span>
-              <span v-else>
-                <template v-if="!category.isQuickAction">未顯示於快速紀錄 · </template>
-                {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
-              </span>
-            </div>
-            <div v-if="category.isArchived" class="category-item__actions">
-              <button
-                class="ui-button ui-button--primary compact-button"
-                type="button"
-                @click="restoreCategory(category)"
-              >
-                重新使用
-              </button>
-            </div>
-            <div v-else class="category-item__actions">
-              <button
-                class="ui-button ui-button--secondary compact-button"
-                type="button"
-                @click="startEditCategory(category)"
-              >
-                編輯
-              </button>
-              <button
-                class="ui-button ui-button--danger compact-button"
-                type="button"
-                @click="deleteCategory(category)"
-              >
-                {{ catTrackerStore.getCategoryUsageCount(category.id) > 0 ? '停用' : '刪除' }}
-              </button>
-            </div>
-          </li>
-        </ul>
+              <span
+                class="category-color"
+                :style="{ '--category-color': getCategoryColorValue(category) }"
+                aria-hidden="true"
+              ></span>
+              <div class="category-item__content">
+                <strong>{{ category.name }}</strong>
+                <span v-if="category.isArchived">
+                  已停用 · 過去紀錄仍會保留 ·
+                  {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
+                </span>
+                <span v-else>
+                  <template v-if="!category.isQuickAction">未顯示於快速紀錄 · </template>
+                  {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
+                </span>
+              </div>
+              <div v-if="category.isArchived" class="category-item__actions">
+                <button
+                  class="ui-button ui-button--primary compact-button"
+                  type="button"
+                  @click="restoreCategory(category)"
+                >
+                  重新使用
+                </button>
+              </div>
+              <div v-else class="category-item__actions">
+                <button
+                  class="ui-button ui-button--secondary compact-button"
+                  type="button"
+                  @click="startEditCategory(category)"
+                >
+                  編輯
+                </button>
+                <button
+                  class="ui-button ui-button--danger compact-button"
+                  type="button"
+                  @click="deleteCategory(category)"
+                >
+                  {{ catTrackerStore.getCategoryUsageCount(category.id) > 0 ? '停用' : '刪除' }}
+                </button>
+              </div>
+            </li>
+          </ul>
 
-        <p v-else class="empty-group">尚無分類</p>
-      </section>
-    </div>
+          <p v-else class="empty-group">尚無分類</p>
+        </section>
+      </div>
 
-    <div v-else class="pet-list">
-      <article
-        v-for="cat in cats"
-        :key="cat.id"
-        class="pet-item"
-        :class="{ 'pet-item--selected': selectedCatId === cat.id }"
-      >
-        <div
-          class="pet-avatar"
-          aria-hidden="true"
+      <div v-else class="pet-list">
+        <article
+          v-for="cat in cats"
+          :key="cat.id"
+          class="pet-item"
+          :class="{ 'pet-item--selected': selectedCatId === cat.id }"
         >
-          <img :src="getCatAvatarOption(cat.avatarId).image" :alt="getCatAvatarOption(cat.avatarId).label" />
-        </div>
-        <div class="pet-item__content">
-          <strong>{{ cat.name }}</strong>
-          <span v-if="getCatMeta(cat)">{{ getCatMeta(cat) }}</span>
-          <span v-else>尚未填寫詳細資料</span>
-          <p v-if="cat.note">{{ cat.note }}</p>
-        </div>
-        <div class="pet-item__actions">
-          <button
-            class="ui-button ui-button--secondary compact-button"
-            type="button"
-            :disabled="selectedCatId === cat.id"
-            @click="catTrackerStore.selectCat(cat.id)"
+          <div
+            class="pet-avatar"
+            aria-hidden="true"
           >
-            {{ selectedCatId === cat.id ? '使用中' : '切換' }}
-          </button>
-          <button
-            class="ui-button ui-button--secondary compact-button"
-            type="button"
-            @click="startEditCat(cat)"
-          >
-            編輯
-          </button>
-        </div>
-      </article>
+            <img :src="getCatAvatarOption(cat.avatarId).image" :alt="getCatAvatarOption(cat.avatarId).label" />
+          </div>
+          <div class="pet-item__content">
+            <strong>{{ cat.name }}</strong>
+            <span v-if="getCatMeta(cat)">{{ getCatMeta(cat) }}</span>
+            <span v-else>尚未填寫詳細資料</span>
+            <p v-if="cat.note">{{ cat.note }}</p>
+          </div>
+          <div class="pet-item__actions">
+            <button
+              class="ui-button ui-button--secondary compact-button"
+              type="button"
+              :disabled="selectedCatId === cat.id"
+              @click="catTrackerStore.selectCat(cat.id)"
+            >
+              {{ selectedCatId === cat.id ? '使用中' : '切換' }}
+            </button>
+            <button
+              class="ui-button ui-button--secondary compact-button"
+              type="button"
+              @click="startEditCat(cat)"
+            >
+              編輯
+            </button>
+          </div>
+        </article>
+      </div>
     </div>
 
     <div
@@ -796,6 +800,10 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   margin: 0 auto;
 }
 
+.settings-topbar {
+  flex: 0 0 auto;
+}
+
 .settings-header {
   display: flex;
   align-items: center;
@@ -825,6 +833,10 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
 .settings-tab {
   min-height: 38px;
+}
+
+.settings-content {
+  min-height: 0;
 }
 
 .settings-header p,
@@ -1206,6 +1218,38 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 @media (max-width: 560px) {
+  .settings-view {
+    display: flex;
+    height: calc(100vh - 88px);
+    height: calc(100dvh - 88px);
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .settings-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: 12px;
+    background: var(--color-background);
+  }
+
+  .settings-header {
+    margin-bottom: 12px;
+  }
+
+  .settings-tabs {
+    margin-bottom: 0;
+  }
+
+  .settings-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .pet-item {
     grid-template-columns: 44px 1fr;
   }
