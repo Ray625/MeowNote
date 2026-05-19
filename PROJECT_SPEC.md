@@ -1,5 +1,14 @@
 # MeowNote - MVP v1 Spec
 
+## Historical Note
+
+This document captures early MVP product direction. Some implementation details have evolved.
+
+For current technical documentation, see:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data Model](docs/DATA_MODEL.md)
+
 ## Product Direction
 
 Build a cat health and behavior tracking app for serious cat owners.
