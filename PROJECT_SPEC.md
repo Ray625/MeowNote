@@ -1,4 +1,4 @@
-# Cat Health & Behavior Tracker - MVP v1 Spec
+# MeowNote - MVP v1 Spec
 
 ## Product Direction
 

@@ -21,7 +21,8 @@ import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { createId } from '@/utils/id'
 import { readJson, writeJson } from '@/utils/storage'
 
-const STORAGE_KEY = 'cat-log:v1'
+const STORAGE_KEY = 'meownote:v1'
+const LEGACY_STORAGE_KEY = 'cat-log:v1'
 
 interface CatTrackerState {
   cats: Cat[]
@@ -135,7 +136,9 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
 }
 
 export const useCatTrackerStore = defineStore('catTracker', () => {
-  const initialState = normalizeState(readJson<CatTrackerState>(STORAGE_KEY, createInitialState()))
+  const initialState = normalizeState(
+    readJson<CatTrackerState>(STORAGE_KEY, readJson<CatTrackerState>(LEGACY_STORAGE_KEY, createInitialState())),
+  )
   const today = new Date()
 
   const cats = ref<Cat[]>(initialState.cats)

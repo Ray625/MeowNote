@@ -1,4 +1,4 @@
-# Cat Tracker
+# MeowNote
 
 A quick-first cat health and behavior tracking app.
 
