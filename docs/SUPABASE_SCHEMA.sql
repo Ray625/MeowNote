@@ -225,6 +225,14 @@ alter table public.cats enable row level security;
 alter table public.event_categories enable row level security;
 alter table public.cat_events enable row level security;
 
+grant usage on schema public to authenticated;
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update on public.notebooks to authenticated;
+grant select, insert, update, delete on public.notebook_members to authenticated;
+grant select, insert, update, delete on public.cats to authenticated;
+grant select, insert, update, delete on public.event_categories to authenticated;
+grant select, insert, update, delete on public.cat_events to authenticated;
+
 drop policy if exists "Users can read their profile" on public.profiles;
 drop policy if exists "Users can insert their profile" on public.profiles;
 drop policy if exists "Users can update their profile" on public.profiles;

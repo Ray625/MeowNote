@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import {
@@ -12,6 +12,7 @@ import {
   getCategoryColorId,
   getCategoryColorValue,
 } from '@/constants/defaultData'
+import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type {
@@ -26,8 +27,23 @@ import type {
 const catTrackerStore = useCatTrackerStore()
 const { categoriesByGroup, cats, selectedCatId } = storeToRefs(catTrackerStore)
 const { isDarkMode, toggleDarkMode } = useTheme()
+const {
+  activeNotebookId,
+  errorMessage,
+  initializeAuth,
+  isConfigured,
+  isLoading,
+  isSignedIn,
+  magicLinkSentTo,
+  signInWithEmail,
+  signOut,
+  user,
+} = useRemoteAuth()
 
-const settingsSection = ref<'categories' | 'pets'>('categories')
+type SettingsSection = 'account' | 'categories' | 'pets'
+
+const settingsSection = ref<SettingsSection>('categories')
+const signInEmail = ref('')
 const editingCategoryId = ref<string>()
 const categoryName = ref('')
 const categoryGroup = ref<EventCategoryGroup>('飲食')
@@ -63,11 +79,22 @@ const pendingDeleteUsageCount = computed(() =>
     : 0,
 )
 const deleteActionLabel = computed(() => (pendingDeleteUsageCount.value > 0 ? '停用' : '刪除'))
+const settingsSubtitle = computed(() => {
+  if (settingsSection.value === 'account') {
+    return '管理帳戶與同步'
+  }
+
+  return settingsSection.value === 'categories' ? '管理事件分類' : '管理寵物資料'
+})
 const deleteMessage = computed(() =>
   pendingDeleteUsageCount.value > 0
     ? '停用後，這個分類不會再出現在快速紀錄中，但過去的紀錄仍會保留。'
     : `確定刪除「${pendingDeleteCategory.value?.name}」？`,
 )
+
+onMounted(() => {
+  void initializeAuth()
+})
 
 function startCreateCategory(): void {
   editingCategoryId.value = undefined
@@ -150,11 +177,15 @@ function restoreCategory(category: EventCategory): void {
   catTrackerStore.restoreCategory(category.id)
 }
 
-function switchSettingsSection(section: 'categories' | 'pets'): void {
+function switchSettingsSection(section: SettingsSection): void {
   settingsSection.value = section
 }
 
 function startCreatePrimaryItem(): void {
+  if (settingsSection.value === 'account') {
+    return
+  }
+
   if (settingsSection.value === 'pets') {
     startCreateCat()
     return
@@ -429,6 +460,14 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       ?.categories.filter((category) => !category.isArchived) ?? []
   )
 }
+
+function submitSignIn(): void {
+  void signInWithEmail(signInEmail.value)
+}
+
+function submitSignOut(): void {
+  void signOut()
+}
 </script>
 
 <template>
@@ -437,7 +476,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       <div class="settings-header">
         <div>
           <h1 id="settings-title">設定</h1>
-          <p>{{ settingsSection === 'categories' ? '管理事件分類' : '管理寵物資料' }}</p>
+          <p>{{ settingsSubtitle }}</p>
         </div>
         <div class="settings-actions">
           <button
@@ -451,6 +490,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             <span aria-hidden="true">{{ isDarkMode ? '☀' : '☾' }}</span>
           </button>
           <button
+            v-if="settingsSection !== 'account'"
             class="ui-button ui-button--primary compact-button"
             type="button"
             @click="startCreatePrimaryItem"
@@ -461,6 +501,16 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       </div>
 
       <div class="settings-tabs" role="tablist" aria-label="設定分類">
+        <button
+          class="ui-button settings-tab"
+          :class="settingsSection === 'account' ? 'ui-button--primary' : 'ui-button--secondary'"
+          type="button"
+          role="tab"
+          :aria-selected="settingsSection === 'account'"
+          @click="switchSettingsSection('account')"
+        >
+          帳戶
+        </button>
         <button
           class="ui-button settings-tab"
           :class="settingsSection === 'categories' ? 'ui-button--primary' : 'ui-button--secondary'"
@@ -485,7 +535,67 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
     </div>
 
     <div class="settings-content">
-      <div v-if="settingsSection === 'categories'" class="category-groups">
+      <section
+        v-if="settingsSection === 'account'"
+        class="account-panel"
+        aria-labelledby="account-title"
+      >
+        <div class="account-panel__header">
+          <h2 id="account-title">同步帳戶</h2>
+          <span v-if="isSignedIn" class="account-badge">已登入</span>
+          <span v-else class="account-badge account-badge--muted">未登入</span>
+        </div>
+
+        <p v-if="!isConfigured" class="account-message">
+          Supabase 尚未設定，請確認 `.env.local` 已填入專案 URL 和 anon key。
+        </p>
+
+        <template v-else-if="isSignedIn">
+          <div class="account-details">
+            <span>Email</span>
+            <strong>{{ user?.email }}</strong>
+            <span>Notebook</span>
+            <strong>{{ activeNotebookId || '建立中' }}</strong>
+          </div>
+
+          <button
+            class="ui-button ui-button--secondary account-button"
+            type="button"
+            :disabled="isLoading"
+            @click="submitSignOut"
+          >
+            登出
+          </button>
+        </template>
+
+        <form v-else class="account-form" @submit.prevent="submitSignIn">
+          <label class="field">
+            <span class="field__label">Email</span>
+            <input
+              v-model="signInEmail"
+              class="field__control"
+              type="email"
+              autocomplete="email"
+              inputmode="email"
+              required
+            />
+          </label>
+          <button
+            class="ui-button ui-button--primary account-button"
+            type="submit"
+            :disabled="isLoading"
+          >
+            {{ isLoading ? '寄送中' : '寄送登入連結' }}
+          </button>
+        </form>
+
+        <p v-if="magicLinkSentTo" class="account-message">登入連結已寄到 {{ magicLinkSentTo }}。</p>
+        <p v-if="errorMessage" class="account-message account-message--error">
+          {{ errorMessage }}
+        </p>
+      </section>
+
+      <div v-else-if="settingsSection === 'categories'" class="category-groups">
         <section
           v-for="group in categoriesByGroup"
           :key="group.group"
@@ -848,6 +958,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
 .settings-header h1,
 .settings-header p,
+.account-panel h2,
 .category-form h2,
 .category-group h2,
 .empty-group {
@@ -860,7 +971,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
 .settings-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -874,10 +985,81 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 .settings-header p,
+.account-details span,
+.account-message,
 .category-item__content span,
 .pet-item__content span,
 .empty-group {
   color: var(--color-muted);
+}
+
+.account-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.account-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-panel h2 {
+  font-size: 1.05rem;
+}
+
+.account-badge {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.account-badge--muted {
+  border-color: var(--color-border);
+  background: var(--color-background);
+  color: var(--color-muted);
+}
+
+.account-form {
+  display: grid;
+  gap: 12px;
+}
+
+.account-button {
+  min-height: 42px;
+}
+
+.account-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.account-details strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-message {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.account-message--error {
+  color: var(--color-danger);
 }
 
 .category-group {
