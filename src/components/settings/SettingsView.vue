@@ -441,12 +441,14 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
         </div>
         <div class="settings-actions">
           <button
-            class="ui-button ui-button--secondary compact-button theme-toggle"
+            class="ui-button ui-button--secondary ui-button--icon compact-button theme-toggle"
             type="button"
+            :aria-label="isDarkMode ? '切換為淺色模式' : '切換為深色模式'"
             :aria-pressed="isDarkMode"
+            :title="isDarkMode ? '淺色模式' : '深色模式'"
             @click="toggleDarkMode"
           >
-            {{ isDarkMode ? '淺色模式' : '深色模式' }}
+            <span aria-hidden="true">{{ isDarkMode ? '☀' : '☾' }}</span>
           </button>
           <button
             class="ui-button ui-button--primary compact-button"
@@ -1182,7 +1184,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 .theme-toggle {
-  min-width: 82px;
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
 }
 
 .compact-button:disabled {
@@ -1287,7 +1293,8 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   }
 
   .theme-toggle {
-    min-width: 72px;
+    width: 34px;
+    min-width: 34px;
   }
 
   .settings-tabs {
