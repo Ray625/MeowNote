@@ -82,10 +82,15 @@ function selectMonth(monthIndex: number): void {
             @click="selectCat(cat.id)"
           >
             <span class="selected-cat__avatar" aria-hidden="true">
-              <img :src="getCatAvatarOption(cat.avatarId).image" :alt="getCatAvatarOption(cat.avatarId).label" />
+              <img
+                :src="getCatAvatarOption(cat.avatarId).image"
+                :alt="getCatAvatarOption(cat.avatarId).label"
+              />
             </span>
             <span>{{ cat.name }}</span>
-            <span class="cat-menu__check" aria-hidden="true">{{ selectedCatId === cat.id ? '✓' : '' }}</span>
+            <span class="cat-menu__check" aria-hidden="true">{{
+              selectedCatId === cat.id ? '✓' : ''
+            }}</span>
           </button>
         </div>
       </div>
@@ -503,7 +508,7 @@ function selectMonth(monthIndex: number): void {
   padding: 0 3px;
   border-radius: 999px;
   background: var(--color-primary);
-  color: var(--color-surface);
+  color: var(--color-on-primary);
   font-size: 0.625rem;
   line-height: 14px;
 }

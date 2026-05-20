@@ -1,4 +1,5 @@
 import catBlackImage from '@/assets/cat-avatars/cat-black.png'
+import catBrownImage from '@/assets/cat-avatars/cat-brown.png'
 import catCalicoImage from '@/assets/cat-avatars/cat-calico.png'
 import catGrayImage from '@/assets/cat-avatars/cat-gary.png'
 import catOrangeImage from '@/assets/cat-avatars/cat-orange.png'
@@ -19,6 +20,7 @@ export const CAT_AVATAR_OPTIONS = [
   { id: 'tortoiseshell', label: '玳瑁', image: catTortoiseshellImage },
   { id: 'black', label: '黑', image: catBlackImage },
   { id: 'white', label: '白', image: catWhiteImage },
+  { id: 'brown', label: '棕白', image: catBrownImage },
   { id: 'gray', label: '銀灰', image: catGrayImage },
   { id: 'tuxedo', label: '賓士', image: catTuxedoImage },
 ] as const satisfies ReadonlyArray<{

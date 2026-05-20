@@ -7,7 +7,10 @@ import EventTimeline from '@/components/home/EventTimeline.vue'
 import FirstTimeSetup from '@/components/home/FirstTimeSetup.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
+import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
+
+useTheme()
 
 const catTrackerStore = useCatTrackerStore()
 const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTrackerStore)
@@ -63,7 +66,13 @@ const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTr
   background: var(--color-background);
   color: var(--color-text);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
 }
 
 @media (max-width: 560px) {

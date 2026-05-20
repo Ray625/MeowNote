@@ -12,11 +12,20 @@ import {
   getCategoryColorId,
   getCategoryColorValue,
 } from '@/constants/defaultData'
+import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
-import type { Cat, CatAvatarId, CatSex, CategoryColorId, EventCategory, EventCategoryGroup } from '@/types'
+import type {
+  Cat,
+  CatAvatarId,
+  CatSex,
+  CategoryColorId,
+  EventCategory,
+  EventCategoryGroup,
+} from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
 const { categoriesByGroup, cats, selectedCatId } = storeToRefs(catTrackerStore)
+const { isDarkMode, toggleDarkMode } = useTheme()
 
 const settingsSection = ref<'categories' | 'pets'>('categories')
 const editingCategoryId = ref<string>()
@@ -209,10 +218,7 @@ function saveCat(): void {
     sex: catSex.value || undefined,
     weightKg: Number.isFinite(weightKg) ? weightKg : undefined,
     avatarId: catAvatarId.value,
-    isNeutered:
-      catIsNeutered.value === ''
-        ? undefined
-        : catIsNeutered.value === 'yes',
+    isNeutered: catIsNeutered.value === '' ? undefined : catIsNeutered.value === 'yes',
     note: catNote.value.trim() || undefined,
   }
 
@@ -433,13 +439,23 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
           <h1 id="settings-title">設定</h1>
           <p>{{ settingsSection === 'categories' ? '管理事件分類' : '管理寵物資料' }}</p>
         </div>
-        <button
-          class="ui-button ui-button--primary compact-button"
-          type="button"
-          @click="startCreatePrimaryItem"
-        >
-          {{ settingsSection === 'categories' ? '新增分類' : '新增寵物' }}
-        </button>
+        <div class="settings-actions">
+          <button
+            class="ui-button ui-button--secondary compact-button theme-toggle"
+            type="button"
+            :aria-pressed="isDarkMode"
+            @click="toggleDarkMode"
+          >
+            {{ isDarkMode ? '淺色模式' : '深色模式' }}
+          </button>
+          <button
+            class="ui-button ui-button--primary compact-button"
+            type="button"
+            @click="startCreatePrimaryItem"
+          >
+            {{ settingsSection === 'categories' ? '新增分類' : '新增寵物' }}
+          </button>
+        </div>
       </div>
 
       <div class="settings-tabs" role="tablist" aria-label="設定分類">
@@ -563,11 +579,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
           class="pet-item"
           :class="{ 'pet-item--selected': selectedCatId === cat.id }"
         >
-          <div
-            class="pet-avatar"
-            aria-hidden="true"
-          >
-            <img :src="getCatAvatarOption(cat.avatarId).image" :alt="getCatAvatarOption(cat.avatarId).label" />
+          <div class="pet-avatar" aria-hidden="true">
+            <img
+              :src="getCatAvatarOption(cat.avatarId).image"
+              :alt="getCatAvatarOption(cat.avatarId).label"
+            />
           </div>
           <div class="pet-item__content">
             <strong>{{ cat.name }}</strong>
@@ -728,7 +744,13 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
             <label class="field">
               <span class="field__label">體重 kg</span>
-              <input v-model="catWeightKg" class="field__control" type="number" min="0" step="0.1" />
+              <input
+                v-model="catWeightKg"
+                class="field__control"
+                type="number"
+                min="0"
+                step="0.1"
+              />
             </label>
 
             <div class="field">
@@ -770,7 +792,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
           </div>
 
           <div class="category-form__actions cat-form__actions">
-            <button class="ui-button ui-button--secondary save-button" type="button" @click="closeCatModal">
+            <button
+              class="ui-button ui-button--secondary save-button"
+              type="button"
+              @click="closeCatModal"
+            >
               取消
             </button>
             <button class="ui-button ui-button--primary save-button" type="submit">
@@ -810,6 +836,12 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.settings-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .settings-header h1,
@@ -1149,6 +1181,10 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   font-size: 0.875rem;
 }
 
+.theme-toggle {
+  min-width: 82px;
+}
+
 .compact-button:disabled {
   cursor: default;
   opacity: 0.68;
@@ -1236,6 +1272,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
   .settings-header {
     margin-bottom: 12px;
+  }
+
+  .settings-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .settings-tabs {

@@ -49,6 +49,7 @@ export type CatAvatarId =
   | 'tortoiseshell'
   | 'black'
   | 'white'
+  | 'brown'
   | 'gray'
   | 'tuxedo'
 
