@@ -7,6 +7,7 @@ export interface Cat {
   weightKg?: number
   isNeutered?: boolean
   note?: string
+  isArchived: boolean
   createdAt: string
   updatedAt: string
 }
@@ -66,10 +67,15 @@ export type CategoryColorId =
 export type EventSeverity = NonNullable<CatEvent['severity']>
 
 export type CreateCatInput = Pick<Cat, 'name'> &
-  Partial<Pick<Cat, 'avatarId' | 'birthday' | 'sex' | 'weightKg' | 'isNeutered' | 'note'>>
+  Partial<
+    Pick<Cat, 'avatarId' | 'birthday' | 'sex' | 'weightKg' | 'isNeutered' | 'note' | 'isArchived'>
+  >
 
 export type UpdateCatInput = Partial<
-  Pick<Cat, 'name' | 'avatarId' | 'birthday' | 'sex' | 'weightKg' | 'isNeutered' | 'note'>
+  Pick<
+    Cat,
+    'avatarId' | 'birthday' | 'isArchived' | 'isNeutered' | 'name' | 'note' | 'sex' | 'weightKg'
+  >
 >
 
 export type CreateCategoryInput = Pick<EventCategory, 'name'> &

@@ -364,6 +364,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       weightKg: input.weightKg,
       isNeutered: input.isNeutered,
       note: input.note,
+      isArchived: input.isArchived ?? false,
       createdAt: now,
       updatedAt: now,
     }

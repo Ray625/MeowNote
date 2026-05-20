@@ -133,6 +133,7 @@ export function createDefaultCat(now: string): Cat {
     id: DEFAULT_CAT_ID,
     name: '我的貓',
     avatarId: DEFAULT_CAT_AVATAR_ID,
+    isArchived: false,
     createdAt: now,
     updatedAt: now,
   }

@@ -31,7 +31,7 @@ function createInitialState(): CatTrackerState {
 
 function normalizeState(state: CatTrackerState): CatTrackerState {
   const fallbackState = createInitialState()
-  const cats = state.cats
+  const cats = state.cats.map(normalizeCat)
   const categories =
     state.categories.length > 0
       ? ensureDefaultCategories(state.categories, getIsoNow())
@@ -45,6 +45,13 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
     categories,
     events: state.events,
     selectedCatId,
+  }
+}
+
+function normalizeCat(cat: Cat): Cat {
+  return {
+    ...cat,
+    isArchived: cat.isArchived ?? false,
   }
 }
 

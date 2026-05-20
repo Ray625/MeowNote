@@ -53,6 +53,7 @@ interface Cat {
   weightKg?: number
   isNeutered?: boolean
   note?: string
+  isArchived: boolean
   createdAt: string
   updatedAt: string
 }
@@ -62,6 +63,7 @@ Notes:
 
 - `avatarId` maps to `CAT_AVATAR_OPTIONS` in `src/constants/defaultData.ts`.
 - `birthday` is stored as a date string from an HTML date input.
+- `isArchived` hides a cat from active daily use while preserving historical events.
 - `createdAt` and `updatedAt` are ISO strings.
 
 ## EventCategory
