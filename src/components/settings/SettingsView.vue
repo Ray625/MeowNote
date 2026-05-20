@@ -556,7 +556,23 @@ async function submitImportLocalData(): Promise<void> {
             :title="isDarkMode ? '淺色模式' : '深色模式'"
             @click="toggleDarkMode"
           >
-            <span aria-hidden="true">{{ isDarkMode ? '☀' : '☾' }}</span>
+            <svg
+              v-if="isDarkMode"
+              class="theme-toggle__svg"
+              viewBox="0 0 576 512"
+              aria-hidden="true"
+            >
+              <path
+                fill="currentColor"
+                d="M288 432c13.3 0 24 10.7 24 24l0 64c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-64c0-13.3 10.7-24 24-24zM129.6 380.4c9.4-9.4 24.6-9.4 34 0s9.4 24.6 0 34l-45.3 45.3c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l45.2-45.3zm282.8 0c9.4-9.4 24.6-9.4 34 0l45.3 45.3c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-45.3-45.3c-9.4-9.4-9.4-24.6 0-34zM288 384a128 128 0 1 1 0-256 128 128 0 1 1 0 256zM88 232c13.3 0 24 10.7 24 24s-10.7 24-24 24l-64 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l64 0zm464 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-64 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l64 0zM84.3 52.3c9.4-9.4 24.6-9.4 33.9 0l45.3 45.2c9.4 9.4 9.4 24.6 0 34s-24.6 9.4-34 0L84.3 86.3c-9.4-9.4-9.4-24.6 0-33.9zm373.4 0c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-45.3 45.3c-9.4 9.4-24.6 9.4-34 0s-9.4-24.6 0-34l45.3-45.2zM288-32c13.3 0 24 10.7 24 24l0 64c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-64c0-13.3 10.7-24 24-24z"
+              />
+            </svg>
+            <svg v-else class="theme-toggle__svg" viewBox="0 0 512 512" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M256 0C114.6 0 0 114.6 0 256S114.6 512 256 512c68.8 0 131.3-27.2 177.3-71.4 7.3-7 9.4-17.9 5.3-27.1s-13.7-14.9-23.8-14.1c-4.9 .4-9.8 .6-14.8 .6-101.6 0-184-82.4-184-184 0-72.1 41.5-134.6 102.1-164.8 9.1-4.5 14.3-14.3 13.1-24.4S322.6 8.5 312.7 6.3C294.4 2.2 275.4 0 256 0z"
+              />
+            </svg>
           </button>
           <button
             v-if="settingsSection !== 'account'"
@@ -1493,11 +1509,21 @@ async function submitImportLocalData(): Promise<void> {
 }
 
 .theme-toggle {
+  display: grid;
+  flex: 0 0 34px;
   width: 34px;
+  height: 34px;
   min-width: 34px;
+  place-items: center;
   padding: 0;
-  font-size: 1.05rem;
-  line-height: 1;
+}
+
+.theme-toggle__svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  color: var(--color-primary);
+  overflow: visible;
 }
 
 .compact-button:disabled {
@@ -1603,6 +1629,7 @@ async function submitImportLocalData(): Promise<void> {
 
   .theme-toggle {
     width: 34px;
+    height: 34px;
     min-width: 34px;
   }
 
