@@ -18,6 +18,7 @@ import {
   importLocalCatTracker,
   type ImportLocalCatTrackerResult,
 } from '@/services/importLocalCatTracker'
+import { loadRemoteCatTracker } from '@/services/loadRemoteCatTracker'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type {
   Cat,
@@ -49,8 +50,11 @@ type SettingsSection = 'account' | 'categories' | 'pets'
 const settingsSection = ref<SettingsSection>('categories')
 const signInEmail = ref('')
 const isImportingLocalData = ref(false)
+const isLoadingRemoteData = ref(false)
 const importResult = ref<ImportLocalCatTrackerResult>()
 const importErrorMessage = ref('')
+const remoteLoadMessage = ref('')
+const remoteLoadErrorMessage = ref('')
 const editingCategoryId = ref<string>()
 const categoryName = ref('')
 const categoryGroup = ref<EventCategoryGroup>('飲食')
@@ -480,6 +484,27 @@ function submitSignOut(): void {
   void signOut()
 }
 
+async function submitLoadRemoteData(): Promise<void> {
+  if (!activeNotebookId.value) {
+    remoteLoadErrorMessage.value = 'Notebook 尚未建立完成'
+    return
+  }
+
+  isLoadingRemoteData.value = true
+  remoteLoadMessage.value = ''
+  remoteLoadErrorMessage.value = ''
+
+  try {
+    const remoteState = await loadRemoteCatTracker(activeNotebookId.value)
+    catTrackerStore.replacePersistedState(remoteState)
+    remoteLoadMessage.value = `已載入 ${remoteState.cats.length} 隻寵物、${remoteState.categories.length} 個分類、${remoteState.events.length} 筆紀錄。`
+  } catch (error) {
+    remoteLoadErrorMessage.value = error instanceof Error ? error.message : '載入雲端資料失敗'
+  } finally {
+    isLoadingRemoteData.value = false
+  }
+}
+
 async function submitImportLocalData(): Promise<void> {
   if (!activeNotebookId.value || !user.value) {
     importErrorMessage.value = 'Notebook 尚未建立完成'
@@ -489,6 +514,8 @@ async function submitImportLocalData(): Promise<void> {
   isImportingLocalData.value = true
   importResult.value = undefined
   importErrorMessage.value = ''
+  remoteLoadMessage.value = ''
+  remoteLoadErrorMessage.value = ''
 
   try {
     importResult.value = await importLocalCatTracker({
@@ -605,6 +632,15 @@ async function submitImportLocalData(): Promise<void> {
             {{ isImportingLocalData ? '匯入中' : '匯入本機資料' }}
           </button>
 
+          <button
+            class="ui-button ui-button--secondary account-button"
+            type="button"
+            :disabled="isLoading || isLoadingRemoteData || !activeNotebookId"
+            @click="submitLoadRemoteData"
+          >
+            {{ isLoadingRemoteData ? '載入中' : '載入雲端資料' }}
+          </button>
+
           <p v-if="importResult" class="account-message">
             已匯入 {{ importResult.catsImported }} 隻寵物、{{
               importResult.categoriesImported
@@ -616,6 +652,12 @@ async function submitImportLocalData(): Promise<void> {
           </p>
           <p v-if="importErrorMessage" class="account-message account-message--error">
             {{ importErrorMessage }}
+          </p>
+          <p v-if="remoteLoadMessage" class="account-message">
+            {{ remoteLoadMessage }}
+          </p>
+          <p v-if="remoteLoadErrorMessage" class="account-message account-message--error">
+            {{ remoteLoadErrorMessage }}
           </p>
 
           <button

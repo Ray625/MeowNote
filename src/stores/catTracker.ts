@@ -390,6 +390,21 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return cat
   }
 
+  function replacePersistedState(state: CatTrackerState): void {
+    cats.value = state.cats
+    categories.value = state.categories
+    events.value = state.events
+    selectedCatId.value = state.cats.some((cat) => cat.id === state.selectedCatId)
+      ? state.selectedCatId
+      : (state.cats.find((cat) => !cat.isArchived)?.id ?? state.cats[0]?.id ?? '')
+
+    if (selectedCatId.value) {
+      isQuickRecordOpen.value = false
+      editingEventId.value = undefined
+      deleteConfirmEventId.value = undefined
+    }
+  }
+
   function createCategory(input: CreateCategoryInput): EventCategory {
     const now = getIsoNow()
     const group = input.group ?? '飲食'
@@ -637,6 +652,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     setActiveTab,
     createCat,
     updateCat,
+    replacePersistedState,
     createCategory,
     updateCategory,
     getCategoryUsageCount,
