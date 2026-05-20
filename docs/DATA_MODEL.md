@@ -8,7 +8,7 @@ src/types/cat.ts
 
 ## Persisted State
 
-The Pinia store persists this shape to `localStorage`:
+The repository persists this shape to `localStorage`:
 
 ```ts
 interface CatTrackerState {
@@ -30,6 +30,16 @@ Legacy fallback key:
 ```txt
 cat-log:v1
 ```
+
+## Persistence Boundary
+
+The persistence boundary is:
+
+```txt
+src/repositories/catTrackerRepository.ts
+```
+
+The Pinia store works with in-memory Vue refs and calls this repository to load and save `CatTrackerState`. The repository currently uses `localStorage`, but it is the intended replacement point for future account-based sync or database-backed storage.
 
 ## Cat
 

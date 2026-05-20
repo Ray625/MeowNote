@@ -9,7 +9,8 @@ MeowNote is a frontend-only Vue app.
 ```txt
 Vue components
   -> Pinia store
-    -> localStorage
+    -> cat tracker repository
+      -> localStorage adapter
 ```
 
 There is no backend, auth, API, or database in the current version.
@@ -47,17 +48,35 @@ It owns the core app state:
 - active tab
 - modal and confirmation state
 
-It also owns persistence. Store changes are watched and written to `localStorage`.
+Store changes are watched and passed to the repository for persistence.
+
+## Repository Layer
+
+The current repository is:
+
+```txt
+src/repositories/catTrackerRepository.ts
+```
+
+It owns the persistence boundary for the cat tracker state:
+
+- load the current persisted state
+- read legacy `cat-log:v1` data when current data does not exist
+- create initial state
+- normalize loaded state
+- save the current state
+
+The current implementation is a localStorage adapter. Future account sync or database-backed storage should replace or extend this repository boundary instead of spreading database calls through Vue components or the Pinia store.
 
 ## Persistence
 
-Storage helpers live in:
+Low-level JSON storage helpers live in:
 
 ```txt
 src/utils/storage.ts
 ```
 
-The store reads from:
+The repository reads from:
 
 - `meownote:v1`
 - then `cat-log:v1` as a legacy fallback

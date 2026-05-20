@@ -1,10 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import {
-  CATEGORY_GROUP_ORDER,
-  createDefaultCategories,
-  ensureDefaultCategories,
-} from '@/constants/defaultData'
+import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
+import { catTrackerRepository, type CatTrackerState } from '@/repositories/catTrackerRepository'
 import type {
   Cat,
   CatEvent,
@@ -19,17 +16,6 @@ import type {
 } from '@/types'
 import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { createId } from '@/utils/id'
-import { readJson, writeJson } from '@/utils/storage'
-
-const STORAGE_KEY = 'meownote:v1'
-const LEGACY_STORAGE_KEY = 'cat-log:v1'
-
-interface CatTrackerState {
-  cats: Cat[]
-  categories: EventCategory[]
-  events: CatEvent[]
-  selectedCatId: string
-}
 
 type MainTab = 'calendar' | 'settings'
 
@@ -47,17 +33,6 @@ export interface EventListItem {
   event: CatEvent
   category?: EventCategory
   time: string
-}
-
-function createInitialState(): CatTrackerState {
-  const now = getIsoNow()
-
-  return {
-    cats: [],
-    categories: createDefaultCategories(now),
-    events: [],
-    selectedCatId: '',
-  }
 }
 
 function startOfDay(date: Date): Date {
@@ -118,27 +93,8 @@ function sortCategories(categories: EventCategory[]): EventCategory[] {
   })
 }
 
-function normalizeState(state: CatTrackerState): CatTrackerState {
-  const fallbackState = createInitialState()
-  const cats = state.cats
-  const categories =
-    state.categories.length > 0 ? ensureDefaultCategories(state.categories, getIsoNow()) : fallbackState.categories
-  const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
-    ? state.selectedCatId
-    : cats[0]?.id ?? ''
-
-  return {
-    cats,
-    categories,
-    events: state.events,
-    selectedCatId,
-  }
-}
-
 export const useCatTrackerStore = defineStore('catTracker', () => {
-  const initialState = normalizeState(
-    readJson<CatTrackerState>(STORAGE_KEY, readJson<CatTrackerState>(LEGACY_STORAGE_KEY, createInitialState())),
-  )
+  const initialState = catTrackerRepository.loadState()
   const today = new Date()
 
   const cats = ref<Cat[]>(initialState.cats)
@@ -169,7 +125,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       categories: sortCategories(categories.value.filter((category) => category.group === group)),
     })),
   )
-  const archivedCategories = computed(() => categories.value.filter((category) => category.isArchived))
+  const archivedCategories = computed(() =>
+    categories.value.filter((category) => category.isArchived),
+  )
   const categoryUsageCounts = computed(() => {
     const usageCounts = new Map<string, number>()
 
@@ -280,7 +238,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   watch(
     [cats, categories, events, selectedCatId],
     () => {
-      writeJson<CatTrackerState>(STORAGE_KEY, {
+      catTrackerRepository.saveState({
         cats: cats.value,
         categories: categories.value,
         events: events.value,
@@ -453,7 +411,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return category
   }
 
-  function updateCategory(categoryId: string, input: UpdateCategoryInput): EventCategory | undefined {
+  function updateCategory(
+    categoryId: string,
+    input: UpdateCategoryInput,
+  ): EventCategory | undefined {
     const category = categoriesById.value.get(categoryId)
 
     if (!category) {
