@@ -14,6 +14,10 @@ import {
 } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useTheme } from '@/composables/useTheme'
+import {
+  importLocalCatTracker,
+  type ImportLocalCatTrackerResult,
+} from '@/services/importLocalCatTracker'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type {
   Cat,
@@ -25,7 +29,7 @@ import type {
 } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { categoriesByGroup, cats, selectedCatId } = storeToRefs(catTrackerStore)
+const { categories, categoriesByGroup, cats, events, selectedCatId } = storeToRefs(catTrackerStore)
 const { isDarkMode, toggleDarkMode } = useTheme()
 const {
   activeNotebookId,
@@ -44,6 +48,9 @@ type SettingsSection = 'account' | 'categories' | 'pets'
 
 const settingsSection = ref<SettingsSection>('categories')
 const signInEmail = ref('')
+const isImportingLocalData = ref(false)
+const importResult = ref<ImportLocalCatTrackerResult>()
+const importErrorMessage = ref('')
 const editingCategoryId = ref<string>()
 const categoryName = ref('')
 const categoryGroup = ref<EventCategoryGroup>('飲食')
@@ -86,6 +93,10 @@ const settingsSubtitle = computed(() => {
 
   return settingsSection.value === 'categories' ? '管理事件分類' : '管理寵物資料'
 })
+const localImportSummary = computed(
+  () =>
+    `${cats.value.length} 隻寵物、${categories.value.length} 個分類、${events.value.length} 筆紀錄`,
+)
 const deleteMessage = computed(() =>
   pendingDeleteUsageCount.value > 0
     ? '停用後，這個分類不會再出現在快速紀錄中，但過去的紀錄仍會保留。'
@@ -468,6 +479,31 @@ function submitSignIn(): void {
 function submitSignOut(): void {
   void signOut()
 }
+
+async function submitImportLocalData(): Promise<void> {
+  if (!activeNotebookId.value || !user.value) {
+    importErrorMessage.value = 'Notebook 尚未建立完成'
+    return
+  }
+
+  isImportingLocalData.value = true
+  importResult.value = undefined
+  importErrorMessage.value = ''
+
+  try {
+    importResult.value = await importLocalCatTracker({
+      notebookId: activeNotebookId.value,
+      cats: cats.value,
+      categories: categories.value,
+      events: events.value,
+      createdBy: user.value.id,
+    })
+  } catch (error) {
+    importErrorMessage.value = error instanceof Error ? error.message : '匯入本機資料失敗'
+  } finally {
+    isImportingLocalData.value = false
+  }
+}
 </script>
 
 <template>
@@ -556,7 +592,31 @@ function submitSignOut(): void {
             <strong>{{ user?.email }}</strong>
             <span>Notebook</span>
             <strong>{{ activeNotebookId || '建立中' }}</strong>
+            <span>本機資料</span>
+            <strong>{{ localImportSummary }}</strong>
           </div>
+
+          <button
+            class="ui-button ui-button--primary account-button"
+            type="button"
+            :disabled="isLoading || isImportingLocalData || !activeNotebookId"
+            @click="submitImportLocalData"
+          >
+            {{ isImportingLocalData ? '匯入中' : '匯入本機資料' }}
+          </button>
+
+          <p v-if="importResult" class="account-message">
+            已匯入 {{ importResult.catsImported }} 隻寵物、{{
+              importResult.categoriesImported
+            }}
+            個分類、{{ importResult.eventsImported }} 筆紀錄。
+            <template v-if="importResult.eventsSkipped > 0">
+              有 {{ importResult.eventsSkipped }} 筆紀錄因找不到寵物或分類而略過。
+            </template>
+          </p>
+          <p v-if="importErrorMessage" class="account-message account-message--error">
+            {{ importErrorMessage }}
+          </p>
 
           <button
             class="ui-button ui-button--secondary account-button"
