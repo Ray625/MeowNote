@@ -30,7 +30,8 @@ import type {
 } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { categories, categoriesByGroup, cats, events, selectedCatId } = storeToRefs(catTrackerStore)
+const { categories, categoriesByGroup, cats, events, remoteEventSyncError, selectedCatId } =
+  storeToRefs(catTrackerStore)
 const { isDarkMode, toggleDarkMode } = useTheme()
 const {
   activeNotebookId,
@@ -680,6 +681,9 @@ async function submitImportLocalData(): Promise<void> {
           </p>
           <p v-if="remoteLoadErrorMessage" class="account-message account-message--error">
             {{ remoteLoadErrorMessage }}
+          </p>
+          <p v-if="remoteEventSyncError" class="account-message account-message--error">
+            事件同步失敗：{{ remoteEventSyncError }}
           </p>
 
           <button

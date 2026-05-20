@@ -1,7 +1,15 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
+import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { catTrackerRepository, type CatTrackerState } from '@/repositories/catTrackerRepository'
+import {
+  canSyncRemoteEvent,
+  createRemoteCatEvent,
+  deleteRemoteCatEvent,
+  isRemoteUuid,
+  updateRemoteCatEvent,
+} from '@/services/syncRemoteCatEvents'
 import type {
   Cat,
   CatEvent,
@@ -95,6 +103,7 @@ function sortCategories(categories: EventCategory[]): EventCategory[] {
 
 export const useCatTrackerStore = defineStore('catTracker', () => {
   const initialState = catTrackerRepository.loadState()
+  const remoteAuth = useRemoteAuth()
   const today = new Date()
 
   const cats = ref<Cat[]>(initialState.cats)
@@ -107,6 +116,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const isQuickRecordOpen = ref(false)
   const editingEventId = ref<string>()
   const deleteConfirmEventId = ref<string>()
+  const remoteEventSyncError = ref('')
 
   const needsFirstTimeSetup = computed(() => cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
@@ -473,6 +483,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     events.value.push(event)
+    syncCreatedEvent(event.id)
 
     return event
   }
@@ -502,12 +513,19 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       ...input,
       updatedAt: getIsoNow(),
     })
+    syncUpdatedEvent(event.id)
 
     return event
   }
 
   function deleteEvent(eventId: string): void {
+    const shouldDeleteRemote = shouldSyncRemoteEventId(eventId)
+
     events.value = events.value.filter((event) => event.id !== eventId)
+
+    if (shouldDeleteRemote) {
+      syncDeletedEvent(eventId)
+    }
   }
 
   function deleteCategory(categoryId: string): void {
@@ -612,6 +630,106 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return Math.max(...groupCategories.map((category) => category.sortOrder)) + 1
   }
 
+  function getRemoteNotebookId(): string {
+    return remoteAuth.activeNotebookId.value
+  }
+
+  function shouldSyncRemoteEvent(event: CatEvent): boolean {
+    return canSyncRemoteEvent(event, getRemoteNotebookId())
+  }
+
+  function shouldSyncRemoteEventId(eventId: string): boolean {
+    return Boolean(getRemoteNotebookId() && isRemoteUuid(eventId))
+  }
+
+  function syncCreatedEvent(localEventId: string): void {
+    const event = eventsById.value.get(localEventId)
+    const notebookId = getRemoteNotebookId()
+
+    if (!event || !shouldSyncRemoteEvent(event)) {
+      return
+    }
+
+    void createRemoteCatEvent(event, notebookId, remoteAuth.user.value?.id ?? null)
+      .then((remoteEvent) => {
+        const eventIndex = events.value.findIndex((item) => item.id === localEventId)
+
+        if (eventIndex < 0) {
+          return
+        }
+
+        events.value[eventIndex] = remoteEvent
+
+        if (editingEventId.value === localEventId) {
+          editingEventId.value = remoteEvent.id
+        }
+
+        if (deleteConfirmEventId.value === localEventId) {
+          deleteConfirmEventId.value = remoteEvent.id
+        }
+
+        remoteEventSyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteEventSyncError.value = getSyncErrorMessage(error)
+      })
+  }
+
+  function syncUpdatedEvent(eventId: string): void {
+    const event = eventsById.value.get(eventId)
+    const notebookId = getRemoteNotebookId()
+
+    if (!event || !isRemoteUuid(event.id) || !shouldSyncRemoteEvent(event)) {
+      return
+    }
+
+    void updateRemoteCatEvent(event, notebookId)
+      .then((remoteEvent) => {
+        const eventIndex = events.value.findIndex((item) => item.id === eventId)
+
+        if (eventIndex >= 0) {
+          events.value[eventIndex] = remoteEvent
+        }
+
+        remoteEventSyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteEventSyncError.value = getSyncErrorMessage(error)
+      })
+  }
+
+  function syncDeletedEvent(eventId: string): void {
+    const notebookId = getRemoteNotebookId()
+
+    if (!notebookId) {
+      return
+    }
+
+    void deleteRemoteCatEvent(eventId, notebookId)
+      .then(() => {
+        remoteEventSyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteEventSyncError.value = getSyncErrorMessage(error)
+      })
+  }
+
+  function getSyncErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+
+    if (typeof error === 'object' && error && 'message' in error) {
+      const message = (error as { message?: unknown }).message
+
+      if (typeof message === 'string') {
+        return message
+      }
+    }
+
+    return '事件同步失敗'
+  }
+
   return {
     cats,
     categories,
@@ -623,6 +741,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     isQuickRecordOpen,
     editingEventId,
     deleteConfirmEventId,
+    remoteEventSyncError,
     needsFirstTimeSetup,
     selectedCat,
     quickActionCategories,

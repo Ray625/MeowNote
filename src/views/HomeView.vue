@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import BottomQuickActions from '@/components/home/BottomQuickActions.vue'
@@ -7,13 +8,19 @@ import EventTimeline from '@/components/home/EventTimeline.vue'
 import FirstTimeSetup from '@/components/home/FirstTimeSetup.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
+import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 useTheme()
+const { initializeAuth } = useRemoteAuth()
 
 const catTrackerStore = useCatTrackerStore()
 const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTrackerStore)
+
+onMounted(() => {
+  void initializeAuth()
+})
 </script>
 
 <template>
