@@ -13,12 +13,12 @@ import {
   getCategoryColorValue,
 } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
+import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
 import { useTheme } from '@/composables/useTheme'
 import {
   importLocalCatTracker,
   type ImportLocalCatTrackerResult,
 } from '@/services/importLocalCatTracker'
-import { loadRemoteCatTracker } from '@/services/loadRemoteCatTracker'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type {
   Cat,
@@ -46,6 +46,7 @@ const {
   signOut,
   user,
 } = useRemoteAuth()
+const { refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
 
 type SettingsSection = 'account' | 'categories' | 'pets'
 
@@ -502,9 +503,8 @@ async function submitLoadRemoteData(): Promise<void> {
   remoteLoadErrorMessage.value = ''
 
   try {
-    const remoteState = await loadRemoteCatTracker(activeNotebookId.value)
-    catTrackerStore.replacePersistedState(remoteState)
-    remoteLoadMessage.value = `已載入 ${remoteState.cats.length} 隻寵物、${remoteState.categories.length} 個分類、${remoteState.events.length} 筆紀錄。`
+    await refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { force: true })
+    remoteLoadMessage.value = `已載入 ${cats.value.length} 隻寵物、${categories.value.length} 個分類、${events.value.length} 筆紀錄。`
   } catch (error) {
     remoteLoadErrorMessage.value = error instanceof Error ? error.message : '載入雲端資料失敗'
   } finally {

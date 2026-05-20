@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import BottomQuickActions from '@/components/home/BottomQuickActions.vue'
@@ -9,18 +9,40 @@ import FirstTimeSetup from '@/components/home/FirstTimeSetup.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
+import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
 import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 useTheme()
-const { initializeAuth } = useRemoteAuth()
+const { activeNotebookId, initializeAuth } = useRemoteAuth()
+const { refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
 
 const catTrackerStore = useCatTrackerStore()
 const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTrackerStore)
 
 onMounted(() => {
-  void initializeAuth()
+  void initializeAuth().then(() => {
+    void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { force: true })
+  })
+
+  window.addEventListener('focus', refreshRemoteData)
+  document.addEventListener('visibilitychange', refreshRemoteDataWhenVisible)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshRemoteData)
+  document.removeEventListener('visibilitychange', refreshRemoteDataWhenVisible)
+})
+
+function refreshRemoteData(): void {
+  void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value)
+}
+
+function refreshRemoteDataWhenVisible(): void {
+  if (document.visibilityState === 'visible') {
+    refreshRemoteData()
+  }
+}
 </script>
 
 <template>
