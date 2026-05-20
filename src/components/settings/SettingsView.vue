@@ -34,13 +34,14 @@ const { categories, categoriesByGroup, cats, events, selectedCatId } = storeToRe
 const { isDarkMode, toggleDarkMode } = useTheme()
 const {
   activeNotebookId,
+  authMessage,
   errorMessage,
   initializeAuth,
   isConfigured,
   isLoading,
   isSignedIn,
-  magicLinkSentTo,
-  signInWithEmail,
+  signInWithPassword,
+  signUpWithPassword,
   signOut,
   user,
 } = useRemoteAuth()
@@ -49,6 +50,7 @@ type SettingsSection = 'account' | 'categories' | 'pets'
 
 const settingsSection = ref<SettingsSection>('categories')
 const signInEmail = ref('')
+const signInPassword = ref('')
 const isImportingLocalData = ref(false)
 const isLoadingRemoteData = ref(false)
 const importResult = ref<ImportLocalCatTrackerResult>()
@@ -477,7 +479,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 function submitSignIn(): void {
-  void signInWithEmail(signInEmail.value)
+  void signInWithPassword(signInEmail.value, signInPassword.value)
+}
+
+function submitSignUp(): void {
+  void signUpWithPassword(signInEmail.value, signInPassword.value)
 }
 
 function submitSignOut(): void {
@@ -682,16 +688,35 @@ async function submitImportLocalData(): Promise<void> {
               required
             />
           </label>
+          <label class="field">
+            <span class="field__label">密碼</span>
+            <input
+              v-model="signInPassword"
+              class="field__control"
+              type="password"
+              autocomplete="current-password"
+              required
+              minlength="6"
+            />
+          </label>
           <button
             class="ui-button ui-button--primary account-button"
             type="submit"
             :disabled="isLoading"
           >
-            {{ isLoading ? '寄送中' : '寄送登入連結' }}
+            {{ isLoading ? '登入中' : '登入' }}
+          </button>
+          <button
+            class="ui-button ui-button--secondary account-button"
+            type="button"
+            :disabled="isLoading"
+            @click="submitSignUp"
+          >
+            註冊
           </button>
         </form>
 
-        <p v-if="magicLinkSentTo" class="account-message">登入連結已寄到 {{ magicLinkSentTo }}。</p>
+        <p v-if="authMessage" class="account-message">{{ authMessage }}</p>
         <p v-if="errorMessage" class="account-message account-message--error">
           {{ errorMessage }}
         </p>

@@ -9,7 +9,7 @@ const user = ref<User | null>(null)
 const activeNotebookId = ref(readJson<string>(ACTIVE_NOTEBOOK_STORAGE_KEY, ''))
 const isLoading = ref(false)
 const errorMessage = ref('')
-const magicLinkSentTo = ref('')
+const authMessage = ref('')
 let isInitialized = false
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -141,7 +141,7 @@ export function useRemoteAuth() {
     }
   }
 
-  async function signInWithEmail(email: string): Promise<void> {
+  async function signInWithPassword(email: string, password: string): Promise<void> {
     if (!supabase) {
       errorMessage.value = 'Supabase 尚未設定'
       return
@@ -154,14 +154,58 @@ export function useRemoteAuth() {
       return
     }
 
+    if (!password) {
+      errorMessage.value = '請輸入密碼'
+      return
+    }
+
     isLoading.value = true
     errorMessage.value = ''
-    magicLinkSentTo.value = ''
+    authMessage.value = ''
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      })
+
+      if (error) {
+        throw error
+      }
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, '登入失敗')
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function signUpWithPassword(email: string, password: string): Promise<void> {
+    if (!supabase) {
+      errorMessage.value = 'Supabase 尚未設定'
+      return
+    }
+
+    const trimmedEmail = email.trim()
+
+    if (!trimmedEmail) {
+      errorMessage.value = '請輸入 Email'
+      return
+    }
+
+    if (password.length < 6) {
+      errorMessage.value = '密碼至少需要 6 個字元'
+      return
+    }
+
+    isLoading.value = true
+    errorMessage.value = ''
+    authMessage.value = ''
 
     try {
       const emailRedirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
-      const { error } = await supabase.auth.signInWithOtp({
+      const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
+        password,
         options: {
           emailRedirectTo,
         },
@@ -171,9 +215,11 @@ export function useRemoteAuth() {
         throw error
       }
 
-      magicLinkSentTo.value = trimmedEmail
+      authMessage.value = data.session
+        ? '註冊成功，已登入。'
+        : '註冊成功，請到信箱確認 Email 後再登入。'
     } catch (error) {
-      errorMessage.value = getErrorMessage(error, '寄送登入連結失敗')
+      errorMessage.value = getErrorMessage(error, '註冊失敗')
     } finally {
       isLoading.value = false
     }
@@ -195,7 +241,7 @@ export function useRemoteAuth() {
       }
 
       setSession(null)
-      magicLinkSentTo.value = ''
+      authMessage.value = ''
     } catch (error) {
       errorMessage.value = getErrorMessage(error, '登出失敗')
     } finally {
@@ -206,14 +252,15 @@ export function useRemoteAuth() {
   return {
     activeNotebookId: readonly(activeNotebookId),
     errorMessage: readonly(errorMessage),
+    authMessage: readonly(authMessage),
     isConfigured: isSupabaseConfigured,
     isLoading: readonly(isLoading),
     isSignedIn,
-    magicLinkSentTo: readonly(magicLinkSentTo),
     user: readonly(user),
     ensureActiveNotebook,
     initializeAuth,
-    signInWithEmail,
+    signInWithPassword,
+    signUpWithPassword,
     signOut,
   }
 }
