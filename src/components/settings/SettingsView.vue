@@ -1275,8 +1275,19 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   }
 
   .settings-actions {
-    flex-direction: column;
+    flex: 0 0 auto;
+    flex-direction: row;
     align-items: stretch;
+  }
+
+  .settings-actions .compact-button {
+    min-width: 0;
+    padding: 0 8px;
+    white-space: nowrap;
+  }
+
+  .theme-toggle {
+    min-width: 72px;
   }
 
   .settings-tabs {
