@@ -53,6 +53,12 @@ export type CatAvatarId =
   | 'brown'
   | 'gray'
   | 'tuxedo'
+  | 'bengal'
+  | 'ragdoll'
+  | 'siamese'
+  | 'cream'
+  | 'blue'
+  | 'mackerel'
 
 export type CategoryColorId =
   | 'red'

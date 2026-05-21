@@ -180,7 +180,13 @@ function isCatAvatarId(value: string | null): value is CatAvatarId {
     value === 'white' ||
     value === 'brown' ||
     value === 'gray' ||
-    value === 'tuxedo'
+    value === 'tuxedo' ||
+    value === 'bengal' ||
+    value === 'ragdoll' ||
+    value === 'siamese' ||
+    value === 'cream' ||
+    value === 'blue' ||
+    value === 'mackerel'
   )
 }
 

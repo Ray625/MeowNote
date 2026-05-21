@@ -1,8 +1,14 @@
+import catBengalImage from '@/assets/cat-avatars/cat-bengal.png'
 import catBlackImage from '@/assets/cat-avatars/cat-black.png'
+import catBlueImage from '@/assets/cat-avatars/cat-blue.png'
 import catBrownImage from '@/assets/cat-avatars/cat-brown.png'
 import catCalicoImage from '@/assets/cat-avatars/cat-calico.png'
+import catCreamImage from '@/assets/cat-avatars/cat-cream.png'
 import catGrayImage from '@/assets/cat-avatars/cat-gary.png'
+import catMackerelImage from '@/assets/cat-avatars/cat-mackerel.png'
 import catOrangeImage from '@/assets/cat-avatars/cat-orange.png'
+import catRagdollImage from '@/assets/cat-avatars/cat-ragdoll.png'
+import catSiameseImage from '@/assets/cat-avatars/cat-siamese.png'
 import catTabbyImage from '@/assets/cat-avatars/cat-tabby.png'
 import catTortoiseshellImage from '@/assets/cat-avatars/cat-tortoiseshell.png'
 import catTuxedoImage from '@/assets/cat-avatars/cat-tuxedo.png'
@@ -23,6 +29,12 @@ export const CAT_AVATAR_OPTIONS = [
   { id: 'brown', label: '棕白', image: catBrownImage },
   { id: 'gray', label: '銀灰', image: catGrayImage },
   { id: 'tuxedo', label: '賓士', image: catTuxedoImage },
+  { id: 'bengal', label: '豹貓', image: catBengalImage },
+  { id: 'ragdoll', label: '布偶', image: catRagdollImage },
+  { id: 'siamese', label: '暹羅', image: catSiameseImage },
+  { id: 'cream', label: '奶色', image: catCreamImage },
+  { id: 'blue', label: '藍貓', image: catBlueImage },
+  { id: 'mackerel', label: '鯖魚虎斑', image: catMackerelImage },
 ] as const satisfies ReadonlyArray<{
   id: CatAvatarId
   label: string
