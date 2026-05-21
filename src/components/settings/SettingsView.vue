@@ -28,6 +28,9 @@ import type {
   EventCategory,
   EventCategoryGroup,
 } from '@/types'
+import { readJson, removeJson, writeJson } from '@/utils/storage'
+
+const REMEMBERED_EMAIL_STORAGE_KEY = 'meownote:remembered-email'
 
 const catTrackerStore = useCatTrackerStore()
 const {
@@ -58,9 +61,11 @@ const { isBootstrappingRemoteData, refreshRemoteCatTracker, remoteRefreshError }
 
 type SettingsSection = 'account' | 'categories' | 'pets'
 
+const rememberedEmail = readJson<string>(REMEMBERED_EMAIL_STORAGE_KEY, '')
 const settingsSection = ref<SettingsSection>('categories')
-const signInEmail = ref('')
+const signInEmail = ref(rememberedEmail)
 const signInPassword = ref('')
+const shouldRememberEmail = ref(Boolean(rememberedEmail))
 const isImportingLocalData = ref(false)
 const isLoadingRemoteData = ref(false)
 const importResult = ref<ImportLocalCatTrackerResult>()
@@ -488,16 +493,41 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   )
 }
 
-function submitSignIn(): void {
-  void signInWithPassword(signInEmail.value, signInPassword.value)
+async function submitSignIn(): Promise<void> {
+  rememberSignInEmail()
+
+  if (await signInWithPassword(signInEmail.value, signInPassword.value)) {
+    signInPassword.value = ''
+  }
 }
 
-function submitSignUp(): void {
-  void signUpWithPassword(signInEmail.value, signInPassword.value)
+async function submitSignUp(): Promise<void> {
+  rememberSignInEmail()
+
+  if (await signUpWithPassword(signInEmail.value, signInPassword.value)) {
+    signInPassword.value = ''
+  }
 }
 
-function submitSignOut(): void {
-  void signOut()
+async function submitSignOut(): Promise<void> {
+  if (await signOut()) {
+    signInPassword.value = ''
+  }
+}
+
+function rememberSignInEmail(): void {
+  const trimmedEmail = signInEmail.value.trim()
+
+  signInEmail.value = trimmedEmail
+
+  if (!shouldRememberEmail.value) {
+    removeJson(REMEMBERED_EMAIL_STORAGE_KEY)
+    return
+  }
+
+  if (trimmedEmail) {
+    writeJson(REMEMBERED_EMAIL_STORAGE_KEY, trimmedEmail)
+  }
 }
 
 async function submitLoadRemoteData(): Promise<void> {
@@ -738,6 +768,10 @@ async function submitImportLocalData(): Promise<void> {
               required
               minlength="6"
             />
+          </label>
+          <label class="toggle-field account-remember-field">
+            <input v-model="shouldRememberEmail" type="checkbox" />
+            <span>記住 Email</span>
           </label>
           <button
             class="ui-button ui-button--primary account-button"
@@ -1203,6 +1237,11 @@ async function submitImportLocalData(): Promise<void> {
 
 .account-button {
   min-height: 42px;
+}
+
+.account-remember-field {
+  justify-self: start;
+  font-size: 0.875rem;
 }
 
 .account-details {

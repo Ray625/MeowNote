@@ -32,9 +32,9 @@ export const CAT_AVATAR_OPTIONS = [
   { id: 'bengal', label: '豹貓', image: catBengalImage },
   { id: 'ragdoll', label: '布偶', image: catRagdollImage },
   { id: 'siamese', label: '暹羅', image: catSiameseImage },
-  { id: 'cream', label: '奶', image: catCreamImage },
+  { id: 'cream', label: '奶白', image: catCreamImage },
   { id: 'blue', label: '藍貓', image: catBlueImage },
-  { id: 'mackerel', label: '鯖魚虎斑', image: catMackerelImage },
+  { id: 'mackerel', label: '銀虎斑', image: catMackerelImage },
 ] as const satisfies ReadonlyArray<{
   id: CatAvatarId
   label: string

@@ -141,22 +141,22 @@ export function useRemoteAuth() {
     }
   }
 
-  async function signInWithPassword(email: string, password: string): Promise<void> {
+  async function signInWithPassword(email: string, password: string): Promise<boolean> {
     if (!supabase) {
       errorMessage.value = 'Supabase 尚未設定'
-      return
+      return false
     }
 
     const trimmedEmail = email.trim()
 
     if (!trimmedEmail) {
       errorMessage.value = '請輸入 Email'
-      return
+      return false
     }
 
     if (!password) {
       errorMessage.value = '請輸入密碼'
-      return
+      return false
     }
 
     isLoading.value = true
@@ -172,29 +172,32 @@ export function useRemoteAuth() {
       if (error) {
         throw error
       }
+
+      return true
     } catch (error) {
       errorMessage.value = getErrorMessage(error, '登入失敗')
+      return false
     } finally {
       isLoading.value = false
     }
   }
 
-  async function signUpWithPassword(email: string, password: string): Promise<void> {
+  async function signUpWithPassword(email: string, password: string): Promise<boolean> {
     if (!supabase) {
       errorMessage.value = 'Supabase 尚未設定'
-      return
+      return false
     }
 
     const trimmedEmail = email.trim()
 
     if (!trimmedEmail) {
       errorMessage.value = '請輸入 Email'
-      return
+      return false
     }
 
     if (password.length < 6) {
       errorMessage.value = '密碼至少需要 6 個字元'
-      return
+      return false
     }
 
     isLoading.value = true
@@ -218,16 +221,18 @@ export function useRemoteAuth() {
       authMessage.value = data.session
         ? '註冊成功，已登入。'
         : '註冊成功，請到信箱確認 Email 後再登入。'
+      return true
     } catch (error) {
       errorMessage.value = getErrorMessage(error, '註冊失敗')
+      return false
     } finally {
       isLoading.value = false
     }
   }
 
-  async function signOut(): Promise<void> {
+  async function signOut(): Promise<boolean> {
     if (!supabase) {
-      return
+      return false
     }
 
     isLoading.value = true
@@ -242,8 +247,10 @@ export function useRemoteAuth() {
 
       setSession(null)
       authMessage.value = ''
+      return true
     } catch (error) {
       errorMessage.value = getErrorMessage(error, '登出失敗')
+      return false
     } finally {
       isLoading.value = false
     }
