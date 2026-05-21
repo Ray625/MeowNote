@@ -30,8 +30,15 @@ import type {
 } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { categories, categoriesByGroup, cats, events, remoteEventSyncError, selectedCatId } =
-  storeToRefs(catTrackerStore)
+const {
+  categories,
+  categoriesByGroup,
+  cats,
+  events,
+  remoteCatSyncError,
+  remoteEventSyncError,
+  selectedCatId,
+} = storeToRefs(catTrackerStore)
 const { isDarkMode, toggleDarkMode } = useTheme()
 const {
   activeNotebookId,
@@ -46,7 +53,8 @@ const {
   signOut,
   user,
 } = useRemoteAuth()
-const { refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
+const { isBootstrappingRemoteData, refreshRemoteCatTracker, remoteRefreshError } =
+  useRemoteCatTrackerRefresh()
 
 type SettingsSection = 'account' | 'categories' | 'pets'
 
@@ -644,12 +652,16 @@ async function submitImportLocalData(): Promise<void> {
             <strong>{{ activeNotebookId || '建立中' }}</strong>
             <span>本機資料</span>
             <strong>{{ localImportSummary }}</strong>
+            <span>同步狀態</span>
+            <strong>{{ isBootstrappingRemoteData ? '同步中' : '待命' }}</strong>
           </div>
 
           <button
             class="ui-button ui-button--primary account-button"
             type="button"
-            :disabled="isLoading || isImportingLocalData || !activeNotebookId"
+            :disabled="
+              isLoading || isImportingLocalData || isBootstrappingRemoteData || !activeNotebookId
+            "
             @click="submitImportLocalData"
           >
             {{ isImportingLocalData ? '匯入中' : '匯入本機資料' }}
@@ -658,7 +670,9 @@ async function submitImportLocalData(): Promise<void> {
           <button
             class="ui-button ui-button--secondary account-button"
             type="button"
-            :disabled="isLoading || isLoadingRemoteData || !activeNotebookId"
+            :disabled="
+              isLoading || isLoadingRemoteData || isBootstrappingRemoteData || !activeNotebookId
+            "
             @click="submitLoadRemoteData"
           >
             {{ isLoadingRemoteData ? '載入中' : '載入雲端資料' }}
@@ -682,8 +696,14 @@ async function submitImportLocalData(): Promise<void> {
           <p v-if="remoteLoadErrorMessage" class="account-message account-message--error">
             {{ remoteLoadErrorMessage }}
           </p>
+          <p v-if="remoteRefreshError" class="account-message account-message--error">
+            自動同步失敗：{{ remoteRefreshError }}
+          </p>
           <p v-if="remoteEventSyncError" class="account-message account-message--error">
             事件同步失敗：{{ remoteEventSyncError }}
+          </p>
+          <p v-if="remoteCatSyncError" class="account-message account-message--error">
+            寵物同步失敗：{{ remoteCatSyncError }}
           </p>
 
           <button

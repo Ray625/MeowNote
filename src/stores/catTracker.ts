@@ -10,6 +10,7 @@ import {
   isRemoteUuid,
   updateRemoteCatEvent,
 } from '@/services/syncRemoteCatEvents'
+import { createRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
 import type {
   Cat,
   CatEvent,
@@ -117,6 +118,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const editingEventId = ref<string>()
   const deleteConfirmEventId = ref<string>()
   const remoteEventSyncError = ref('')
+  const remoteCatSyncError = ref('')
 
   const needsFirstTimeSetup = computed(() => cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
@@ -381,6 +383,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     cats.value.push(cat)
     selectedCatId.value = cat.id
+    syncCreatedCat(cat.id)
 
     return cat
   }
@@ -396,6 +399,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       ...input,
       updatedAt: getIsoNow(),
     })
+    syncUpdatedCat(cat.id)
 
     return cat
   }
@@ -634,6 +638,69 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return remoteAuth.activeNotebookId.value
   }
 
+  function syncCreatedCat(localCatId: string): void {
+    const cat = catsById.value.get(localCatId)
+    const notebookId = getRemoteNotebookId()
+
+    if (!cat || !notebookId) {
+      return
+    }
+
+    void createRemoteCat(cat, notebookId)
+      .then((remoteCat) => {
+        const catIndex = cats.value.findIndex((item) => item.id === localCatId)
+
+        if (catIndex < 0) {
+          return
+        }
+
+        replaceCatId(localCatId, remoteCat.id)
+        cats.value[catIndex] = remoteCat
+        remoteCatSyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteCatSyncError.value = getSyncErrorMessage(error, '寵物同步失敗')
+      })
+  }
+
+  function syncUpdatedCat(catId: string): void {
+    const cat = catsById.value.get(catId)
+    const notebookId = getRemoteNotebookId()
+
+    if (!cat || !notebookId || !isRemoteUuid(cat.id)) {
+      return
+    }
+
+    void updateRemoteCat(cat, notebookId)
+      .then((remoteCat) => {
+        const catIndex = cats.value.findIndex((item) => item.id === catId)
+
+        if (catIndex >= 0) {
+          cats.value[catIndex] = remoteCat
+        }
+
+        remoteCatSyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteCatSyncError.value = getSyncErrorMessage(error, '寵物同步失敗')
+      })
+  }
+
+  function replaceCatId(previousCatId: string, nextCatId: string): void {
+    if (selectedCatId.value === previousCatId) {
+      selectedCatId.value = nextCatId
+    }
+
+    events.value.forEach((event) => {
+      if (event.catId === previousCatId) {
+        Object.assign(event, {
+          catId: nextCatId,
+          updatedAt: getIsoNow(),
+        })
+      }
+    })
+  }
+
   function shouldSyncRemoteEvent(event: CatEvent): boolean {
     return canSyncRemoteEvent(event, getRemoteNotebookId())
   }
@@ -671,7 +738,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         remoteEventSyncError.value = ''
       })
       .catch((error: unknown) => {
-        remoteEventSyncError.value = getSyncErrorMessage(error)
+        remoteEventSyncError.value = getSyncErrorMessage(error, '事件同步失敗')
       })
   }
 
@@ -694,7 +761,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         remoteEventSyncError.value = ''
       })
       .catch((error: unknown) => {
-        remoteEventSyncError.value = getSyncErrorMessage(error)
+        remoteEventSyncError.value = getSyncErrorMessage(error, '事件同步失敗')
       })
   }
 
@@ -710,11 +777,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         remoteEventSyncError.value = ''
       })
       .catch((error: unknown) => {
-        remoteEventSyncError.value = getSyncErrorMessage(error)
+        remoteEventSyncError.value = getSyncErrorMessage(error, '事件同步失敗')
       })
   }
 
-  function getSyncErrorMessage(error: unknown): string {
+  function getSyncErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof Error) {
       return error.message
     }
@@ -727,7 +794,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       }
     }
 
-    return '事件同步失敗'
+    return fallback
   }
 
   return {
@@ -742,6 +809,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     editingEventId,
     deleteConfirmEventId,
     remoteEventSyncError,
+    remoteCatSyncError,
     needsFirstTimeSetup,
     selectedCat,
     quickActionCategories,

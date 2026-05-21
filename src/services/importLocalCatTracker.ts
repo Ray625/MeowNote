@@ -95,14 +95,18 @@ export async function importLocalCatTracker({
   }
 }
 
-async function assertNotebookIsEmpty(notebookId: string): Promise<void> {
+export async function isRemoteNotebookEmpty(notebookId: string): Promise<boolean> {
   const [catCount, categoryCount, eventCount] = await Promise.all([
     getNotebookTableCount('cats', notebookId),
     getNotebookTableCount('event_categories', notebookId),
     getNotebookTableCount('cat_events', notebookId),
   ])
 
-  if (catCount + categoryCount + eventCount > 0) {
+  return catCount + categoryCount + eventCount === 0
+}
+
+async function assertNotebookIsEmpty(notebookId: string): Promise<void> {
+  if (!(await isRemoteNotebookEmpty(notebookId))) {
     throw new Error('遠端同步空間已有資料，為避免重複匯入，已取消匯入。')
   }
 }

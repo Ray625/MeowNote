@@ -1,10 +1,12 @@
 import { readonly, ref } from 'vue'
+import { importLocalCatTracker, isRemoteNotebookEmpty } from '@/services/importLocalCatTracker'
 import { loadRemoteCatTracker } from '@/services/loadRemoteCatTracker'
 import type { useCatTrackerStore } from '@/stores/catTracker'
 
 const MIN_REFRESH_INTERVAL_MS = 30_000
 
 const isRefreshingRemoteData = ref(false)
+const isBootstrappingRemoteData = ref(false)
 const remoteRefreshError = ref('')
 let lastRefreshAt = 0
 
@@ -25,6 +27,41 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function useRemoteCatTrackerRefresh() {
+  async function bootstrapRemoteCatTracker(
+    catTrackerStore: ReturnType<typeof useCatTrackerStore>,
+    notebookId: string,
+    userId: string | null,
+  ): Promise<void> {
+    if (!notebookId || isBootstrappingRemoteData.value) {
+      return
+    }
+
+    isBootstrappingRemoteData.value = true
+
+    try {
+      const localCats = [...catTrackerStore.cats]
+      const localCategories = [...catTrackerStore.categories]
+      const localEvents = [...catTrackerStore.events]
+      const hasLocalUserData = localCats.length > 0 || localEvents.length > 0
+
+      if (hasLocalUserData && (await isRemoteNotebookEmpty(notebookId))) {
+        await importLocalCatTracker({
+          notebookId,
+          cats: localCats,
+          categories: localCategories,
+          events: localEvents,
+          createdBy: userId,
+        })
+      }
+
+      await refreshRemoteCatTracker(catTrackerStore, notebookId, { force: true })
+    } catch (error) {
+      remoteRefreshError.value = getErrorMessage(error)
+    } finally {
+      isBootstrappingRemoteData.value = false
+    }
+  }
+
   async function refreshRemoteCatTracker(
     catTrackerStore: ReturnType<typeof useCatTrackerStore>,
     notebookId: string,
@@ -55,6 +92,8 @@ export function useRemoteCatTrackerRefresh() {
   }
 
   return {
+    bootstrapRemoteCatTracker,
+    isBootstrappingRemoteData: readonly(isBootstrappingRemoteData),
     isRefreshingRemoteData: readonly(isRefreshingRemoteData),
     remoteRefreshError: readonly(remoteRefreshError),
     refreshRemoteCatTracker,

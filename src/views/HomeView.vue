@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import BottomQuickActions from '@/components/home/BottomQuickActions.vue'
@@ -14,19 +14,25 @@ import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 useTheme()
-const { activeNotebookId, initializeAuth } = useRemoteAuth()
-const { refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
+const { activeNotebookId, initializeAuth, user } = useRemoteAuth()
+const { bootstrapRemoteCatTracker, refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
 
 const catTrackerStore = useCatTrackerStore()
 const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTrackerStore)
 
 onMounted(() => {
   void initializeAuth().then(() => {
-    void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { force: true })
+    void bootstrapRemoteCatTracker(catTrackerStore, activeNotebookId.value, user.value?.id ?? null)
   })
 
   window.addEventListener('focus', refreshRemoteData)
   document.addEventListener('visibilitychange', refreshRemoteDataWhenVisible)
+})
+
+watch(activeNotebookId, (notebookId) => {
+  if (notebookId) {
+    void bootstrapRemoteCatTracker(catTrackerStore, notebookId, user.value?.id ?? null)
+  }
 })
 
 onBeforeUnmount(() => {
