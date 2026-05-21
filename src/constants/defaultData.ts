@@ -14,6 +14,7 @@ import catTortoiseshellImage from '@/assets/cat-avatars/cat-tortoiseshell.png'
 import catTuxedoImage from '@/assets/cat-avatars/cat-tuxedo.png'
 import catWhiteImage from '@/assets/cat-avatars/cat-white.png'
 import type { Cat, CatAvatarId, CategoryColorId, EventCategory, EventCategoryGroup } from '@/types'
+import { createId } from '@/utils/id'
 
 export const DEFAULT_CAT_ID = 'default-cat'
 
@@ -142,7 +143,7 @@ export const QUICK_CATEGORY_NAMES = DEFAULT_CATEGORY_DEFINITIONS.map(
 
 export function createDefaultCat(now: string): Cat {
   return {
-    id: DEFAULT_CAT_ID,
+    id: createId(),
     name: '我的貓',
     avatarId: DEFAULT_CAT_AVATAR_ID,
     isArchived: false,
@@ -153,7 +154,7 @@ export function createDefaultCat(now: string): Cat {
 
 export function createDefaultCategories(now: string): EventCategory[] {
   return DEFAULT_CATEGORY_DEFINITIONS.map((category, index) => ({
-    id: `default-category-${category.name}`,
+    id: createId(),
     name: category.name,
     group: category.group,
     colorId: category.colorId,

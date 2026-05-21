@@ -10,7 +10,7 @@ import {
   isRemoteUuid,
   updateRemoteCatEvent,
 } from '@/services/syncRemoteCatEvents'
-import { createRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
+import { createRemoteCat, deleteRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
 import type {
   Cat,
   CatEvent,
@@ -122,6 +122,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   const needsFirstTimeSetup = computed(() => cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
+  const canCreateEventForSelectedCat = computed(() =>
+    Boolean(selectedCat.value && !selectedCat.value.isArchived),
+  )
 
   const quickActionCategories = computed(() =>
     sortCategories(
@@ -145,6 +148,15 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     for (const event of events.value) {
       usageCounts.set(event.categoryId, (usageCounts.get(event.categoryId) ?? 0) + 1)
+    }
+
+    return usageCounts
+  })
+  const catUsageCounts = computed(() => {
+    const usageCounts = new Map<string, number>()
+
+    for (const event of events.value) {
+      usageCounts.set(event.catId, (usageCounts.get(event.catId) ?? 0) + 1)
     }
 
     return usageCounts
@@ -261,7 +273,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   )
 
   function selectCat(catId: string): void {
-    if (!catsById.value.has(catId)) {
+    const cat = catsById.value.get(catId)
+
+    if (!cat) {
       return
     }
 
@@ -404,13 +418,60 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return cat
   }
 
+  function deleteCat(catId: string): void {
+    const cat = catsById.value.get(catId)
+
+    if (!cat) {
+      return
+    }
+
+    if (getCatUsageCount(catId) > 0) {
+      Object.assign(cat, {
+        isArchived: true,
+        updatedAt: getIsoNow(),
+      })
+
+      syncUpdatedCat(cat.id)
+      return
+    }
+
+    cats.value = cats.value.filter((item) => item.id !== catId)
+
+    if (selectedCatId.value === catId) {
+      selectedCatId.value = getFallbackSelectedCatId(catId)
+    }
+
+    syncDeletedCat(catId)
+  }
+
+  function restoreCat(catId: string): Cat | undefined {
+    const cat = catsById.value.get(catId)
+
+    if (!cat) {
+      return undefined
+    }
+
+    Object.assign(cat, {
+      isArchived: false,
+      updatedAt: getIsoNow(),
+    })
+
+    if (!selectedCatId.value) {
+      selectedCatId.value = cat.id
+    }
+
+    syncUpdatedCat(cat.id)
+
+    return cat
+  }
+
   function replacePersistedState(state: CatTrackerState): void {
     cats.value = state.cats
     categories.value = state.categories
     events.value = state.events
     selectedCatId.value = state.cats.some((cat) => cat.id === state.selectedCatId)
       ? state.selectedCatId
-      : (state.cats.find((cat) => !cat.isArchived)?.id ?? state.cats[0]?.id ?? '')
+      : (state.cats.find((cat) => !cat.isArchived)?.id ?? '')
 
     if (selectedCatId.value) {
       isQuickRecordOpen.value = false
@@ -471,6 +532,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return categoryUsageCounts.value.get(categoryId) ?? 0
   }
 
+  function getCatUsageCount(catId: string): number {
+    return catUsageCounts.value.get(catId) ?? 0
+  }
+
   function createEvent(input: CreateCatEventInput): CatEvent {
     const now = getIsoNow()
     const event: CatEvent = {
@@ -495,7 +560,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function quickRecord(categoryId: string, occurredAt?: string): CatEvent | undefined {
     const category = categoriesById.value.get(categoryId)
 
-    if (!selectedCat.value || !category || category.isArchived) {
+    if (!selectedCat.value || selectedCat.value.isArchived || !category || category.isArchived) {
       return undefined
     }
 
@@ -638,6 +703,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return remoteAuth.activeNotebookId.value
   }
 
+  function getFallbackSelectedCatId(excludedCatId?: string): string {
+    return cats.value.find((cat) => !cat.isArchived && cat.id !== excludedCatId)?.id ?? ''
+  }
+
   function syncCreatedCat(localCatId: string): void {
     const cat = catsById.value.get(localCatId)
     const notebookId = getRemoteNotebookId()
@@ -654,7 +723,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
           return
         }
 
-        replaceCatId(localCatId, remoteCat.id)
+        if (localCatId !== remoteCat.id) {
+          replaceCatId(localCatId, remoteCat.id)
+        }
+
         cats.value[catIndex] = remoteCat
         remoteCatSyncError.value = ''
       })
@@ -686,7 +758,27 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       })
   }
 
+  function syncDeletedCat(catId: string): void {
+    const notebookId = getRemoteNotebookId()
+
+    if (!notebookId || !isRemoteUuid(catId)) {
+      return
+    }
+
+    void deleteRemoteCat(catId, notebookId)
+      .then(() => {
+        remoteCatSyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteCatSyncError.value = getSyncErrorMessage(error, '寵物同步失敗')
+      })
+  }
+
   function replaceCatId(previousCatId: string, nextCatId: string): void {
+    if (previousCatId === nextCatId) {
+      return
+    }
+
     if (selectedCatId.value === previousCatId) {
       selectedCatId.value = nextCatId
     }
@@ -812,11 +904,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     remoteCatSyncError,
     needsFirstTimeSetup,
     selectedCat,
+    canCreateEventForSelectedCat,
     quickActionCategories,
     activeCategories,
     categoriesByGroup,
     archivedCategories,
     categoryUsageCounts,
+    catUsageCounts,
     todayEvents,
     catsById,
     categoriesById,
@@ -839,10 +933,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     setActiveTab,
     createCat,
     updateCat,
+    deleteCat,
+    restoreCat,
     replacePersistedState,
     createCategory,
     updateCategory,
     getCategoryUsageCount,
+    getCatUsageCount,
     createEvent,
     quickRecord,
     quickRecordForSelectedDate,

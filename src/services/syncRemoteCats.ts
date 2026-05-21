@@ -52,3 +52,19 @@ export async function updateRemoteCat(cat: Cat, notebookId: string): Promise<Cat
 
   return fromCatRow(data)
 }
+
+export async function deleteRemoteCat(catId: string, notebookId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase 尚未設定')
+  }
+
+  const { error } = await supabase
+    .from('cats')
+    .delete()
+    .eq('id', catId)
+    .eq('notebook_id', notebookId)
+
+  if (error) {
+    throw error
+  }
+}

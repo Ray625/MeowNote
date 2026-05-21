@@ -6,7 +6,8 @@ import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory, EventCategoryGroup } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { activeTab, isQuickRecordOpen, quickActionCategories } = storeToRefs(catTrackerStore)
+const { activeTab, canCreateEventForSelectedCat, isQuickRecordOpen, quickActionCategories } =
+  storeToRefs(catTrackerStore)
 const activeGroup = ref<EventCategoryGroup>('飲食')
 
 const groupedQuickActionCategories = computed(() =>
@@ -97,6 +98,7 @@ function selectGroup(group: EventCategoryGroup): void {
         class="ui-button ui-button--primary add-button"
         type="button"
         aria-label="新增快速紀錄"
+        :disabled="!canCreateEventForSelectedCat"
         @click="catTrackerStore.toggleQuickRecord"
       >
         +

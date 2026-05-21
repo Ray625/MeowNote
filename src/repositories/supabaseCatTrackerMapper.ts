@@ -53,12 +53,9 @@ export interface SupabaseCatEventRow {
   updated_at: string
 }
 
-export type InsertCatRow = Omit<SupabaseCatRow, 'id' | 'created_at' | 'updated_at'>
-export type InsertEventCategoryRow = Omit<
-  SupabaseEventCategoryRow,
-  'id' | 'created_at' | 'updated_at'
->
-export type InsertCatEventRow = Omit<SupabaseCatEventRow, 'id' | 'created_at' | 'updated_at'>
+export type InsertCatRow = Omit<SupabaseCatRow, 'created_at' | 'updated_at'>
+export type InsertEventCategoryRow = Omit<SupabaseEventCategoryRow, 'created_at' | 'updated_at'>
+export type InsertCatEventRow = Omit<SupabaseCatEventRow, 'created_at' | 'updated_at'>
 
 export interface ImportedIdMap {
   catIds: Map<string, string>
@@ -67,6 +64,7 @@ export interface ImportedIdMap {
 
 export function toInsertCatRow(cat: Cat, notebookId: string): InsertCatRow {
   return {
+    id: cat.id,
     notebook_id: notebookId,
     name: cat.name,
     avatar_id: cat.avatarId ?? null,
@@ -101,6 +99,7 @@ export function toInsertEventCategoryRow(
   notebookId: string,
 ): InsertEventCategoryRow {
   return {
+    id: category.id,
     notebook_id: notebookId,
     name: category.name,
     group_name: category.group ?? null,
@@ -143,6 +142,7 @@ export function toInsertCatEventRow(
   }
 
   return {
+    id: event.id,
     notebook_id: notebookId,
     cat_id: catId,
     category_id: categoryId,

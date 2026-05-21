@@ -95,6 +95,7 @@ const catAvatarId = ref<CatAvatarId>(DEFAULT_CAT_AVATAR_ID)
 const catIsNeutered = ref<'yes' | 'no' | ''>('')
 const catNote = ref('')
 const isCatModalOpen = ref(false)
+const pendingDeleteCatId = ref<string>()
 
 const isEditing = computed(() => Boolean(editingCategoryId.value))
 const formTitle = computed(() => (isEditing.value ? '編輯分類' : '新增分類'))
@@ -111,6 +112,15 @@ const pendingDeleteUsageCount = computed(() =>
     : 0,
 )
 const deleteActionLabel = computed(() => (pendingDeleteUsageCount.value > 0 ? '停用' : '刪除'))
+const pendingDeleteCat = computed(() =>
+  pendingDeleteCatId.value ? catTrackerStore.catsById.get(pendingDeleteCatId.value) : undefined,
+)
+const pendingDeleteCatUsageCount = computed(() =>
+  pendingDeleteCat.value ? catTrackerStore.getCatUsageCount(pendingDeleteCat.value.id) : 0,
+)
+const deleteCatActionLabel = computed(() =>
+  pendingDeleteCatUsageCount.value > 0 ? '停用' : '刪除',
+)
 const settingsSubtitle = computed(() => {
   if (settingsSection.value === 'account') {
     return '管理帳戶與同步'
@@ -126,6 +136,11 @@ const deleteMessage = computed(() =>
   pendingDeleteUsageCount.value > 0
     ? '停用後，這個分類不會再出現在快速紀錄中，但過去的紀錄仍會保留。'
     : `確定刪除「${pendingDeleteCategory.value?.name}」？`,
+)
+const deleteCatMessage = computed(() =>
+  pendingDeleteCatUsageCount.value > 0
+    ? '停用後，這隻寵物不會再出現在切換選單中，但過去的紀錄仍會保留。'
+    : `確定刪除「${pendingDeleteCat.value?.name}」？`,
 )
 
 onMounted(() => {
@@ -211,6 +226,33 @@ function confirmDeleteCategory(): void {
 
 function restoreCategory(category: EventCategory): void {
   catTrackerStore.restoreCategory(category.id)
+}
+
+function deleteCat(cat: Cat): void {
+  pendingDeleteCatId.value = cat.id
+}
+
+function cancelDeleteCat(): void {
+  pendingDeleteCatId.value = undefined
+}
+
+function confirmDeleteCat(): void {
+  if (!pendingDeleteCat.value) {
+    return
+  }
+
+  const deletedCatId = pendingDeleteCat.value.id
+
+  catTrackerStore.deleteCat(deletedCatId)
+  pendingDeleteCatId.value = undefined
+
+  if (editingCatId.value === deletedCatId) {
+    closeCatModal()
+  }
+}
+
+function restoreCat(cat: Cat): void {
+  catTrackerStore.restoreCat(cat.id)
 }
 
 function switchSettingsSection(section: SettingsSection): void {
@@ -956,7 +998,10 @@ async function submitImportLocalData(): Promise<void> {
           v-for="cat in cats"
           :key="cat.id"
           class="pet-item"
-          :class="{ 'pet-item--selected': selectedCatId === cat.id }"
+          :class="{
+            'pet-item--archived': cat.isArchived,
+            'pet-item--selected': selectedCatId === cat.id,
+          }"
         >
           <div class="pet-avatar" aria-hidden="true">
             <img
@@ -966,11 +1011,28 @@ async function submitImportLocalData(): Promise<void> {
           </div>
           <div class="pet-item__content">
             <strong>{{ cat.name }}</strong>
-            <span v-if="getCatMeta(cat)">{{ getCatMeta(cat) }}</span>
-            <span v-else>尚未填寫詳細資料</span>
+            <span v-if="cat.isArchived">
+              已停用 · 過去紀錄仍會保留 ·
+              {{ catTrackerStore.getCatUsageCount(cat.id) }} 筆紀錄
+            </span>
+            <span v-else-if="getCatMeta(cat)">
+              {{ getCatMeta(cat) }} · {{ catTrackerStore.getCatUsageCount(cat.id) }} 筆紀錄
+            </span>
+            <span v-else
+              >尚未填寫詳細資料 · {{ catTrackerStore.getCatUsageCount(cat.id) }} 筆紀錄</span
+            >
             <p v-if="cat.note">{{ cat.note }}</p>
           </div>
-          <div class="pet-item__actions">
+          <div v-if="cat.isArchived" class="pet-item__actions">
+            <button
+              class="ui-button ui-button--primary compact-button"
+              type="button"
+              @click="restoreCat(cat)"
+            >
+              重新使用
+            </button>
+          </div>
+          <div v-else class="pet-item__actions">
             <button
               class="ui-button ui-button--secondary compact-button"
               type="button"
@@ -985,6 +1047,13 @@ async function submitImportLocalData(): Promise<void> {
               @click="startEditCat(cat)"
             >
               編輯
+            </button>
+            <button
+              class="ui-button ui-button--danger compact-button"
+              type="button"
+              @click="deleteCat(cat)"
+            >
+              {{ catTrackerStore.getCatUsageCount(cat.id) > 0 ? '停用' : '刪除' }}
             </button>
           </div>
         </article>
@@ -1195,6 +1264,17 @@ async function submitImportLocalData(): Promise<void> {
       tone="danger"
       @cancel="cancelDeleteCategory"
       @confirm="confirmDeleteCategory"
+    />
+
+    <ConfirmDialog
+      v-if="pendingDeleteCat"
+      :title="`${deleteCatActionLabel}寵物？`"
+      :message="deleteCatMessage"
+      :confirm-label="deleteCatActionLabel"
+      cancel-label="保留"
+      tone="danger"
+      @cancel="cancelDeleteCat"
+      @confirm="confirmDeleteCat"
     />
   </section>
 </template>
@@ -1476,6 +1556,19 @@ async function submitImportLocalData(): Promise<void> {
 .pet-item--selected {
   border-color: var(--color-primary);
   background: var(--color-primary-light);
+}
+
+.pet-item--archived {
+  border-style: dashed;
+  background: var(--color-disabled-surface);
+}
+
+.pet-item--archived .pet-avatar {
+  opacity: 0.58;
+}
+
+.pet-item--archived strong {
+  color: var(--color-muted);
 }
 
 .pet-avatar {

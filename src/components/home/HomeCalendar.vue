@@ -67,6 +67,7 @@ function selectMonth(monthIndex: number): void {
             />
           </span>
           <strong class="cat-name">{{ selectedCat?.name ?? '我的貓' }}</strong>
+          <span v-if="selectedCat?.isArchived" class="archived-badge">已停用</span>
           <span class="cat-switcher__chevron" aria-hidden="true">⌄</span>
         </button>
 
@@ -75,7 +76,10 @@ function selectMonth(monthIndex: number): void {
             v-for="cat in cats"
             :key="cat.id"
             class="cat-menu__item"
-            :class="{ 'cat-menu__item--selected': selectedCatId === cat.id }"
+            :class="{
+              'cat-menu__item--archived': cat.isArchived,
+              'cat-menu__item--selected': selectedCatId === cat.id,
+            }"
             type="button"
             role="option"
             :aria-selected="selectedCatId === cat.id"
@@ -87,7 +91,10 @@ function selectMonth(monthIndex: number): void {
                 :alt="getCatAvatarOption(cat.avatarId).label"
               />
             </span>
-            <span>{{ cat.name }}</span>
+            <span>
+              {{ cat.name }}
+              <small v-if="cat.isArchived">已停用</small>
+            </span>
             <span class="cat-menu__check" aria-hidden="true">{{
               selectedCatId === cat.id ? '✓' : ''
             }}</span>
@@ -282,6 +289,16 @@ function selectMonth(monthIndex: number): void {
   line-height: 1;
 }
 
+.archived-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .cat-menu {
   position: absolute;
   top: calc(100% + 8px);
@@ -321,10 +338,24 @@ function selectMonth(monthIndex: number): void {
   background: var(--color-primary-light);
 }
 
+.cat-menu__item--archived {
+  color: var(--color-muted);
+}
+
+.cat-menu__item--archived .selected-cat__avatar {
+  opacity: 0.58;
+}
+
 .cat-menu__item span:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cat-menu__item small {
+  margin-left: 4px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
 }
 
 .cat-menu__check {

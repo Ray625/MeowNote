@@ -22,6 +22,7 @@ export async function createRemoteCatEvent(
   const { data, error } = await supabase
     .from('cat_events')
     .insert({
+      id: event.id,
       notebook_id: notebookId,
       cat_id: event.catId,
       category_id: event.categoryId,
