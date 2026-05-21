@@ -45,6 +45,7 @@ const {
 const { isDarkMode, toggleDarkMode } = useTheme()
 const {
   activeNotebookId,
+  activeNotebookName,
   authMessage,
   errorMessage,
   initializeAuth,
@@ -54,6 +55,7 @@ const {
   signInWithPassword,
   signUpWithPassword,
   signOut,
+  updateActiveNotebookName,
   user,
 } = useRemoteAuth()
 const { isBootstrappingRemoteData, refreshRemoteCatTracker, remoteRefreshError } =
@@ -66,6 +68,8 @@ const settingsSection = ref<SettingsSection>('categories')
 const signInEmail = ref(rememberedEmail)
 const signInPassword = ref('')
 const shouldRememberEmail = ref(Boolean(rememberedEmail))
+const isEditingNotebookName = ref(false)
+const notebookNameDraft = ref('')
 const isImportingLocalData = ref(false)
 const isLoadingRemoteData = ref(false)
 const importResult = ref<ImportLocalCatTrackerResult>()
@@ -512,6 +516,23 @@ async function submitSignUp(): Promise<void> {
 async function submitSignOut(): Promise<void> {
   if (await signOut()) {
     signInPassword.value = ''
+    closeNotebookNameEditor()
+  }
+}
+
+function startEditNotebookName(): void {
+  notebookNameDraft.value = activeNotebookName.value || ''
+  isEditingNotebookName.value = true
+}
+
+function closeNotebookNameEditor(): void {
+  isEditingNotebookName.value = false
+  notebookNameDraft.value = ''
+}
+
+async function submitNotebookName(): Promise<void> {
+  if (await updateActiveNotebookName(notebookNameDraft.value)) {
+    closeNotebookNameEditor()
   }
 }
 
@@ -679,12 +700,57 @@ async function submitImportLocalData(): Promise<void> {
             <span>Email</span>
             <strong>{{ user?.email }}</strong>
             <span>Notebook</span>
-            <strong>{{ activeNotebookId || '建立中' }}</strong>
+            <strong>{{ activeNotebookName || '建立中' }}</strong>
             <span>本機資料</span>
             <strong>{{ localImportSummary }}</strong>
             <span>同步狀態</span>
             <strong>{{ isBootstrappingRemoteData ? '同步中' : '待命' }}</strong>
           </div>
+
+          <form
+            v-if="isEditingNotebookName"
+            class="notebook-name-form"
+            @submit.prevent="submitNotebookName"
+          >
+            <label class="field">
+              <span class="field__label">Notebook 名稱</span>
+              <input
+                v-model="notebookNameDraft"
+                class="field__control"
+                type="text"
+                autocomplete="off"
+                required
+                maxlength="80"
+              />
+            </label>
+            <div class="notebook-name-form__actions">
+              <button
+                class="ui-button ui-button--primary account-button"
+                type="submit"
+                :disabled="isLoading || !activeNotebookId"
+              >
+                儲存名稱
+              </button>
+              <button
+                class="ui-button ui-button--secondary account-button"
+                type="button"
+                :disabled="isLoading"
+                @click="closeNotebookNameEditor"
+              >
+                取消
+              </button>
+            </div>
+          </form>
+
+          <button
+            v-else
+            class="ui-button ui-button--secondary account-button"
+            type="button"
+            :disabled="isLoading || !activeNotebookId"
+            @click="startEditNotebookName"
+          >
+            編輯 Notebook 名稱
+          </button>
 
           <button
             class="ui-button ui-button--primary account-button"
@@ -1242,6 +1308,17 @@ async function submitImportLocalData(): Promise<void> {
 .account-remember-field {
   justify-self: start;
   font-size: 0.875rem;
+}
+
+.notebook-name-form {
+  display: grid;
+  gap: 12px;
+}
+
+.notebook-name-form__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .account-details {

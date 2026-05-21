@@ -4,9 +4,11 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import { readJson, writeJson } from '@/utils/storage'
 
 const ACTIVE_NOTEBOOK_STORAGE_KEY = 'meownote:active-notebook-id'
+const ACTIVE_NOTEBOOK_NAME_STORAGE_KEY = 'meownote:active-notebook-name'
 
 const user = ref<User | null>(null)
 const activeNotebookId = ref(readJson<string>(ACTIVE_NOTEBOOK_STORAGE_KEY, ''))
+const activeNotebookName = ref(readJson<string>(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, ''))
 const isLoading = ref(false)
 const errorMessage = ref('')
 const authMessage = ref('')
@@ -33,7 +35,9 @@ function setSession(session: Session | null): void {
 
   if (!session?.user) {
     activeNotebookId.value = ''
+    activeNotebookName.value = ''
     writeJson(ACTIVE_NOTEBOOK_STORAGE_KEY, '')
+    writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, '')
   }
 }
 
@@ -56,6 +60,24 @@ async function loadFirstNotebook(): Promise<string> {
   return data?.notebook_id ?? ''
 }
 
+async function loadNotebookName(notebookId: string): Promise<string> {
+  if (!supabase) {
+    throw new Error('Supabase 尚未設定')
+  }
+
+  const { data, error } = await supabase
+    .from('notebooks')
+    .select('name')
+    .eq('id', notebookId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data?.name ?? ''
+}
+
 async function createNotebook(name = '我的貓咪紀錄'): Promise<string> {
   if (!supabase) {
     throw new Error('Supabase 尚未設定')
@@ -74,13 +96,19 @@ async function createNotebook(name = '我的貓咪紀錄'): Promise<string> {
 
 async function ensureActiveNotebook(): Promise<string> {
   if (activeNotebookId.value) {
+    activeNotebookName.value = await loadNotebookName(activeNotebookId.value)
+    writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, activeNotebookName.value)
+
     return activeNotebookId.value
   }
 
   const notebookId = (await loadFirstNotebook()) || (await createNotebook())
+  const notebookName = await loadNotebookName(notebookId)
 
   activeNotebookId.value = notebookId
+  activeNotebookName.value = notebookName
   writeJson(ACTIVE_NOTEBOOK_STORAGE_KEY, notebookId)
+  writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, notebookName)
 
   return notebookId
 }
@@ -256,8 +284,53 @@ export function useRemoteAuth() {
     }
   }
 
+  async function updateActiveNotebookName(name: string): Promise<boolean> {
+    if (!supabase) {
+      errorMessage.value = 'Supabase 尚未設定'
+      return false
+    }
+
+    const trimmedName = name.trim()
+
+    if (!activeNotebookId.value) {
+      errorMessage.value = 'Notebook 尚未建立完成'
+      return false
+    }
+
+    if (!trimmedName) {
+      errorMessage.value = '請輸入 Notebook 名稱'
+      return false
+    }
+
+    isLoading.value = true
+    errorMessage.value = ''
+    authMessage.value = ''
+
+    try {
+      const { error } = await supabase
+        .from('notebooks')
+        .update({ name: trimmedName })
+        .eq('id', activeNotebookId.value)
+
+      if (error) {
+        throw error
+      }
+
+      activeNotebookName.value = trimmedName
+      writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, trimmedName)
+      authMessage.value = 'Notebook 名稱已更新。'
+      return true
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, '更新 Notebook 名稱失敗')
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     activeNotebookId: readonly(activeNotebookId),
+    activeNotebookName: readonly(activeNotebookName),
     errorMessage: readonly(errorMessage),
     authMessage: readonly(authMessage),
     isConfigured: isSupabaseConfigured,
@@ -269,5 +342,6 @@ export function useRemoteAuth() {
     signInWithPassword,
     signUpWithPassword,
     signOut,
+    updateActiveNotebookName,
   }
 }
