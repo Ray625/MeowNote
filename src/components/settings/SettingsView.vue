@@ -704,7 +704,7 @@ async function submitImportLocalData(): Promise<void> {
             <span>本機資料</span>
             <strong>{{ localImportSummary }}</strong>
             <span>同步狀態</span>
-            <strong>{{ isBootstrappingRemoteData ? '同步中' : '待命' }}</strong>
+            <strong>{{ isBootstrappingRemoteData ? '同步中' : '已連線' }}</strong>
           </div>
 
           <form
@@ -760,7 +760,7 @@ async function submitImportLocalData(): Promise<void> {
             "
             @click="submitImportLocalData"
           >
-            {{ isImportingLocalData ? '匯入中' : '匯入本機資料' }}
+            {{ isImportingLocalData ? '上傳中' : '上傳本機資料' }}
           </button>
 
           <button
