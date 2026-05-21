@@ -1236,6 +1236,7 @@ async function submitImportLocalData(): Promise<void> {
 .field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .field__label {
@@ -1245,7 +1246,10 @@ async function submitImportLocalData(): Promise<void> {
 }
 
 .field__control {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 40px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -1557,6 +1561,8 @@ async function submitImportLocalData(): Promise<void> {
 
 .category-modal {
   width: min(100%, 520px);
+  max-width: 100%;
+  min-width: 0;
   padding: 18px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
@@ -1573,12 +1579,18 @@ async function submitImportLocalData(): Promise<void> {
 }
 
 .cat-form {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
 .cat-form__body {
   display: grid;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
+  min-width: 0;
   gap: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1679,6 +1691,27 @@ async function submitImportLocalData(): Promise<void> {
 
   .category-modal {
     padding: 16px;
+  }
+
+  .cat-form__body {
+    padding: 0 4px;
+  }
+
+  .field__control[type='date'] {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-right: 6px;
+    padding-left: 8px;
+    appearance: none;
+    -webkit-appearance: none;
+    font-size: 0.9375rem;
+  }
+
+  .field__control[type='date']::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: left;
   }
 }
 </style>
