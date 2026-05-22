@@ -9,6 +9,8 @@ const {
   calendarDays,
   calendarDisplayMode,
   cats,
+  eventSearchQuery,
+  isEventSearchOpen,
   monthTitle,
   selectedCat,
   selectedCatId,
@@ -58,7 +60,41 @@ function selectMonth(monthIndex: number): void {
 
 <template>
   <section class="calendar-section" aria-labelledby="calendar-title">
-    <div class="calendar-section__top">
+    <div v-if="isEventSearchOpen" class="calendar-search-top">
+      <div class="calendar-search-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="calendar-search-field__icon">
+          <path
+            d="M10.8 4.2a6.6 6.6 0 1 0 0 13.2 6.6 6.6 0 0 0 0-13.2Zm-8.4 6.6a8.4 8.4 0 1 1 15.1 5.1l4 4a.9.9 0 0 1-1.3 1.3l-4-4A8.4 8.4 0 0 1 2.4 10.8Z"
+            fill="currentColor"
+          />
+        </svg>
+        <input
+          v-model="eventSearchQuery"
+          class="calendar-search-field__input"
+          type="search"
+          placeholder="搜尋標題或備註"
+          autocomplete="off"
+        />
+        <button
+          v-if="eventSearchQuery"
+          class="calendar-search-field__clear"
+          type="button"
+          aria-label="清除搜尋"
+          @click="eventSearchQuery = ''"
+        >
+          ×
+        </button>
+      </div>
+      <button
+        class="calendar-search-cancel"
+        type="button"
+        @click="catTrackerStore.closeEventSearch"
+      >
+        取消
+      </button>
+    </div>
+
+    <div v-else class="calendar-section__top">
       <div class="cat-switcher">
         <button
           class="selected-cat"
@@ -127,19 +163,35 @@ function selectMonth(monthIndex: number): void {
           :aria-selected="calendarDisplayMode === 'list'"
           @click="catTrackerStore.setCalendarDisplayMode('list')"
         >
-          條列
+          清單
         </button>
       </div>
-      <button
-        class="ui-button ui-button--secondary today-button"
-        type="button"
-        @click="catTrackerStore.selectCalendarDate(new Date())"
-      >
-        今天
-      </button>
+      <div class="calendar-top-tools">
+        <button
+          class="ui-button ui-button--icon search-button"
+          type="button"
+          :aria-label="isEventSearchOpen ? '關閉搜尋' : '搜尋紀錄'"
+          :aria-pressed="isEventSearchOpen"
+          @click="catTrackerStore.toggleEventSearch"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="search-button__icon">
+            <path
+              d="M10.8 4.2a6.6 6.6 0 1 0 0 13.2 6.6 6.6 0 0 0 0-13.2Zm-8.4 6.6a8.4 8.4 0 1 1 15.1 5.1l4 4a.9.9 0 0 1-1.3 1.3l-4-4A8.4 8.4 0 0 1 2.4 10.8Z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+        <button
+          class="ui-button ui-button--secondary today-button"
+          type="button"
+          @click="catTrackerStore.selectCalendarDate(new Date())"
+        >
+          今天
+        </button>
+      </div>
     </div>
 
-    <div class="calendar-header">
+    <div v-if="!isEventSearchOpen" class="calendar-header">
       <button
         class="ui-button ui-button--icon month-button"
         type="button"
@@ -210,11 +262,19 @@ function selectMonth(monthIndex: number): void {
       </button>
     </div>
 
-    <div v-if="calendarDisplayMode === 'calendar'" class="weekday-grid" aria-hidden="true">
+    <div
+      v-if="!isEventSearchOpen && calendarDisplayMode === 'calendar'"
+      class="weekday-grid"
+      aria-hidden="true"
+    >
       <span v-for="weekDay in weekDays" :key="weekDay">{{ weekDay }}</span>
     </div>
 
-    <div v-if="calendarDisplayMode === 'calendar'" class="calendar-grid" aria-label="月份日期">
+    <div
+      v-if="!isEventSearchOpen && calendarDisplayMode === 'calendar'"
+      class="calendar-grid"
+      aria-label="月份日期"
+    >
       <button
         v-for="day in calendarDays"
         :key="day.key"
@@ -433,12 +493,91 @@ function selectMonth(monthIndex: number): void {
   text-align: center;
 }
 
+.calendar-top-tools {
+  display: flex;
+  justify-self: end;
+  gap: 6px;
+}
+
 .today-button {
   justify-self: end;
   flex: 0 0 auto;
   min-height: 32px;
   padding: 0 10px;
   font-size: 0.875rem;
+}
+
+.search-button {
+  justify-self: end;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.search-button__icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 0 auto;
+}
+
+.calendar-search-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-search-field {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 6px 0 10px;
+  background: var(--color-background);
+}
+
+.calendar-search-field__icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-muted);
+}
+
+.calendar-search-field__input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.calendar-search-field__clear {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-muted);
+  color: var(--color-background);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.calendar-search-cancel {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
 }
 
 .calendar-header {

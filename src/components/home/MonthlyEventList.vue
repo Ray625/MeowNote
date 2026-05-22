@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { visibleMonthEventGroups } = storeToRefs(catTrackerStore)
+const { isEventSearchActive, isEventSearchOpen, searchedEventGroups, visibleMonthEventGroups } =
+  storeToRefs(catTrackerStore)
+const displayedEventGroups = computed(() => {
+  if (isEventSearchActive.value) {
+    return searchedEventGroups.value
+  }
+
+  return isEventSearchOpen.value ? [] : visibleMonthEventGroups.value
+})
 
 function getCategoryStyle(category?: EventCategory): Record<string, string> {
   return {
@@ -16,8 +25,8 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 
 <template>
   <section class="month-list-section" aria-label="整月紀錄">
-    <div v-if="visibleMonthEventGroups.length > 0" class="month-event-groups">
-      <section v-for="group in visibleMonthEventGroups" :key="group.key" class="month-event-group">
+    <div v-if="displayedEventGroups.length > 0" class="month-event-groups">
+      <section v-for="group in displayedEventGroups" :key="group.key" class="month-event-group">
         <header class="month-event-group__header">
           <h3>{{ group.title }}</h3>
           <span>{{ group.items.length }} 筆</span>
@@ -28,9 +37,31 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
             v-for="item in group.items"
             :key="item.event.id"
             class="month-event-item"
+            :class="{ 'month-event-item--search': isEventSearchActive }"
             :style="getCategoryStyle(item.category)"
           >
             <button
+              v-if="isEventSearchActive"
+              class="month-event-item__button month-event-item__button--search"
+              type="button"
+              @click="catTrackerStore.openEditEvent(item.event.id)"
+            >
+              <span class="category-bar" aria-hidden="true"></span>
+              <div class="month-event-item__search-content">
+                <time class="month-event-item__search-date" :datetime="item.event.occurredAt">
+                  {{ item.dateText }} · {{ item.time }}
+                </time>
+                <strong class="month-event-item__search-title">
+                  <span>{{ item.category?.name ?? '未分類' }}</span>
+                  <span v-if="item.event.title"> · {{ item.event.title }}</span>
+                </strong>
+                <p v-if="item.event.note" class="month-event-item__search-note">
+                  {{ item.event.note }}
+                </p>
+              </div>
+            </button>
+            <button
+              v-else
               class="month-event-item__button"
               type="button"
               @click="catTrackerStore.openEditEvent(item.event.id)"
@@ -44,6 +75,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                 <span v-if="item.event.title">{{ item.event.title }}</span>
                 <span v-else-if="item.event.note">{{ item.event.note }}</span>
                 <span v-else-if="item.event.severity">嚴重度 {{ item.event.severity }}</span>
+                <small v-if="isEventSearchActive && item.dateText">
+                  {{ item.dateText }} · {{ item.time }}
+                </small>
               </div>
             </button>
             <button
@@ -59,7 +93,15 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
       </section>
     </div>
 
-    <p v-else class="empty-state">這個月還沒有紀錄。</p>
+    <p v-else class="empty-state">
+      {{
+        isEventSearchOpen && !isEventSearchActive
+          ? '輸入關鍵字搜尋標題或備註。'
+          : isEventSearchActive
+            ? '找不到符合搜尋的紀錄。'
+            : '這個月還沒有紀錄。'
+      }}
+    </p>
   </section>
 </template>
 
@@ -144,6 +186,13 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   text-align: left;
 }
 
+.month-event-item__button--search {
+  grid-template-columns: 5px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
 .month-event-item__button:hover {
   background: color-mix(in srgb, var(--category-color) 8%, transparent);
 }
@@ -162,17 +211,59 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   background: var(--category-color);
 }
 
+.category-bar {
+  width: 5px;
+  border-radius: 999px;
+  background: var(--category-color);
+}
+
 .month-event-item__content {
   display: grid;
   min-width: 0;
   gap: 2px;
 }
 
-.month-event-item__content strong,
-.month-event-item__content span {
+.month-event-item__search-content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.month-event-item__search-date {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.month-event-item__search-title,
+.month-event-item__search-note {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.month-event-item__search-title {
+  color: var(--color-text);
+}
+
+.month-event-item__search-note {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.month-event-item__content strong,
+.month-event-item__content span,
+.month-event-item__content small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.month-event-item__content small {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
 }
 
 .month-event-item__delete {

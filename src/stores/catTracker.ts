@@ -42,6 +42,7 @@ export interface CalendarDay {
 export interface EventListItem {
   event: CatEvent
   category?: EventCategory
+  dateText?: string
   time: string
 }
 
@@ -99,6 +100,33 @@ function formatMonthEventGroupTitle(date: Date): string {
   }).format(date)
 }
 
+function formatSearchEventGroupTitle(date: Date): string {
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
+function formatSearchEventDate(date: Date): string {
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date)
+}
+
+function compareEventsForGroupedList(a: CatEvent, b: CatEvent): number {
+  const dateOrder = toDateKey(new Date(b.occurredAt)).localeCompare(
+    toDateKey(new Date(a.occurredAt)),
+  )
+
+  if (dateOrder !== 0) {
+    return dateOrder
+  }
+
+  return a.occurredAt.localeCompare(b.occurredAt)
+}
+
 function sortCategories(categories: EventCategory[]): EventCategory[] {
   return [...categories].sort((a, b) => {
     const archivedOrder = Number(a.isArchived) - Number(b.isArchived)
@@ -128,6 +156,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const selectedCatId = ref(initialState.selectedCatId)
   const activeTab = ref<MainTab>('calendar')
   const calendarDisplayMode = ref<CalendarDisplayMode>('calendar')
+  const isEventSearchOpen = ref(false)
+  const eventSearchQuery = ref('')
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
@@ -265,6 +295,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       time: formatEventTime(event.occurredAt),
     })),
   )
+  const trimmedEventSearchQuery = computed(() => eventSearchQuery.value.trim().toLocaleLowerCase())
+  const isEventSearchActive = computed(() => trimmedEventSearchQuery.value.length > 0)
   const visibleMonthEventGroups = computed<MonthlyEventGroup[]>(() => {
     const groups = new Map<string, MonthlyEventGroup>()
     const monthStart = startOfMonth(visibleMonth.value)
@@ -276,19 +308,33 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
         return occurredAt >= monthStart && occurredAt < nextMonthStart
       })
-      .sort((a, b) => {
-        const dateOrder = toDateKey(new Date(b.occurredAt)).localeCompare(
-          toDateKey(new Date(a.occurredAt)),
-        )
+      .sort(compareEventsForGroupedList)
 
-        if (dateOrder !== 0) {
-          return dateOrder
-        }
+    return groupEventsByDate(monthEvents)
+  })
+  const searchedEventGroups = computed<MonthlyEventGroup[]>(() => {
+    if (!isEventSearchActive.value) {
+      return []
+    }
 
-        return a.occurredAt.localeCompare(b.occurredAt)
+    const query = trimmedEventSearchQuery.value
+    const matchedEvents = events.value
+      .filter((event) => event.catId === selectedCatId.value)
+      .filter((event) => {
+        const title = event.title?.toLocaleLowerCase() ?? ''
+        const note = event.note?.toLocaleLowerCase() ?? ''
+
+        return title.includes(query) || note.includes(query)
       })
+      .sort(compareEventsForGroupedList)
 
-    for (const event of monthEvents) {
+    return groupEventsByMonth(matchedEvents)
+  })
+
+  function groupEventsByDate(groupedEvents: CatEvent[]): MonthlyEventGroup[] {
+    const groups = new Map<string, MonthlyEventGroup>()
+
+    for (const event of groupedEvents) {
       const occurredAt = new Date(event.occurredAt)
       const key = toDateKey(occurredAt)
       const group = groups.get(key) ?? {
@@ -306,7 +352,31 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     return [...groups.values()]
-  })
+  }
+
+  function groupEventsByMonth(groupedEvents: CatEvent[]): MonthlyEventGroup[] {
+    const groups = new Map<string, MonthlyEventGroup>()
+
+    for (const event of groupedEvents) {
+      const occurredAt = new Date(event.occurredAt)
+      const key = `${occurredAt.getFullYear()}-${String(occurredAt.getMonth() + 1).padStart(2, '0')}`
+      const group = groups.get(key) ?? {
+        key,
+        title: formatSearchEventGroupTitle(occurredAt),
+        items: [],
+      }
+
+      group.items.push({
+        event,
+        category: categoriesById.value.get(event.categoryId),
+        dateText: formatSearchEventDate(occurredAt),
+        time: formatEventTime(event.occurredAt),
+      })
+      groups.set(key, group)
+    }
+
+    return [...groups.values()]
+  }
   const editingEvent = computed(() =>
     editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined,
   )
@@ -379,6 +449,19 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function setCalendarDisplayMode(mode: CalendarDisplayMode): void {
     calendarDisplayMode.value = mode
     isQuickRecordOpen.value = false
+  }
+
+  function toggleEventSearch(): void {
+    isEventSearchOpen.value = !isEventSearchOpen.value
+
+    if (!isEventSearchOpen.value) {
+      eventSearchQuery.value = ''
+    }
+  }
+
+  function closeEventSearch(): void {
+    isEventSearchOpen.value = false
+    eventSearchQuery.value = ''
   }
 
   function getQuickRecordOccurredAt(): string {
@@ -959,6 +1042,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     selectedCatId,
     activeTab,
     calendarDisplayMode,
+    isEventSearchOpen,
+    eventSearchQuery,
     selectedDate,
     visibleMonth,
     isQuickRecordOpen,
@@ -985,6 +1070,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     selectedDateEvents,
     selectedDateEventListItems,
     visibleMonthEventGroups,
+    searchedEventGroups,
+    isEventSearchActive,
     editingEvent,
     editingCategory,
     deleteConfirmEvent,
@@ -997,6 +1084,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     closeQuickRecord,
     setActiveTab,
     setCalendarDisplayMode,
+    toggleEventSearch,
+    closeEventSearch,
     createCat,
     updateCat,
     deleteCat,

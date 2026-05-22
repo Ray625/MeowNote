@@ -19,8 +19,14 @@ const { activeNotebookId, initializeAuth, user } = useRemoteAuth()
 const { bootstrapRemoteCatTracker, refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
 
 const catTrackerStore = useCatTrackerStore()
-const { activeTab, calendarDisplayMode, deleteConfirmEvent, needsFirstTimeSetup } =
-  storeToRefs(catTrackerStore)
+const {
+  activeTab,
+  calendarDisplayMode,
+  deleteConfirmEvent,
+  isEventSearchActive,
+  isEventSearchOpen,
+  needsFirstTimeSetup,
+} = storeToRefs(catTrackerStore)
 
 onMounted(() => {
   void initializeAuth().then(() => {
@@ -59,7 +65,9 @@ function refreshRemoteDataWhenVisible(): void {
 
     <template v-else-if="activeTab === 'calendar'">
       <HomeCalendar />
-      <EventTimeline v-if="calendarDisplayMode === 'calendar'" />
+      <EventTimeline
+        v-if="calendarDisplayMode === 'calendar' && !isEventSearchOpen && !isEventSearchActive"
+      />
       <MonthlyEventList v-else />
     </template>
     <SettingsView v-else />
