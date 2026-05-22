@@ -27,6 +27,7 @@ import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { createId } from '@/utils/id'
 
 type MainTab = 'calendar' | 'settings'
+type CalendarDisplayMode = 'calendar' | 'list'
 
 export interface CalendarDay {
   date: Date
@@ -42,6 +43,12 @@ export interface EventListItem {
   event: CatEvent
   category?: EventCategory
   time: string
+}
+
+export interface MonthlyEventGroup {
+  key: string
+  title: string
+  items: EventListItem[]
 }
 
 function startOfDay(date: Date): Date {
@@ -84,6 +91,14 @@ function formatEventTime(dateTime: string): string {
   }).format(new Date(dateTime))
 }
 
+function formatMonthEventGroupTitle(date: Date): string {
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date)
+}
+
 function sortCategories(categories: EventCategory[]): EventCategory[] {
   return [...categories].sort((a, b) => {
     const archivedOrder = Number(a.isArchived) - Number(b.isArchived)
@@ -112,6 +127,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const events = ref<CatEvent[]>(initialState.events)
   const selectedCatId = ref(initialState.selectedCatId)
   const activeTab = ref<MainTab>('calendar')
+  const calendarDisplayMode = ref<CalendarDisplayMode>('calendar')
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
@@ -249,6 +265,48 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       time: formatEventTime(event.occurredAt),
     })),
   )
+  const visibleMonthEventGroups = computed<MonthlyEventGroup[]>(() => {
+    const groups = new Map<string, MonthlyEventGroup>()
+    const monthStart = startOfMonth(visibleMonth.value)
+    const nextMonthStart = addMonths(monthStart, 1)
+    const monthEvents = events.value
+      .filter((event) => event.catId === selectedCatId.value)
+      .filter((event) => {
+        const occurredAt = new Date(event.occurredAt)
+
+        return occurredAt >= monthStart && occurredAt < nextMonthStart
+      })
+      .sort((a, b) => {
+        const dateOrder = toDateKey(new Date(b.occurredAt)).localeCompare(
+          toDateKey(new Date(a.occurredAt)),
+        )
+
+        if (dateOrder !== 0) {
+          return dateOrder
+        }
+
+        return a.occurredAt.localeCompare(b.occurredAt)
+      })
+
+    for (const event of monthEvents) {
+      const occurredAt = new Date(event.occurredAt)
+      const key = toDateKey(occurredAt)
+      const group = groups.get(key) ?? {
+        key,
+        title: formatMonthEventGroupTitle(occurredAt),
+        items: [],
+      }
+
+      group.items.push({
+        event,
+        category: categoriesById.value.get(event.categoryId),
+        time: formatEventTime(event.occurredAt),
+      })
+      groups.set(key, group)
+    }
+
+    return [...groups.values()]
+  })
   const editingEvent = computed(() =>
     editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined,
   )
@@ -315,6 +373,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function setActiveTab(tab: MainTab): void {
     activeTab.value = tab
+    isQuickRecordOpen.value = false
+  }
+
+  function setCalendarDisplayMode(mode: CalendarDisplayMode): void {
+    calendarDisplayMode.value = mode
     isQuickRecordOpen.value = false
   }
 
@@ -895,6 +958,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     events,
     selectedCatId,
     activeTab,
+    calendarDisplayMode,
     selectedDate,
     visibleMonth,
     isQuickRecordOpen,
@@ -920,6 +984,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     calendarDays,
     selectedDateEvents,
     selectedDateEventListItems,
+    visibleMonthEventGroups,
     editingEvent,
     editingCategory,
     deleteConfirmEvent,
@@ -931,6 +996,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     toggleQuickRecord,
     closeQuickRecord,
     setActiveTab,
+    setCalendarDisplayMode,
     createCat,
     updateCat,
     deleteCat,

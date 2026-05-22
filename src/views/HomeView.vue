@@ -7,6 +7,7 @@ import EventEditModal from '@/components/home/EventEditModal.vue'
 import EventTimeline from '@/components/home/EventTimeline.vue'
 import FirstTimeSetup from '@/components/home/FirstTimeSetup.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
+import MonthlyEventList from '@/components/home/MonthlyEventList.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
@@ -18,7 +19,8 @@ const { activeNotebookId, initializeAuth, user } = useRemoteAuth()
 const { bootstrapRemoteCatTracker, refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
 
 const catTrackerStore = useCatTrackerStore()
-const { activeTab, deleteConfirmEvent, needsFirstTimeSetup } = storeToRefs(catTrackerStore)
+const { activeTab, calendarDisplayMode, deleteConfirmEvent, needsFirstTimeSetup } =
+  storeToRefs(catTrackerStore)
 
 onMounted(() => {
   void initializeAuth().then(() => {
@@ -57,7 +59,8 @@ function refreshRemoteDataWhenVisible(): void {
 
     <template v-else-if="activeTab === 'calendar'">
       <HomeCalendar />
-      <EventTimeline />
+      <EventTimeline v-if="calendarDisplayMode === 'calendar'" />
+      <MonthlyEventList v-else />
     </template>
     <SettingsView v-else />
     <BottomQuickActions v-if="!needsFirstTimeSetup" />

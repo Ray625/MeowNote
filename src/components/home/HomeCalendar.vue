@@ -5,8 +5,15 @@ import { getCatAvatarOption } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 const catTrackerStore = useCatTrackerStore()
-const { calendarDays, cats, monthTitle, selectedCat, selectedCatId, visibleMonth } =
-  storeToRefs(catTrackerStore)
+const {
+  calendarDays,
+  calendarDisplayMode,
+  cats,
+  monthTitle,
+  selectedCat,
+  selectedCatId,
+  visibleMonth,
+} = storeToRefs(catTrackerStore)
 const isCatMenuOpen = ref(false)
 const isMonthPickerOpen = ref(false)
 const pickerYear = ref(visibleMonth.value.getFullYear())
@@ -68,7 +75,7 @@ function selectMonth(monthIndex: number): void {
           </span>
           <strong class="cat-name">{{ selectedCat?.name ?? '我的貓' }}</strong>
           <span v-if="selectedCat?.isArchived" class="archived-badge">已停用</span>
-          <span class="cat-switcher__chevron" aria-hidden="true">⌄</span>
+          <span class="cat-switcher__chevron" aria-hidden="true">▾</span>
         </button>
 
         <div v-if="isCatMenuOpen" class="cat-menu" role="listbox" aria-label="選擇寵物">
@@ -101,6 +108,28 @@ function selectMonth(monthIndex: number): void {
           </button>
         </div>
       </div>
+      <div class="calendar-mode-tabs" role="tablist" aria-label="紀錄檢視模式">
+        <button
+          class="calendar-mode-tab"
+          :class="{ 'calendar-mode-tab--active': calendarDisplayMode === 'calendar' }"
+          type="button"
+          role="tab"
+          :aria-selected="calendarDisplayMode === 'calendar'"
+          @click="catTrackerStore.setCalendarDisplayMode('calendar')"
+        >
+          月曆
+        </button>
+        <button
+          class="calendar-mode-tab"
+          :class="{ 'calendar-mode-tab--active': calendarDisplayMode === 'list' }"
+          type="button"
+          role="tab"
+          :aria-selected="calendarDisplayMode === 'list'"
+          @click="catTrackerStore.setCalendarDisplayMode('list')"
+        >
+          條列
+        </button>
+      </div>
       <button
         class="ui-button ui-button--secondary today-button"
         type="button"
@@ -129,7 +158,7 @@ function selectMonth(monthIndex: number): void {
             @click="toggleMonthPicker"
           >
             <span>{{ monthTitle }}</span>
-            <span class="month-title-button__chevron" aria-hidden="true">⌄</span>
+            <span class="month-title-button__chevron" aria-hidden="true">▾</span>
           </button>
         </h1>
 
@@ -181,11 +210,11 @@ function selectMonth(monthIndex: number): void {
       </button>
     </div>
 
-    <div class="weekday-grid" aria-hidden="true">
+    <div v-if="calendarDisplayMode === 'calendar'" class="weekday-grid" aria-hidden="true">
       <span v-for="weekDay in weekDays" :key="weekDay">{{ weekDay }}</span>
     </div>
 
-    <div class="calendar-grid" aria-label="月份日期">
+    <div v-if="calendarDisplayMode === 'calendar'" class="calendar-grid" aria-label="月份日期">
       <button
         v-for="day in calendarDays"
         :key="day.key"
@@ -221,19 +250,58 @@ function selectMonth(monthIndex: number): void {
 
 .calendar-section__top,
 .calendar-header {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
+}
+
+.calendar-section__top {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.calendar-header {
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+}
+
+.calendar-mode-tabs {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 116px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+}
+
+.calendar-mode-tab {
+  min-height: 30px;
+  border: 0;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.calendar-mode-tab--active {
+  background: var(--color-primary);
+  color: var(--color-text);
 }
 
 .cat-switcher {
   position: relative;
+  justify-self: start;
   min-width: 0;
+  max-width: 100%;
 }
 
 .selected-cat {
   display: flex;
+  width: 100%;
+  max-width: 112px;
   min-width: 0;
   align-items: center;
   gap: 8px;
@@ -277,6 +345,7 @@ function selectMonth(monthIndex: number): void {
 
 .cat-name {
   min-width: 0;
+  max-width: 56px;
   overflow: hidden;
   font-size: 1.125rem;
   text-overflow: ellipsis;
@@ -365,6 +434,7 @@ function selectMonth(monthIndex: number): void {
 }
 
 .today-button {
+  justify-self: end;
   flex: 0 0 auto;
   min-height: 32px;
   padding: 0 10px;
@@ -377,7 +447,9 @@ function selectMonth(monthIndex: number): void {
 
 .month-picker {
   position: relative;
+  justify-self: center;
   min-width: 0;
+  text-align: center;
 }
 
 .month-title-button {
@@ -467,8 +539,18 @@ function selectMonth(monthIndex: number): void {
 .month-button {
   width: 36px;
   height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   font-size: 1.35rem;
   line-height: 1;
+}
+
+.month-button:first-child {
+  justify-self: start;
+}
+
+.month-button:last-child {
+  justify-self: end;
 }
 
 .weekday-grid,
