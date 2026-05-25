@@ -29,6 +29,7 @@ import type {
   UpdateCatEventInput,
 } from '@/types'
 import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
+import { getEventValueText } from '@/utils/eventValues'
 import { createId } from '@/utils/id'
 
 type MainTab = 'calendar' | 'settings'
@@ -327,10 +328,18 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const matchedEvents = events.value
       .filter((event) => event.catId === selectedCatId.value)
       .filter((event) => {
+        const category = categoriesById.value.get(event.categoryId)
+        const categoryName = category?.name.toLocaleLowerCase() ?? ''
+        const valueText = getEventValueText(event, category).toLocaleLowerCase()
         const title = event.title?.toLocaleLowerCase() ?? ''
         const note = event.note?.toLocaleLowerCase() ?? ''
 
-        return title.includes(query) || note.includes(query)
+        return (
+          categoryName.includes(query) ||
+          valueText.includes(query) ||
+          title.includes(query) ||
+          note.includes(query)
+        )
       })
       .sort(compareEventsForGroupedList)
 

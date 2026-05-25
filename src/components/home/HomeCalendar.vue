@@ -75,15 +75,6 @@ function selectMonth(monthIndex: number): void {
           placeholder="搜尋標題或備註"
           autocomplete="off"
         />
-        <button
-          v-if="eventSearchQuery"
-          class="calendar-search-field__clear"
-          type="button"
-          aria-label="清除搜尋"
-          @click="eventSearchQuery = ''"
-        >
-          ×
-        </button>
       </div>
       <button
         class="calendar-search-cancel"
@@ -531,7 +522,7 @@ function selectMonth(monthIndex: number): void {
 
 .calendar-search-field {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   min-width: 0;
   min-height: 40px;
@@ -554,21 +545,6 @@ function selectMonth(monthIndex: number): void {
   background: transparent;
   color: var(--color-text);
   font: inherit;
-}
-
-.calendar-search-field__clear {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: var(--color-muted);
-  color: var(--color-background);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 900;
-  line-height: 1;
 }
 
 .calendar-search-cancel {
