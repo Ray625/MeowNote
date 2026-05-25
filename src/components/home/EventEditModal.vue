@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -14,11 +15,17 @@ const selectedCategoryId = ref('')
 const editingTitle = ref('')
 const editingOccurredAt = ref('')
 const editingNote = ref('')
+const editingNumericValue = ref<string | number>('')
 const isCategoryMenuOpen = ref(false)
 const pendingCategoryId = ref<string>()
 
 const modalCategory = computed(
   () => categoriesById.value.get(selectedCategoryId.value) ?? editingCategory.value,
+)
+const shouldShowNumericValue = computed(
+  () =>
+    modalCategory.value?.statisticsMode === 'sum' ||
+    modalCategory.value?.statisticsMode === 'measurement',
 )
 const isCategoryChangeConfirmOpen = computed(() => Boolean(pendingCategoryId.value))
 const groupedActiveCategories = computed(() =>
@@ -28,6 +35,8 @@ const groupedActiveCategories = computed(() =>
   })).filter((item) => item.categories.length > 0),
 )
 
+useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
+
 watch(
   editingEvent,
   (event) => {
@@ -35,6 +44,7 @@ watch(
     editingTitle.value = event?.title ?? ''
     editingOccurredAt.value = event ? toDateTimeLocalValue(event.occurredAt) : ''
     editingNote.value = event?.note ?? ''
+    editingNumericValue.value = getNumericValueText(event?.values)
     isCategoryMenuOpen.value = false
     pendingCategoryId.value = undefined
   },
@@ -59,13 +69,25 @@ function saveEditingEvent(): void {
   }
 
   const hasCategoryChanged = selectedCategoryId.value !== editingEvent.value.categoryId
+  const selectedCategory = categoriesById.value.get(selectedCategoryId.value)
+  const shouldSaveNumericValue =
+    selectedCategory?.statisticsMode === 'sum' || selectedCategory?.statisticsMode === 'measurement'
+  const trimmedNumericValue = String(editingNumericValue.value).trim()
+  const numericValue = trimmedNumericValue ? Number(trimmedNumericValue) : undefined
 
   catTrackerStore.updateEvent(editingEvent.value.id, {
     categoryId: selectedCategoryId.value,
     occurredAt: fromDateTimeLocalValue(editingOccurredAt.value),
     title: editingTitle.value.trim() || undefined,
     note: editingNote.value.trim() || undefined,
-    values: hasCategoryChanged ? {} : editingEvent.value.values,
+    values:
+      shouldSaveNumericValue && Number.isFinite(numericValue)
+        ? { amount: numericValue }
+        : hasCategoryChanged
+          ? {}
+          : shouldSaveNumericValue
+            ? {}
+            : {},
   })
 
   closeEditEvent()
@@ -123,6 +145,12 @@ function confirmCategoryChange(): void {
 
 function hasEventValues(values?: Record<string, unknown>): boolean {
   return Boolean(values && Object.keys(values).length > 0)
+}
+
+function getNumericValueText(values?: Record<string, unknown>): string {
+  const amount = values?.amount
+
+  return typeof amount === 'number' && Number.isFinite(amount) ? String(amount) : ''
 }
 
 function toDateTimeLocalValue(dateTime: string): string {
@@ -212,17 +240,26 @@ function fromDateTimeLocalValue(value: string): string {
 
         <label class="field">
           <span class="field__label">標題</span>
-          <input
-            v-model="editingTitle"
-            class="field__control"
-            type="text"
-            maxlength="40"
-          />
+          <input v-model="editingTitle" class="field__control" type="text" maxlength="40" />
         </label>
 
         <label class="field">
           <span class="field__label">發生時間</span>
           <input v-model="editingOccurredAt" class="field__control" type="datetime-local" />
+        </label>
+
+        <label v-if="shouldShowNumericValue" class="field">
+          <span class="field__label">
+            {{ modalCategory?.valueLabel || '數值' }}
+            <template v-if="modalCategory?.valueUnit">({{ modalCategory.valueUnit }})</template>
+          </span>
+          <input
+            v-model="editingNumericValue"
+            class="field__control"
+            type="number"
+            inputmode="decimal"
+            step="any"
+          />
         </label>
 
         <label class="field">
@@ -277,12 +314,17 @@ function fromDateTimeLocalValue(value: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   background: var(--overlay-color);
 }
 
 .event-modal {
   width: min(100%, 520px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px;
   border: 1px solid color-mix(in srgb, var(--category-color) 34%, var(--color-border));
   border-radius: 12px;

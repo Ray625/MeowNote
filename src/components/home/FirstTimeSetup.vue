@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import {
   CAT_AVATAR_OPTIONS,
+  CATEGORY_GROUP_ORDER,
+  CATEGORY_TEMPLATES,
   DEFAULT_CAT_AVATAR_ID,
   getCatAvatarOption,
 } from '@/constants/defaultData'
@@ -10,17 +12,39 @@ import type { CatAvatarId } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
 
+type SetupStep = 'profile' | 'templates'
+
 const catName = ref('')
 const catAvatarId = ref<CatAvatarId>(DEFAULT_CAT_AVATAR_ID)
+const selectedTemplateIds = ref<string[]>(['vomit', 'diarrhea', 'water', 'medication', 'vet-visit'])
+const setupStep = ref<SetupStep>('profile')
+
+const groupedTemplates = CATEGORY_GROUP_ORDER.map((group) => ({
+  group,
+  templates: CATEGORY_TEMPLATES.filter((template) => template.group === group),
+})).filter((item) => item.templates.length > 0)
 
 function selectCatAvatar(avatarId: CatAvatarId): void {
   catAvatarId.value = avatarId
+}
+
+function goToTemplateStep(): void {
+  if (!catName.value.trim()) {
+    return
+  }
+
+  setupStep.value = 'templates'
+}
+
+function goToProfileStep(): void {
+  setupStep.value = 'profile'
 }
 
 function startTracking(): void {
   const trimmedName = catName.value.trim()
 
   if (!trimmedName) {
+    setupStep.value = 'profile'
     return
   }
 
@@ -28,12 +52,28 @@ function startTracking(): void {
     name: trimmedName,
     avatarId: catAvatarId.value,
   })
+
+  CATEGORY_TEMPLATES.filter((template) => selectedTemplateIds.value.includes(template.id)).forEach(
+    (template) => {
+      catTrackerStore.createCategory({
+        templateId: template.id,
+        name: template.name,
+        group: template.group,
+        colorId: template.colorId,
+        isQuickAction: true,
+        isArchived: false,
+        statisticsMode: template.statisticsMode,
+        valueLabel: template.valueLabel,
+        valueUnit: template.valueUnit,
+      })
+    },
+  )
 }
 </script>
 
 <template>
   <section class="first-time-setup" aria-labelledby="first-time-setup-title">
-    <form class="setup-form" @submit.prevent="startTracking">
+    <form class="setup-form" @submit.prevent="setupStep === 'profile' ? goToTemplateStep() : startTracking()">
       <div class="setup-preview" aria-hidden="true">
         <img
           :src="getCatAvatarOption(catAvatarId).image"
@@ -41,49 +81,79 @@ function startTracking(): void {
         />
       </div>
 
-      <div class="field">
-        <label id="first-time-setup-title" class="setup-title" for="first-cat-name">
-          你的貓叫什麼名字？
-        </label>
-        <input
-          id="first-cat-name"
-          v-model="catName"
-          class="field__control"
-          type="text"
-          autocomplete="off"
-          autofocus
-          maxlength="24"
-          placeholder="名字"
-          required
-        />
-      </div>
+      <template v-if="setupStep === 'profile'">
+        <div class="field">
+          <label id="first-time-setup-title" class="setup-title" for="first-cat-name">
+            你的貓叫什麼名字？
+          </label>
+          <input
+            id="first-cat-name"
+            v-model="catName"
+            class="field__control"
+            type="text"
+            autocomplete="off"
+            autofocus
+            maxlength="24"
+            placeholder="名字"
+            required
+          />
+        </div>
 
-      <div class="field">
-        <span class="field__label">選擇花色</span>
-        <div class="cat-avatar-options" role="radiogroup" aria-label="選擇花色">
-          <button
-            v-for="avatar in CAT_AVATAR_OPTIONS"
-            :key="avatar.id"
-            class="cat-avatar-option"
-            :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
-            type="button"
-            role="radio"
-            :aria-checked="catAvatarId === avatar.id"
-            :aria-label="avatar.label"
-            :title="avatar.label"
-            @click="selectCatAvatar(avatar.id)"
-          >
-            <span class="pet-avatar pet-avatar--option" aria-hidden="true">
-              <img :src="avatar.image" :alt="avatar.label" />
-            </span>
-            <span>{{ avatar.label }}</span>
+        <div class="field">
+          <span class="field__label">選擇花色</span>
+          <div class="cat-avatar-options" role="radiogroup" aria-label="選擇花色">
+            <button
+              v-for="avatar in CAT_AVATAR_OPTIONS"
+              :key="avatar.id"
+              class="cat-avatar-option"
+              :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
+              type="button"
+              role="radio"
+              :aria-checked="catAvatarId === avatar.id"
+              :aria-label="avatar.label"
+              :title="avatar.label"
+              @click="selectCatAvatar(avatar.id)"
+            >
+              <span class="pet-avatar pet-avatar--option" aria-hidden="true">
+                <img :src="avatar.image" :alt="avatar.label" />
+              </span>
+              <span>{{ avatar.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <button
+          class="ui-button ui-button--primary setup-submit"
+          type="submit"
+          :disabled="!catName.trim()"
+        >
+          下一步
+        </button>
+      </template>
+
+      <template v-else>
+        <div class="field">
+          <label id="first-time-setup-title" class="setup-title">想追蹤哪些項目？</label>
+          <div class="template-groups">
+            <section v-for="group in groupedTemplates" :key="group.group" class="template-group">
+              <h2>{{ group.group }}</h2>
+              <label v-for="template in group.templates" :key="template.id" class="template-option">
+                <input v-model="selectedTemplateIds" type="checkbox" :value="template.id" />
+                <span>{{ template.name }}</span>
+              </label>
+            </section>
+          </div>
+        </div>
+
+        <div class="setup-actions">
+          <button class="ui-button ui-button--secondary setup-submit" type="button" @click="goToProfileStep">
+            上一步
+          </button>
+          <button class="ui-button ui-button--primary setup-submit" type="submit">
+            開始記錄
           </button>
         </div>
-      </div>
-
-      <button class="ui-button ui-button--primary setup-submit" type="submit" :disabled="!catName.trim()">
-        開始記錄
-      </button>
+      </template>
     </form>
   </section>
 </template>
@@ -168,6 +238,29 @@ function startTracking(): void {
   gap: 8px;
 }
 
+.template-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.template-group {
+  display: grid;
+  gap: 8px;
+}
+
+.template-group h2 {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.template-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
 .cat-avatar-option {
   display: grid;
   gap: 6px;
@@ -214,6 +307,12 @@ function startTracking(): void {
 
 .setup-submit {
   min-height: 46px;
+}
+
+.setup-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .setup-submit:disabled {

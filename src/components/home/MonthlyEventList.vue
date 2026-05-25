@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
+import { getEventValueText } from '@/utils/eventValues'
 
 const catTrackerStore = useCatTrackerStore()
 const { isEventSearchActive, isEventSearchOpen, searchedEventGroups, visibleMonthEventGroups } =
@@ -54,6 +55,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                 <strong class="month-event-item__search-title">
                   <span>{{ item.category?.name ?? '未分類' }}</span>
                   <span v-if="item.event.title"> · {{ item.event.title }}</span>
+                  <span v-if="getEventValueText(item.event, item.category)">
+                    · {{ getEventValueText(item.event, item.category) }}
+                  </span>
                 </strong>
                 <p v-if="item.event.note" class="month-event-item__search-note">
                   {{ item.event.note }}
@@ -71,10 +75,29 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
               </time>
               <span class="category-dot" aria-hidden="true"></span>
               <div class="month-event-item__content">
-                <strong>{{ item.category?.name ?? '未分類' }}</strong>
-                <span v-if="item.event.title">{{ item.event.title }}</span>
-                <span v-else-if="item.event.note">{{ item.event.note }}</span>
-                <span v-else-if="item.event.severity">嚴重度 {{ item.event.severity }}</span>
+                <strong class="month-event-item__summary">
+                  <span>{{ item.category?.name ?? '未分類' }}</span>
+                  <span v-if="item.event.title"> · {{ item.event.title }}</span>
+                  <span v-if="getEventValueText(item.event, item.category)">
+                    · {{ getEventValueText(item.event, item.category) }}
+                  </span>
+                </strong>
+                <span
+                  v-if="
+                    !item.event.title && !getEventValueText(item.event, item.category) && item.event.note
+                  "
+                >
+                  {{ item.event.note }}
+                </span>
+                <span
+                  v-else-if="
+                    !item.event.title &&
+                    !getEventValueText(item.event, item.category) &&
+                    item.event.severity
+                  "
+                >
+                  嚴重度 {{ item.event.severity }}
+                </span>
                 <small v-if="isEventSearchActive && item.dateText">
                   {{ item.dateText }} · {{ item.time }}
                 </small>
@@ -235,7 +258,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   font-variant-numeric: tabular-nums;
 }
 
-.month-event-item__search-title,
 .month-event-item__search-note {
   min-width: 0;
   overflow: hidden;
@@ -244,7 +266,15 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 .month-event-item__search-title {
+  min-width: 0;
   color: var(--color-text);
+  white-space: normal;
+}
+
+.month-event-item__summary {
+  min-width: 0;
+  color: var(--color-text);
+  white-space: normal;
 }
 
 .month-event-item__search-note {
@@ -253,7 +283,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   font-size: 0.875rem;
 }
 
-.month-event-item__content strong,
 .month-event-item__content span,
 .month-event-item__content small {
   overflow: hidden;

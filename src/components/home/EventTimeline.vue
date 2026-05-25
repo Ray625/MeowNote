@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
+import { getEventValueText } from '@/utils/eventValues'
 
 const catTrackerStore = useCatTrackerStore()
 const { selectedDateEventListItems, selectedDateTitle } = storeToRefs(catTrackerStore)
@@ -43,6 +44,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
               <span>{{ item.category?.name ?? '未分類' }}</span>
             </strong>
             <strong v-if="item.event.title" class="event-item__title">{{ item.event.title }}</strong>
+            <span v-if="getEventValueText(item.event, item.category)" class="event-item__value">
+              {{ getEventValueText(item.event, item.category) }}
+            </span>
             <span v-if="item.event.severity" class="event-item__meta">
               嚴重度 {{ item.event.severity }}
             </span>
@@ -197,11 +201,14 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 
 .event-item__title {
   min-width: 0;
-  overflow: hidden;
   color: var(--color-text);
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+}
+
+.event-item__value {
+  color: var(--color-text);
+  font-weight: 800;
 }
 
 .category-dot {

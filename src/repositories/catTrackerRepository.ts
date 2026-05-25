@@ -1,4 +1,4 @@
-import { createDefaultCategories, ensureDefaultCategories } from '@/constants/defaultData'
+import { ensureDefaultCategories } from '@/constants/defaultData'
 import type { Cat, CatEvent, EventCategory } from '@/types'
 import { getIsoNow } from '@/utils/datetime'
 import { createId, isUuid } from '@/utils/id'
@@ -20,11 +20,9 @@ export interface CatTrackerRepository {
 }
 
 function createInitialState(): CatTrackerState {
-  const now = getIsoNow()
-
   return {
     cats: [],
-    categories: createDefaultCategories(now),
+    categories: [],
     events: [],
     selectedCatId: '',
   }

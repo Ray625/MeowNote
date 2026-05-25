@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
+import { CATEGORY_GROUP_ORDER, DEFAULT_CATEGORY_STATISTICS_MODE } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { catTrackerRepository, type CatTrackerState } from '@/repositories/catTrackerRepository'
 import {
@@ -11,6 +11,11 @@ import {
   updateRemoteCatEvent,
 } from '@/services/syncRemoteCatEvents'
 import { createRemoteCat, deleteRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
+import {
+  createRemoteCategory,
+  deleteRemoteCategory,
+  updateRemoteCategory,
+} from '@/services/syncRemoteCategories'
 import type {
   Cat,
   CatEvent,
@@ -165,6 +170,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const deleteConfirmEventId = ref<string>()
   const remoteEventSyncError = ref('')
   const remoteCatSyncError = ref('')
+  const remoteCategorySyncError = ref('')
 
   const needsFirstTimeSetup = computed(() => cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
@@ -482,6 +488,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     isQuickRecordOpen.value = false
 
+    const category = categoriesById.value.get(categoryId)
+
+    if (category && category.statisticsMode !== 'count') {
+      openEditEvent(event.id)
+    }
+
     return event
   }
 
@@ -639,11 +651,16 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       isQuickAction: input.isQuickAction ?? false,
       isArchived: input.isArchived ?? false,
       sortOrder: input.sortOrder ?? getNextCategorySortOrder(group),
+      statisticsMode: input.statisticsMode ?? DEFAULT_CATEGORY_STATISTICS_MODE,
+      templateId: input.templateId,
+      valueLabel: input.valueLabel,
+      valueUnit: input.valueUnit,
       createdAt: now,
       updatedAt: now,
     }
 
     categories.value.push(category)
+    syncCreatedCategory(category.id)
 
     return category
   }
@@ -666,10 +683,19 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       nextInput.sortOrder = getNextCategorySortOrder(input.group)
     }
 
+    const nextStatisticsMode = nextInput.statisticsMode ?? category.statisticsMode
+
     Object.assign(category, {
       ...nextInput,
+      statisticsMode: nextStatisticsMode,
+      valueLabel:
+        nextStatisticsMode === 'count' ? undefined : (nextInput.valueLabel ?? category.valueLabel),
+      valueUnit:
+        nextStatisticsMode === 'count' ? undefined : (nextInput.valueUnit ?? category.valueUnit),
       updatedAt: getIsoNow(),
     })
+
+    syncUpdatedCategory(category.id)
 
     return category
   }
@@ -757,10 +783,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         updatedAt: getIsoNow(),
       })
 
+      syncUpdatedCategory(category.id)
+
       return
     }
 
     categories.value = categories.value.filter((item) => item.id !== categoryId)
+    syncDeletedCategory(categoryId)
   }
 
   function restoreCategory(categoryId: string): EventCategory | undefined {
@@ -775,6 +804,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       isQuickAction: true,
       updatedAt: getIsoNow(),
     })
+
+    syncUpdatedCategory(category.id)
 
     return category
   }
@@ -832,6 +863,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         sortOrder: index,
         updatedAt: now,
       })
+      syncUpdatedCategory(item.id)
     })
   }
 
@@ -947,6 +979,72 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return Boolean(getRemoteNotebookId() && isRemoteUuid(eventId))
   }
 
+  function shouldSyncRemoteCategory(category: EventCategory): boolean {
+    return Boolean(getRemoteNotebookId() && isRemoteUuid(category.id))
+  }
+
+  function syncCreatedCategory(localCategoryId: string): void {
+    const category = categoriesById.value.get(localCategoryId)
+    const notebookId = getRemoteNotebookId()
+
+    if (!category || !notebookId || !isRemoteUuid(category.id)) {
+      return
+    }
+
+    void createRemoteCategory(category, notebookId)
+      .then((remoteCategory) => {
+        const categoryIndex = categories.value.findIndex((item) => item.id === localCategoryId)
+
+        if (categoryIndex >= 0) {
+          categories.value[categoryIndex] = remoteCategory
+        }
+
+        remoteCategorySyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteCategorySyncError.value = getSyncErrorMessage(error, '分類同步失敗')
+      })
+  }
+
+  function syncUpdatedCategory(categoryId: string): void {
+    const category = categoriesById.value.get(categoryId)
+    const notebookId = getRemoteNotebookId()
+
+    if (!category || !notebookId || !shouldSyncRemoteCategory(category)) {
+      return
+    }
+
+    void updateRemoteCategory(category, notebookId)
+      .then((remoteCategory) => {
+        const categoryIndex = categories.value.findIndex((item) => item.id === categoryId)
+
+        if (categoryIndex >= 0) {
+          categories.value[categoryIndex] = remoteCategory
+        }
+
+        remoteCategorySyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteCategorySyncError.value = getSyncErrorMessage(error, '分類同步失敗')
+      })
+  }
+
+  function syncDeletedCategory(categoryId: string): void {
+    const notebookId = getRemoteNotebookId()
+
+    if (!notebookId || !isRemoteUuid(categoryId)) {
+      return
+    }
+
+    void deleteRemoteCategory(categoryId, notebookId)
+      .then(() => {
+        remoteCategorySyncError.value = ''
+      })
+      .catch((error: unknown) => {
+        remoteCategorySyncError.value = getSyncErrorMessage(error, '分類同步失敗')
+      })
+  }
+
   function syncCreatedEvent(localEventId: string): void {
     const event = eventsById.value.get(localEventId)
     const notebookId = getRemoteNotebookId()
@@ -1051,6 +1149,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     deleteConfirmEventId,
     remoteEventSyncError,
     remoteCatSyncError,
+    remoteCategorySyncError,
     needsFirstTimeSetup,
     selectedCat,
     canCreateEventForSelectedCat,

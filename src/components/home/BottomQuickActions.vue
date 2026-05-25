@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory, EventCategoryGroup } from '@/types'
 
@@ -16,14 +17,35 @@ const groupedQuickActionCategories = computed(() =>
     categories: quickActionCategories.value.filter((category) => category.group === group),
   })).filter((item) => item.categories.length > 0),
 )
+const shouldGroupQuickActions = computed(() => groupedQuickActionCategories.value.length > 1)
+const visibleQuickActionCategories = computed(() => {
+  if (!shouldGroupQuickActions.value) {
+    return quickActionCategories.value
+  }
 
-const activeGroupCategories = computed(
-  () =>
+  return (
     groupedQuickActionCategories.value.find((item) => item.group === activeGroup.value)
-      ?.categories ??
-    groupedQuickActionCategories.value[0]?.categories ??
-    [],
+      ?.categories ?? groupedQuickActionCategories.value[0]?.categories ?? []
+  )
+})
+
+watch(
+  groupedQuickActionCategories,
+  (groups) => {
+    if (groups.length === 0) {
+      return
+    }
+
+    const firstGroup = groups[0]
+
+    if (firstGroup && !groups.some((group) => group.group === activeGroup.value)) {
+      activeGroup.value = firstGroup.group
+    }
+  },
+  { immediate: true },
 )
+
+useBodyScrollLock(isQuickRecordOpen)
 
 function recordQuickEvent(categoryId: string): void {
   catTrackerStore.quickRecordForSelectedDate(categoryId)
@@ -55,7 +77,7 @@ function selectGroup(group: EventCategoryGroup): void {
         </button>
       </div>
 
-      <div class="quick-groups" aria-label="快速記錄群組">
+      <div v-if="shouldGroupQuickActions" class="quick-groups" aria-label="快速記錄群組">
         <button
           v-for="item in groupedQuickActionCategories"
           :key="item.group"
@@ -70,7 +92,7 @@ function selectGroup(group: EventCategoryGroup): void {
 
       <div class="quick-actions" aria-label="快速記錄分類">
         <button
-          v-for="category in activeGroupCategories"
+          v-for="category in visibleQuickActionCategories"
           :key="category.id"
           class="ui-button ui-button--category quick-action"
           :style="getCategoryStyle(category)"
@@ -80,6 +102,7 @@ function selectGroup(group: EventCategoryGroup): void {
           <span class="category-dot" aria-hidden="true"></span>
           <span>{{ category.name }}</span>
         </button>
+        <p v-if="quickActionCategories.length === 0" class="quick-empty">尚未設定快速紀錄分類。</p>
       </div>
     </div>
   </section>
@@ -122,6 +145,9 @@ function selectGroup(group: EventCategoryGroup): void {
   bottom: 68px;
   left: 0;
   z-index: 12;
+  max-height: calc(100dvh - 88px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 16px;
 }
 
@@ -168,7 +194,7 @@ function selectGroup(group: EventCategoryGroup): void {
 
 .quick-actions {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .quick-group {
@@ -184,6 +210,13 @@ function selectGroup(group: EventCategoryGroup): void {
   gap: 8px;
   min-height: 52px;
   padding: 0 14px;
+}
+
+.quick-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-muted);
+  text-align: center;
 }
 
 .category-dot {

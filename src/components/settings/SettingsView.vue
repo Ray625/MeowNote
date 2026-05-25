@@ -6,14 +6,17 @@ import {
   CAT_AVATAR_OPTIONS,
   CATEGORY_COLOR_OPTIONS,
   CATEGORY_GROUP_ORDER,
+  CATEGORY_TEMPLATES,
   DEFAULT_CAT_AVATAR_ID,
   DEFAULT_CATEGORY_COLOR_ID,
   getCatAvatarOption,
   getCategoryColorId,
   getCategoryColorValue,
+  type CategoryTemplate,
 } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useTheme } from '@/composables/useTheme'
 import {
   importLocalCatTracker,
@@ -24,6 +27,7 @@ import type {
   Cat,
   CatAvatarId,
   CatSex,
+  CategoryStatisticsMode,
   CategoryColorId,
   EventCategory,
   EventCategoryGroup,
@@ -38,6 +42,7 @@ const {
   categoriesByGroup,
   cats,
   events,
+  remoteCategorySyncError,
   remoteCatSyncError,
   remoteEventSyncError,
   selectedCatId,
@@ -80,6 +85,9 @@ const editingCategoryId = ref<string>()
 const categoryName = ref('')
 const categoryGroup = ref<EventCategoryGroup>('飲食')
 const categoryColorId = ref<CategoryColorId>(DEFAULT_CATEGORY_COLOR_ID)
+const categoryStatisticsMode = ref<CategoryStatisticsMode>('count')
+const categoryValueLabel = ref('')
+const categoryValueUnit = ref('')
 const isQuickAction = ref(true)
 const isCategoryModalOpen = ref(false)
 const draggingCategoryId = ref<string>()
@@ -142,16 +150,32 @@ const deleteCatMessage = computed(() =>
     ? '停用後，這隻寵物不會再出現在切換選單中，但過去的紀錄仍會保留。'
     : `確定刪除「${pendingDeleteCat.value?.name}」？`,
 )
+const isSettingsModalOpen = computed(() => isCategoryModalOpen.value || isCatModalOpen.value)
+const availableCategoryTemplates = computed(() => {
+  const existingTemplateIds = new Set(
+    categories.value.map((category) => category.templateId).filter(Boolean),
+  )
+  const existingNames = new Set(categories.value.map((category) => category.name))
+
+  return CATEGORY_TEMPLATES.filter(
+    (template) => !existingTemplateIds.has(template.id) && !existingNames.has(template.name),
+  )
+})
 
 onMounted(() => {
   void initializeAuth()
 })
+
+useBodyScrollLock(isSettingsModalOpen)
 
 function startCreateCategory(): void {
   editingCategoryId.value = undefined
   categoryName.value = ''
   categoryGroup.value = '飲食'
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
+  categoryStatisticsMode.value = 'count'
+  categoryValueLabel.value = ''
+  categoryValueUnit.value = ''
   isQuickAction.value = true
   isCategoryModalOpen.value = true
 }
@@ -161,6 +185,9 @@ function startEditCategory(category: EventCategory): void {
   categoryName.value = category.name
   categoryGroup.value = category.group ?? '飲食'
   categoryColorId.value = getCategoryColorId(category.colorId)
+  categoryStatisticsMode.value = category.statisticsMode
+  categoryValueLabel.value = category.valueLabel ?? ''
+  categoryValueUnit.value = category.valueUnit ?? ''
   isQuickAction.value = category.isQuickAction
   isCategoryModalOpen.value = true
 }
@@ -171,6 +198,9 @@ function closeCategoryModal(): void {
   categoryName.value = ''
   categoryGroup.value = '飲食'
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
+  categoryStatisticsMode.value = 'count'
+  categoryValueLabel.value = ''
+  categoryValueUnit.value = ''
   isQuickAction.value = true
 }
 
@@ -187,6 +217,15 @@ function saveCategory(): void {
       group: categoryGroup.value,
       colorId: categoryColorId.value,
       isQuickAction: isQuickAction.value,
+      statisticsMode: categoryStatisticsMode.value,
+      valueLabel:
+        categoryStatisticsMode.value === 'count'
+          ? undefined
+          : categoryValueLabel.value.trim() || undefined,
+      valueUnit:
+        categoryStatisticsMode.value === 'count'
+          ? undefined
+          : categoryValueUnit.value.trim() || undefined,
     })
   } else {
     catTrackerStore.createCategory({
@@ -195,10 +234,33 @@ function saveCategory(): void {
       colorId: categoryColorId.value,
       isQuickAction: isQuickAction.value,
       isArchived: false,
+      statisticsMode: categoryStatisticsMode.value,
+      valueLabel:
+        categoryStatisticsMode.value === 'count'
+          ? undefined
+          : categoryValueLabel.value.trim() || undefined,
+      valueUnit:
+        categoryStatisticsMode.value === 'count'
+          ? undefined
+          : categoryValueUnit.value.trim() || undefined,
     })
   }
 
   closeCategoryModal()
+}
+
+function addCategoryTemplate(template: CategoryTemplate): void {
+  catTrackerStore.createCategory({
+    templateId: template.id,
+    name: template.name,
+    group: template.group,
+    colorId: template.colorId,
+    isQuickAction: true,
+    isArchived: false,
+    statisticsMode: template.statisticsMode,
+    valueLabel: template.valueLabel,
+    valueUnit: template.valueUnit,
+  })
 }
 
 function deleteCategory(category: EventCategory): void {
@@ -843,6 +905,9 @@ async function submitImportLocalData(): Promise<void> {
           <p v-if="remoteCatSyncError" class="account-message account-message--error">
             寵物同步失敗：{{ remoteCatSyncError }}
           </p>
+          <p v-if="remoteCategorySyncError" class="account-message account-message--error">
+            分類同步失敗：{{ remoteCategorySyncError }}
+          </p>
 
           <button
             class="ui-button ui-button--secondary account-button"
@@ -906,6 +971,38 @@ async function submitImportLocalData(): Promise<void> {
 
       <div v-else-if="settingsSection === 'categories'" class="category-groups">
         <section
+          v-if="availableCategoryTemplates.length > 0"
+          class="template-picker"
+          aria-labelledby="category-template-title"
+        >
+          <div class="template-picker__header">
+            <h2 id="category-template-title">可加入的追蹤模板</h2>
+            <span>選擇你想追蹤的項目</span>
+          </div>
+
+          <div class="template-picker__list">
+            <button
+              v-for="template in availableCategoryTemplates"
+              :key="template.id"
+              class="template-chip"
+              type="button"
+              @click="addCategoryTemplate(template)"
+            >
+              <span
+                class="category-color"
+                :style="{ '--category-color': getCategoryColorValue(template) }"
+                aria-hidden="true"
+              ></span>
+              <span>{{ template.name }}</span>
+              <small v-if="template.statisticsMode !== 'count'">
+                {{ template.valueLabel || '數值'
+                }}{{ template.valueUnit ? ` ${template.valueUnit}` : '' }}
+              </small>
+            </button>
+          </div>
+        </section>
+
+        <section
           v-for="group in categoriesByGroup"
           :key="group.group"
           class="category-group"
@@ -958,6 +1055,10 @@ async function submitImportLocalData(): Promise<void> {
                 </span>
                 <span v-else>
                   <template v-if="!category.isQuickAction">未顯示於快速紀錄 · </template>
+                  <template v-if="category.statisticsMode !== 'count'">
+                    {{ category.valueLabel || '數值'
+                    }}{{ category.valueUnit ? ` (${category.valueUnit})` : '' }} ·
+                  </template>
                   {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
                 </span>
               </div>
@@ -1128,6 +1229,37 @@ async function submitImportLocalData(): Promise<void> {
             <input v-model="isQuickAction" type="checkbox" />
             <span>顯示在快速紀錄</span>
           </label>
+
+          <label class="field">
+            <span class="field__label">統計方式</span>
+            <select v-model="categoryStatisticsMode" class="field__control">
+              <option value="count">只計次數</option>
+              <option value="sum">數值加總</option>
+              <option value="measurement">量測趨勢</option>
+            </select>
+          </label>
+
+          <template v-if="categoryStatisticsMode !== 'count'">
+            <label class="field">
+              <span class="field__label">數值名稱</span>
+              <input
+                v-model="categoryValueLabel"
+                class="field__control"
+                type="text"
+                placeholder="例如：飲水量、體重、劑量"
+              />
+            </label>
+
+            <label class="field">
+              <span class="field__label">單位</span>
+              <input
+                v-model="categoryValueUnit"
+                class="field__control"
+                type="text"
+                placeholder="例如：ml、g、kg"
+              />
+            </label>
+          </template>
 
           <div class="category-form__actions">
             <button
@@ -1430,6 +1562,62 @@ async function submitImportLocalData(): Promise<void> {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
+}
+
+.template-picker {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.template-picker__header {
+  display: grid;
+  gap: 2px;
+}
+
+.template-picker__header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.template-picker__header span {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.template-picker__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.template-chip:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.template-chip small {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .category-form {
@@ -1784,6 +1972,8 @@ async function submitImportLocalData(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   background: var(--overlay-color);
 }
@@ -1791,7 +1981,10 @@ async function submitImportLocalData(): Promise<void> {
 .category-modal {
   width: min(100%, 520px);
   max-width: 100%;
+  max-height: calc(100dvh - 32px);
   min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px;
   border: 1px solid var(--color-border);
   border-radius: 12px;

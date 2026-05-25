@@ -4,6 +4,7 @@ export type {
   CatEvent,
   CatSex,
   CategoryColorId,
+  CategoryStatisticsMode,
   CreateCatEventInput,
   CreateCatInput,
   CreateCategoryInput,

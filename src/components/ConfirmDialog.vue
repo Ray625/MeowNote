@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+
 withDefaults(
   defineProps<{
     title: string
@@ -18,6 +20,8 @@ const emit = defineEmits<{
   cancel: []
   confirm: []
 }>()
+
+useBodyScrollLock(true)
 </script>
 
 <template>
@@ -68,12 +72,16 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   background: var(--overlay-color);
 }
 
 .confirm-dialog {
   width: min(100%, 360px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   padding: 18px;
   border: 1px solid var(--color-border);
   border-radius: 12px;

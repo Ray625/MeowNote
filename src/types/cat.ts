@@ -14,6 +14,7 @@ export interface Cat {
 
 export interface EventCategory {
   id: string
+  templateId?: string
   name: string
   group?: EventCategoryGroup
   colorId?: CategoryColorId
@@ -22,6 +23,9 @@ export interface EventCategory {
   isQuickAction: boolean
   isArchived: boolean
   sortOrder: number
+  statisticsMode: CategoryStatisticsMode
+  valueLabel?: string
+  valueUnit?: string
   createdAt: string
   updatedAt: string
 }
@@ -40,6 +44,8 @@ export interface CatEvent {
 }
 
 export type EventCategoryGroup = '飲食' | '健康' | '行為' | '日常' | '醫療'
+
+export type CategoryStatisticsMode = 'count' | 'sum' | 'measurement'
 
 export type CatSex = 'male' | 'female'
 
@@ -86,13 +92,35 @@ export type UpdateCatInput = Partial<
 
 export type CreateCategoryInput = Pick<EventCategory, 'name'> &
   Partial<
-    Pick<EventCategory, 'colorId' | 'group' | 'icon' | 'isArchived' | 'isQuickAction' | 'sortOrder'>
+    Pick<
+      EventCategory,
+      | 'colorId'
+      | 'group'
+      | 'icon'
+      | 'isArchived'
+      | 'isQuickAction'
+      | 'sortOrder'
+      | 'statisticsMode'
+      | 'templateId'
+      | 'valueLabel'
+      | 'valueUnit'
+    >
   >
 
 export type UpdateCategoryInput = Partial<
   Pick<
     EventCategory,
-    'colorId' | 'group' | 'icon' | 'isArchived' | 'isQuickAction' | 'name' | 'sortOrder'
+    | 'colorId'
+    | 'group'
+    | 'icon'
+    | 'isArchived'
+    | 'isQuickAction'
+    | 'name'
+    | 'sortOrder'
+    | 'statisticsMode'
+    | 'templateId'
+    | 'valueLabel'
+    | 'valueUnit'
   >
 >
 

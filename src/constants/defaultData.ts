@@ -13,7 +13,14 @@ import catTabbyImage from '@/assets/cat-avatars/cat-tabby.png'
 import catTortoiseshellImage from '@/assets/cat-avatars/cat-tortoiseshell.png'
 import catTuxedoImage from '@/assets/cat-avatars/cat-tuxedo.png'
 import catWhiteImage from '@/assets/cat-avatars/cat-white.png'
-import type { Cat, CatAvatarId, CategoryColorId, EventCategory, EventCategoryGroup } from '@/types'
+import type {
+  Cat,
+  CatAvatarId,
+  CategoryColorId,
+  CategoryStatisticsMode,
+  EventCategory,
+  EventCategoryGroup,
+} from '@/types'
 import { createId } from '@/utils/id'
 
 export const DEFAULT_CAT_ID = 'default-cat'
@@ -104,34 +111,111 @@ export const CATEGORY_COLOR_OPTIONS = [
 ] as const
 
 export const DEFAULT_CATEGORY_COLOR_ID = 'teal' satisfies CategoryColorId
+export const DEFAULT_CATEGORY_STATISTICS_MODE = 'count' satisfies CategoryStatisticsMode
 
-export const DEFAULT_CATEGORY_DEFINITIONS = [
-  { name: '濕食', group: '飲食', colorId: 'orange' },
-  { name: '乾糧', group: '飲食', colorId: 'amber' },
-  { name: '飲水', group: '飲食', colorId: 'blue' },
-  { name: '食欲變化', group: '健康', colorId: 'orange' },
-  { name: '精神狀況', group: '健康', colorId: 'teal' },
-  { name: '嘔吐', group: '健康', colorId: 'red' },
-  { name: '腹瀉', group: '健康', colorId: 'pink' },
-  { name: '泌尿異常', group: '健康', colorId: 'amber' },
-  { name: '攻擊', group: '行為', colorId: 'purple' },
-  { name: '嚎叫', group: '行為', colorId: 'blue' },
-  { name: '不當排洩', group: '行為', colorId: 'amber' },
-  { name: '躲藏', group: '行為', colorId: 'teal' },
-  { name: '半夜不睡', group: '行為', colorId: 'purple' },
-  { name: '刷牙', group: '日常', colorId: 'teal' },
-  { name: '剪指甲', group: '日常', colorId: 'green' },
-  { name: '梳毛', group: '日常', colorId: 'blue' },
-  { name: '外出', group: '日常', colorId: 'blue' },
-  { name: '體外驅蟲', group: '醫療', colorId: 'green' },
-  { name: '預防針', group: '醫療', colorId: 'blue' },
-  { name: '門診', group: '醫療', colorId: 'teal' },
-  { name: '用藥', group: '醫療', colorId: 'purple' },
-] as const satisfies ReadonlyArray<{
+export interface CategoryTemplate {
+  id: string
   name: string
   group: EventCategoryGroup
   colorId: CategoryColorId
-}>
+  statisticsMode: CategoryStatisticsMode
+  valueLabel?: string
+  valueUnit?: string
+}
+
+export const CATEGORY_TEMPLATES: readonly CategoryTemplate[] = [
+  {
+    id: 'wet-food',
+    name: '濕食',
+    group: '飲食',
+    colorId: 'orange',
+    statisticsMode: 'sum',
+    valueLabel: '份量',
+    valueUnit: 'g',
+  },
+  {
+    id: 'dry-food',
+    name: '乾糧',
+    group: '飲食',
+    colorId: 'amber',
+    statisticsMode: 'sum',
+    valueLabel: '份量',
+    valueUnit: 'g',
+  },
+  {
+    id: 'water',
+    name: '飲水',
+    group: '飲食',
+    colorId: 'blue',
+    statisticsMode: 'sum',
+    valueLabel: '飲水量',
+    valueUnit: 'ml',
+  },
+  { id: 'appetite', name: '食欲變化', group: '健康', colorId: 'orange', statisticsMode: 'count' },
+  { id: 'energy', name: '精神狀況', group: '健康', colorId: 'teal', statisticsMode: 'count' },
+  { id: 'vomit', name: '嘔吐', group: '健康', colorId: 'red', statisticsMode: 'count' },
+  { id: 'diarrhea', name: '腹瀉', group: '健康', colorId: 'pink', statisticsMode: 'count' },
+  { id: 'urinary', name: '泌尿異常', group: '健康', colorId: 'amber', statisticsMode: 'count' },
+  { id: 'attack', name: '攻擊', group: '行為', colorId: 'purple', statisticsMode: 'count' },
+  { id: 'vocalization', name: '嚎叫', group: '行為', colorId: 'blue', statisticsMode: 'count' },
+  {
+    id: 'inappropriate-elimination',
+    name: '不當排洩',
+    group: '行為',
+    colorId: 'amber',
+    statisticsMode: 'count',
+  },
+  { id: 'hiding', name: '躲藏', group: '行為', colorId: 'teal', statisticsMode: 'count' },
+  {
+    id: 'night-activity',
+    name: '半夜不睡',
+    group: '行為',
+    colorId: 'purple',
+    statisticsMode: 'count',
+  },
+  { id: 'tooth-brushing', name: '刷牙', group: '日常', colorId: 'teal', statisticsMode: 'count' },
+  { id: 'nail-trim', name: '剪指甲', group: '日常', colorId: 'green', statisticsMode: 'count' },
+  { id: 'grooming', name: '梳毛', group: '日常', colorId: 'blue', statisticsMode: 'count' },
+  { id: 'outside', name: '外出', group: '日常', colorId: 'blue', statisticsMode: 'count' },
+  {
+    id: 'external-parasite',
+    name: '體外驅蟲',
+    group: '醫療',
+    colorId: 'green',
+    statisticsMode: 'count',
+  },
+  { id: 'vaccine', name: '預防針', group: '醫療', colorId: 'blue', statisticsMode: 'count' },
+  { id: 'vet-visit', name: '門診', group: '醫療', colorId: 'teal', statisticsMode: 'count' },
+  {
+    id: 'medication',
+    name: '用藥',
+    group: '醫療',
+    colorId: 'purple',
+    statisticsMode: 'sum',
+    valueLabel: '劑量',
+    valueUnit: '',
+  },
+  {
+    id: 'weight',
+    name: '體重',
+    group: '健康',
+    colorId: 'green',
+    statisticsMode: 'measurement',
+    valueLabel: '體重',
+    valueUnit: 'kg',
+  },
+  {
+    id: 'temperature',
+    name: '體溫',
+    group: '健康',
+    colorId: 'red',
+    statisticsMode: 'measurement',
+    valueLabel: '體溫',
+    valueUnit: '°C',
+  },
+] as const
+
+export const DEFAULT_CATEGORY_DEFINITIONS = CATEGORY_TEMPLATES
 
 const LEGACY_DEFAULT_CATEGORY_NAMES = ['排便', '排尿', '軟便', '皮下點滴', '夜擾'] as const
 
@@ -155,6 +239,7 @@ export function createDefaultCat(now: string): Cat {
 export function createDefaultCategories(now: string): EventCategory[] {
   return DEFAULT_CATEGORY_DEFINITIONS.map((category, index) => ({
     id: createId(),
+    templateId: category.id,
     name: category.name,
     group: category.group,
     colorId: category.colorId,
@@ -162,13 +247,40 @@ export function createDefaultCategories(now: string): EventCategory[] {
     isQuickAction: true,
     isArchived: false,
     sortOrder: index,
+    statisticsMode: category.statisticsMode,
+    valueLabel: category.valueLabel,
+    valueUnit: category.valueUnit,
     createdAt: now,
     updatedAt: now,
   }))
 }
 
+export function createCategoryFromTemplate(
+  template: CategoryTemplate,
+  sortOrder: number,
+  now: string,
+): EventCategory {
+  return {
+    id: createId(),
+    templateId: template.id,
+    name: template.name,
+    group: template.group,
+    colorId: template.colorId,
+    isDefault: true,
+    isQuickAction: true,
+    isArchived: false,
+    sortOrder,
+    statisticsMode: template.statisticsMode,
+    valueLabel: template.valueLabel,
+    valueUnit: template.valueUnit,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 export function normalizeDefaultCategory(category: EventCategory): EventCategory {
   const defaultCategory = DEFAULT_CATEGORY_DEFINITIONS.find((item) => item.name === category.name)
+  const statisticsMode = getCategoryStatisticsMode(category.statisticsMode)
 
   if (!defaultCategory) {
     if (isLegacyDefaultCategory(category)) {
@@ -177,6 +289,7 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
         colorId: getCategoryColorId(category.colorId),
         isQuickAction: false,
         isArchived: true,
+        statisticsMode,
       }
     }
 
@@ -184,11 +297,13 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
       ...category,
       colorId: getCategoryColorId(category.colorId),
       isArchived: category.isArchived ?? false,
+      statisticsMode,
     }
   }
 
   return {
     ...category,
+    templateId: category.templateId ?? defaultCategory.id,
     group: defaultCategory.group,
     colorId: getCategoryColorId(category.colorId, defaultCategory.colorId),
     isDefault: category.isDefault || category.id === `default-category-${category.name}`,
@@ -197,6 +312,12 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
     isQuickAction:
       (category.isQuickAction || category.id === `default-category-${category.name}`) &&
       !(category.isArchived ?? false),
+    statisticsMode: getCategoryStatisticsMode(
+      category.statisticsMode,
+      defaultCategory.statisticsMode,
+    ),
+    valueLabel: category.valueLabel ?? defaultCategory.valueLabel,
+    valueUnit: category.valueUnit ?? defaultCategory.valueUnit,
   }
 }
 
@@ -209,12 +330,8 @@ function isLegacyDefaultCategory(category: EventCategory): boolean {
 
 export function ensureDefaultCategories(categories: EventCategory[], now: string): EventCategory[] {
   const normalizedCategories = categories.map((category) => normalizeDefaultCategory(category))
-  const existingNames = new Set(normalizedCategories.map((category) => category.name))
-  const missingDefaultCategories = createDefaultCategories(now).filter(
-    (category) => !existingNames.has(category.name),
-  )
 
-  return normalizeCategorySortOrders([...normalizedCategories, ...missingDefaultCategories])
+  return normalizeCategorySortOrders(normalizedCategories)
 }
 
 function normalizeCategorySortOrders(categories: EventCategory[]): EventCategory[] {
@@ -263,6 +380,17 @@ export function getCategoryColorId(
   }
 
   return fallbackColorId
+}
+
+export function getCategoryStatisticsMode(
+  statisticsMode?: CategoryStatisticsMode | string,
+  fallbackStatisticsMode: CategoryStatisticsMode = DEFAULT_CATEGORY_STATISTICS_MODE,
+): CategoryStatisticsMode {
+  if (statisticsMode === 'count' || statisticsMode === 'sum' || statisticsMode === 'measurement') {
+    return statisticsMode
+  }
+
+  return fallbackStatisticsMode
 }
 
 export function getCatAvatarOption(avatarId?: CatAvatarId | string) {

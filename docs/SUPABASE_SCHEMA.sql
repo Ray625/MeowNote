@@ -57,6 +57,7 @@ create table if not exists public.cats (
 create table if not exists public.event_categories (
   id uuid primary key default gen_random_uuid(),
   notebook_id uuid not null references public.notebooks(id) on delete cascade,
+  template_id text,
   name text not null check (char_length(trim(name)) > 0),
   group_name text,
   color_id text not null,
@@ -65,10 +66,29 @@ create table if not exists public.event_categories (
   is_quick_action boolean not null default true,
   is_archived boolean not null default false,
   sort_order integer not null default 0,
+  statistics_mode text not null default 'count' check (statistics_mode in ('count', 'sum', 'measurement')),
+  value_label text,
+  value_unit text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (id, notebook_id)
 );
+
+alter table public.event_categories
+  add column if not exists template_id text,
+  add column if not exists statistics_mode text not null default 'count',
+  add column if not exists value_label text,
+  add column if not exists value_unit text;
+
+do $$
+begin
+  alter table public.event_categories
+    add constraint event_categories_statistics_mode_check
+    check (statistics_mode in ('count', 'sum', 'measurement'));
+exception
+  when duplicate_object then null;
+end;
+$$;
 
 create table if not exists public.cat_events (
   id uuid primary key default gen_random_uuid(),

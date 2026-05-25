@@ -5,6 +5,7 @@ import type {
   CategoryColorId,
   EventCategory,
   EventCategoryGroup,
+  CategoryStatisticsMode,
 } from '@/types'
 
 export interface SupabaseCatRow {
@@ -26,6 +27,7 @@ export interface SupabaseCatRow {
 export interface SupabaseEventCategoryRow {
   id: string
   notebook_id: string
+  template_id: string | null
   name: string
   group_name: string | null
   color_id: string
@@ -34,6 +36,9 @@ export interface SupabaseEventCategoryRow {
   is_quick_action: boolean
   is_archived: boolean
   sort_order: number
+  statistics_mode: string
+  value_label: string | null
+  value_unit: string | null
   created_at: string
   updated_at: string
 }
@@ -101,6 +106,7 @@ export function toInsertEventCategoryRow(
   return {
     id: category.id,
     notebook_id: notebookId,
+    template_id: category.templateId ?? null,
     name: category.name,
     group_name: category.group ?? null,
     color_id: category.colorId ?? 'teal',
@@ -109,12 +115,16 @@ export function toInsertEventCategoryRow(
     is_quick_action: category.isQuickAction,
     is_archived: category.isArchived,
     sort_order: category.sortOrder,
+    statistics_mode: category.statisticsMode,
+    value_label: category.valueLabel ?? null,
+    value_unit: category.valueUnit ?? null,
   }
 }
 
 export function fromEventCategoryRow(row: SupabaseEventCategoryRow): EventCategory {
   return {
     id: row.id,
+    templateId: row.template_id ?? undefined,
     name: row.name,
     group: isEventCategoryGroup(row.group_name) ? row.group_name : undefined,
     colorId: isCategoryColorId(row.color_id) ? row.color_id : undefined,
@@ -123,6 +133,9 @@ export function fromEventCategoryRow(row: SupabaseEventCategoryRow): EventCatego
     isQuickAction: row.is_quick_action,
     isArchived: row.is_archived,
     sortOrder: row.sort_order,
+    statisticsMode: isCategoryStatisticsMode(row.statistics_mode) ? row.statistics_mode : 'count',
+    valueLabel: row.value_label ?? undefined,
+    valueUnit: row.value_unit ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -207,6 +220,10 @@ function isCategoryColorId(value: string | null): value is CategoryColorId {
     value === 'purple' ||
     value === 'pink'
   )
+}
+
+function isCategoryStatisticsMode(value: string | null): value is CategoryStatisticsMode {
+  return value === 'count' || value === 'sum' || value === 'measurement'
 }
 
 function isEventSeverity(value: number | null): value is NonNullable<CatEvent['severity']> {
