@@ -18,6 +18,25 @@ export interface CountCategoryStats {
   latestOccurredAt?: string
 }
 
+export interface SumDailyBucket {
+  key: string
+  label: string
+  start: Date
+  end: Date
+  total: number
+}
+
+export interface SumDailyStats {
+  category: EventCategory
+  mode: 'sum'
+  rangeTotal: number
+  currentDayTotal: number
+  maxDailyTotal: number
+  minDailyTotal: number
+  buckets: SumDailyBucket[]
+  latestOccurredAt?: string
+}
+
 export interface CountTrendStatsInput {
   categories: EventCategory[]
   events: CatEvent[]
@@ -25,6 +44,15 @@ export interface CountTrendStatsInput {
   interval?: 'day' | 'week' | 'month'
   referenceDate?: Date
   periods?: number
+}
+
+export interface SumDailyStatsInput {
+  categories: EventCategory[]
+  events: CatEvent[]
+  catId: string
+  categoryId: string
+  referenceDate?: Date
+  days?: number
 }
 
 export function getCountTrendStats({
@@ -134,6 +162,90 @@ export function getCountTrendStats({
     .filter((stats) => categoryById.has(stats.category.id))
 }
 
+export function getSumDailyStats({
+  categories,
+  events,
+  catId,
+  categoryId,
+  referenceDate = new Date(),
+  days = 7,
+}: SumDailyStatsInput): SumDailyStats | undefined {
+  if (!catId || !categoryId || days <= 0) {
+    return undefined
+  }
+
+  const category = categories.find(
+    (item) => item.id === categoryId && item.statisticsMode === 'sum',
+  )
+
+  if (!category) {
+    return undefined
+  }
+
+  const anchorStart = startOfDay(referenceDate)
+  const rangeStart = addDays(anchorStart, -(days - 1))
+  const rangeEnd = addDays(anchorStart, 1)
+  const buckets = createSumDayBuckets(rangeStart, days)
+  let latestOccurredAt: string | undefined
+
+  const scopedEvents = events
+    .filter((event) => event.catId === catId && event.categoryId === categoryId)
+    .filter((event) => {
+      const occurredAt = new Date(event.occurredAt)
+
+      return occurredAt >= rangeStart && occurredAt < rangeEnd
+    })
+
+  for (const event of scopedEvents) {
+    const occurredAt = new Date(event.occurredAt)
+    const amount = getNumericAmount(event.values)
+
+    if (typeof amount !== 'number') {
+      continue
+    }
+
+    if (!latestOccurredAt || event.occurredAt > latestOccurredAt) {
+      latestOccurredAt = event.occurredAt
+    }
+
+    const bucket = buckets.find((item) => occurredAt >= item.start && occurredAt < item.end)
+
+    if (bucket) {
+      bucket.total += amount
+    }
+  }
+
+  const rangeTotal = buckets.reduce((total, bucket) => total + bucket.total, 0)
+  const currentDayTotal = buckets.at(-1)?.total ?? 0
+  const bucketTotals = buckets.map((bucket) => bucket.total)
+
+  return {
+    category,
+    mode: 'sum',
+    rangeTotal,
+    currentDayTotal,
+    maxDailyTotal: Math.max(...bucketTotals, 0),
+    minDailyTotal: Math.min(...bucketTotals),
+    buckets,
+    latestOccurredAt,
+  }
+}
+
+function createSumDayBuckets(start: Date, days: number): SumDailyBucket[] {
+  return Array.from({ length: days }, (_, index) => {
+    const bucketStart = addDays(start, index)
+    const bucketEnd = addDays(bucketStart, 1)
+
+    return {
+      key: toDateKey(bucketStart),
+      label: formatDayLabel(bucketStart),
+      start: bucketStart,
+      end: bucketEnd,
+      total: 0,
+    }
+  })
+}
+
 function createDayBuckets(start: Date, days: number): CountTrendBucket[] {
   return Array.from({ length: days }, (_, index) => {
     const bucketStart = addDays(start, index)
@@ -147,6 +259,16 @@ function createDayBuckets(start: Date, days: number): CountTrendBucket[] {
       count: 0,
     }
   })
+}
+
+function getNumericAmount(values?: Record<string, unknown>): number | undefined {
+  const amount = values?.amount
+  const numericAmount =
+    typeof amount === 'number' ? amount : typeof amount === 'string' ? Number(amount) : undefined
+
+  return typeof numericAmount === 'number' && Number.isFinite(numericAmount)
+    ? numericAmount
+    : undefined
 }
 
 function createWeekBuckets(start: Date, weeks: number): CountTrendBucket[] {
@@ -223,7 +345,7 @@ function formatWeekLabel(date: Date): string {
 }
 
 function formatDayLabel(date: Date): string {
-  return new Intl.DateTimeFormat('zh-TW', { weekday: 'short' }).format(date)
+  return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
 function formatMonthLabel(date: Date): string {

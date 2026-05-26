@@ -2,15 +2,23 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getCategoryColorValue } from '@/constants/defaultData'
-import { getCountTrendStats, type CountCategoryStats } from '@/services/catTrackerStats'
+import {
+  getCountTrendStats,
+  getSumDailyStats,
+  type CountCategoryStats,
+  type SumDailyStats,
+} from '@/services/catTrackerStats'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
+type StatsMode = 'count' | 'sum'
 type CountInterval = 'day' | 'week' | 'month'
 
 const catTrackerStore = useCatTrackerStore()
 const { categories, events, selectedCat, selectedCatId } = storeToRefs(catTrackerStore)
+const statsMode = ref<StatsMode>('count')
 const countInterval = ref<CountInterval>('week')
 const selectedCountCategoryId = ref('')
+const selectedSumCategoryId = ref('')
 const statsReferenceDate = ref(new Date())
 
 const periodCount = computed(() =>
@@ -22,7 +30,9 @@ const periodUnitText = computed(() =>
 const recentPeriodText = computed(() => `最近 ${periodCount.value} ${periodUnitText.value}`)
 const previousPeriodText = computed(() => `前 ${periodCount.value} ${periodUnitText.value}`)
 const currentRange = computed(() =>
-  getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value),
+  statsMode.value === 'count'
+    ? getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value)
+    : getStatsRange(statsReferenceDate.value, 'day', 7),
 )
 const rangeTitle = computed(
   () => `${formatRangeDate(currentRange.value.start)} - ${formatRangeDate(currentRange.value.end)}`,
@@ -41,6 +51,21 @@ const countStats = computed(() =>
 const selectedCountStats = computed(
   () => countStats.value.find((stats) => stats.category.id === selectedCountCategoryId.value),
 )
+const sumCategories = computed(() =>
+  categories.value
+    .filter((category) => category.statisticsMode === 'sum' && !category.isArchived)
+    .sort((a, b) => a.sortOrder - b.sortOrder),
+)
+const selectedSumStats = computed(() =>
+  getSumDailyStats({
+    categories: categories.value,
+    events: events.value,
+    catId: selectedCatId.value,
+    categoryId: selectedSumCategoryId.value,
+    referenceDate: statsReferenceDate.value,
+    days: 7,
+  }),
+)
 
 watch(
   countStats,
@@ -57,7 +82,28 @@ watch(
   { immediate: true },
 )
 
+watch(
+  sumCategories,
+  (categoryList) => {
+    if (categoryList.length === 0) {
+      selectedSumCategoryId.value = ''
+      return
+    }
+
+    if (!categoryList.some((category) => category.id === selectedSumCategoryId.value)) {
+      selectedSumCategoryId.value = categoryList[0]?.id ?? ''
+    }
+  },
+  { immediate: true },
+)
+
 function getStatsStyle(stats: CountCategoryStats): Record<string, string> {
+  return {
+    '--category-color': getCategoryColorValue(stats.category),
+  }
+}
+
+function getSumStatsStyle(stats: SumDailyStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
   }
@@ -99,12 +145,39 @@ function getCountBarsStyle(stats: CountCategoryStats): Record<string, string> {
   }
 }
 
+function getSumBarsStyle(stats: SumDailyStats): Record<string, string> {
+  return {
+    '--count-bucket-count': String(stats.buckets.length),
+  }
+}
+
+function getSumBarHeight(total: number, stats: SumDailyStats): string {
+  const maxTotal = Math.max(...stats.buckets.map((bucket) => bucket.total), 1)
+  const ratio = total / maxTotal
+
+  return `${Math.max(4, Math.round(ratio * 38))}px`
+}
+
+function formatAmount(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)))
+}
+
+function getAmountText(value: number, stats: SumDailyStats): string {
+  return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
+}
+
 function showPreviousRange(): void {
-  statsReferenceDate.value = shiftDate(statsReferenceDate.value, countInterval.value, -periodCount.value)
+  statsReferenceDate.value =
+    statsMode.value === 'count'
+      ? shiftDate(statsReferenceDate.value, countInterval.value, -periodCount.value)
+      : shiftDate(statsReferenceDate.value, 'day', -7)
 }
 
 function showNextRange(): void {
-  statsReferenceDate.value = shiftDate(statsReferenceDate.value, countInterval.value, periodCount.value)
+  statsReferenceDate.value =
+    statsMode.value === 'count'
+      ? shiftDate(statsReferenceDate.value, countInterval.value, periodCount.value)
+      : shiftDate(statsReferenceDate.value, 'day', 7)
 }
 
 function getStatsRange(referenceDate: Date, interval: CountInterval, periods: number) {
@@ -174,16 +247,39 @@ function formatRangeDate(date: Date): string {
   <section class="stats-view" aria-labelledby="stats-title">
     <header class="stats-header">
       <h1 id="stats-title">統計</h1>
-      <p>{{ selectedCat?.name ?? '目前寵物' }} · 次數趨勢</p>
+      <p>{{ selectedCat?.name ?? '目前寵物' }} · {{ statsMode === 'count' ? '次數趨勢' : '每日總量' }}</p>
     </header>
 
     <section class="stats-section" aria-labelledby="count-stats-title">
       <div class="stats-section__header">
-        <h2 id="count-stats-title">次數追蹤</h2>
-        <span>{{ countStats.length }} 個分類</span>
+        <h2 id="count-stats-title">追蹤統計</h2>
+        <span>{{ statsMode === 'count' ? `${countStats.length} 個分類` : `${sumCategories.length} 個分類` }}</span>
       </div>
 
-      <div class="stats-controls">
+      <div class="mode-tabs" role="tablist" aria-label="統計方式">
+        <button
+          class="mode-tab"
+          :class="{ 'mode-tab--active': statsMode === 'count' }"
+          type="button"
+          role="tab"
+          :aria-selected="statsMode === 'count'"
+          @click="statsMode = 'count'"
+        >
+          次數
+        </button>
+        <button
+          class="mode-tab"
+          :class="{ 'mode-tab--active': statsMode === 'sum' }"
+          type="button"
+          role="tab"
+          :aria-selected="statsMode === 'sum'"
+          @click="statsMode = 'sum'"
+        >
+          加總
+        </button>
+      </div>
+
+      <div v-if="statsMode === 'count'" class="stats-controls">
         <label class="stats-field">
           <span>紀錄項目</span>
           <select v-model="selectedCountCategoryId">
@@ -227,6 +323,21 @@ function formatRangeDate(date: Date): string {
         </div>
       </div>
 
+      <div v-else class="stats-controls stats-controls--single">
+        <label class="stats-field">
+          <span>紀錄項目</span>
+          <select v-model="selectedSumCategoryId">
+            <option
+              v-for="category in sumCategories"
+              :key="category.id"
+              :value="category.id"
+            >
+              {{ category.name }}
+            </option>
+          </select>
+        </label>
+      </div>
+
       <div class="range-controls" aria-label="統計日期區間">
         <button
           class="ui-button ui-button--icon range-button"
@@ -245,7 +356,7 @@ function formatRangeDate(date: Date): string {
         </button>
       </div>
 
-      <div v-if="selectedCountStats" class="count-stats-list">
+      <div v-if="statsMode === 'count' && selectedCountStats" class="count-stats-list">
         <article
           :key="selectedCountStats.category.id"
           class="count-card"
@@ -280,7 +391,56 @@ function formatRangeDate(date: Date): string {
         </article>
       </div>
 
-      <p v-else class="empty-state">最近還沒有可統計的次數紀錄。</p>
+      <div v-else-if="statsMode === 'sum' && selectedSumStats" class="count-stats-list">
+        <article
+          :key="selectedSumStats.category.id"
+          class="count-card"
+          :style="getSumStatsStyle(selectedSumStats)"
+        >
+          <div class="count-card__summary">
+            <div>
+              <h3>{{ selectedSumStats.category.name }}</h3>
+              <p>區間總量 {{ getAmountText(selectedSumStats.rangeTotal, selectedSumStats) }}</p>
+            </div>
+            <strong>{{ getAmountText(selectedSumStats.currentDayTotal, selectedSumStats) }}</strong>
+          </div>
+
+          <div class="stats-metrics">
+            <div>
+              <span>區間最後日</span>
+              <strong>{{ getAmountText(selectedSumStats.currentDayTotal, selectedSumStats) }}</strong>
+            </div>
+            <div>
+              <span>最高單日</span>
+              <strong>{{ getAmountText(selectedSumStats.maxDailyTotal, selectedSumStats) }}</strong>
+            </div>
+            <div>
+              <span>最低單日</span>
+              <strong>{{ getAmountText(selectedSumStats.minDailyTotal, selectedSumStats) }}</strong>
+            </div>
+          </div>
+
+          <div class="count-bars" aria-label="每日總量" :style="getSumBarsStyle(selectedSumStats)">
+            <div v-for="bucket in selectedSumStats.buckets" :key="bucket.key" class="count-bar">
+              <span
+                class="count-bar__fill"
+                :style="{ height: getSumBarHeight(bucket.total, selectedSumStats) }"
+                :title="`${bucket.label}: ${getAmountText(bucket.total, selectedSumStats)}`"
+              ></span>
+              <small>{{ formatAmount(bucket.total) }}</small>
+              <em>{{ bucket.label }}</em>
+            </div>
+          </div>
+
+          <div class="count-card__meta">
+            <span>最近 {{ formatLatestDate(selectedSumStats.latestOccurredAt) }}</span>
+          </div>
+        </article>
+      </div>
+
+      <p v-else class="empty-state">
+        {{ statsMode === 'count' ? '最近還沒有可統計的次數紀錄。' : '最近還沒有可統計的加總紀錄。' }}
+      </p>
     </section>
   </section>
 </template>
@@ -347,6 +507,34 @@ function formatRangeDate(date: Date): string {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 10px;
+}
+
+.stats-controls--single {
+  grid-template-columns: 1fr;
+}
+
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+}
+
+.mode-tab {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
+.mode-tab--active {
+  background: var(--color-primary);
+  color: var(--color-text);
 }
 
 .range-controls {
@@ -466,6 +654,36 @@ function formatRangeDate(date: Date): string {
   color: var(--color-danger) !important;
 }
 
+.stats-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stats-metrics div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--category-color) 22%, var(--color-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--category-color) 5%, var(--color-background));
+}
+
+.stats-metrics span {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.stats-metrics strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .count-bars {
   display: grid;
   grid-template-columns: repeat(var(--count-bucket-count), minmax(0, 1fr));
@@ -515,5 +733,28 @@ function formatRangeDate(date: Date): string {
 .empty-state {
   padding: 18px 0;
   text-align: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mode-tab:hover,
+  .interval-tab:hover {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: var(--color-text);
+  }
+
+  .mode-tab--active:hover,
+  .interval-tab--active:hover {
+    background: var(--color-primary);
+  }
+}
+
+@media (max-width: 520px) {
+  .stats-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-metrics {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
