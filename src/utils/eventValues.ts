@@ -2,7 +2,7 @@ import type { CatEvent, EventCategory } from '@/types'
 
 export function getEventValueText(
   event: Pick<CatEvent, 'values'>,
-  category?: Pick<EventCategory, 'name' | 'valueLabel' | 'valueUnit'>,
+  category?: Pick<EventCategory, 'name' | 'statisticsMode' | 'valueLabel' | 'valueUnit'>,
 ): string {
   const amount = event.values?.amount
   const numericAmount =
@@ -12,7 +12,12 @@ export function getEventValueText(
     return ''
   }
 
-  const valueLabel = category?.valueLabel && category.valueLabel !== category.name ? category.valueLabel : ''
+  if (category?.statisticsMode === 'rating') {
+    return `評分：${formatEventAmount(numericAmount)}`
+  }
+
+  const valueLabel =
+    category?.valueLabel && category.valueLabel !== category.name ? category.valueLabel : ''
 
   return [valueLabel, formatEventAmount(numericAmount), category?.valueUnit]
     .filter(Boolean)

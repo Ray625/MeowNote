@@ -663,6 +663,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       statisticsMode: input.statisticsMode ?? DEFAULT_CATEGORY_STATISTICS_MODE,
       templateId: input.templateId,
       valueLabel: input.valueLabel,
+      valueMax: input.valueMax,
       valueUnit: input.valueUnit,
       createdAt: now,
       updatedAt: now,
@@ -699,8 +700,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       statisticsMode: nextStatisticsMode,
       valueLabel:
         nextStatisticsMode === 'count' ? undefined : (nextInput.valueLabel ?? category.valueLabel),
+      valueMax:
+        nextStatisticsMode === 'rating' ? (nextInput.valueMax ?? category.valueMax ?? 10) : undefined,
       valueUnit:
-        nextStatisticsMode === 'count' ? undefined : (nextInput.valueUnit ?? category.valueUnit),
+        nextStatisticsMode === 'count' || nextStatisticsMode === 'rating'
+          ? undefined
+          : (nextInput.valueUnit ?? category.valueUnit),
       updatedAt: getIsoNow(),
     })
 

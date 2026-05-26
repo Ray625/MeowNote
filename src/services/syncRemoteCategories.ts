@@ -49,6 +49,7 @@ export async function updateRemoteCategory(
       sort_order: category.sortOrder,
       statistics_mode: category.statisticsMode,
       value_label: category.valueLabel ?? null,
+      value_max: category.valueMax ?? null,
       value_unit: category.valueUnit ?? null,
     })
     .eq('id', category.id)

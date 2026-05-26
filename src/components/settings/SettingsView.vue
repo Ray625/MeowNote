@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import {
@@ -87,6 +87,7 @@ const categoryGroup = ref<EventCategoryGroup>('飲食')
 const categoryColorId = ref<CategoryColorId>(DEFAULT_CATEGORY_COLOR_ID)
 const categoryStatisticsMode = ref<CategoryStatisticsMode>('count')
 const categoryValueLabel = ref('')
+const categoryValueMax = ref<string | number>(10)
 const categoryValueUnit = ref('')
 const isQuickAction = ref(true)
 const isCategoryModalOpen = ref(false)
@@ -168,6 +169,14 @@ onMounted(() => {
 
 useBodyScrollLock(isSettingsModalOpen)
 
+watch(categoryStatisticsMode, (statisticsMode) => {
+  if (statisticsMode === 'rating') {
+    categoryValueLabel.value = categoryValueLabel.value.trim() || '評分'
+    categoryValueMax.value = categoryValueMax.value || 10
+    categoryValueUnit.value = ''
+  }
+})
+
 function startCreateCategory(): void {
   editingCategoryId.value = undefined
   categoryName.value = ''
@@ -175,6 +184,7 @@ function startCreateCategory(): void {
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   categoryStatisticsMode.value = 'count'
   categoryValueLabel.value = ''
+  categoryValueMax.value = 10
   categoryValueUnit.value = ''
   isQuickAction.value = true
   isCategoryModalOpen.value = true
@@ -187,6 +197,7 @@ function startEditCategory(category: EventCategory): void {
   categoryColorId.value = getCategoryColorId(category.colorId)
   categoryStatisticsMode.value = category.statisticsMode
   categoryValueLabel.value = category.valueLabel ?? ''
+  categoryValueMax.value = category.valueMax ?? 10
   categoryValueUnit.value = category.valueUnit ?? ''
   isQuickAction.value = category.isQuickAction
   isCategoryModalOpen.value = true
@@ -200,6 +211,7 @@ function closeCategoryModal(): void {
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   categoryStatisticsMode.value = 'count'
   categoryValueLabel.value = ''
+  categoryValueMax.value = 10
   categoryValueUnit.value = ''
   isQuickAction.value = true
 }
@@ -208,6 +220,15 @@ function saveCategory(): void {
   const trimmedName = categoryName.value.trim()
 
   if (!trimmedName) {
+    return
+  }
+
+  const ratingMax = Number(categoryValueMax.value)
+
+  if (
+    categoryStatisticsMode.value === 'rating' &&
+    (!Number.isInteger(ratingMax) || ratingMax < 2)
+  ) {
     return
   }
 
@@ -221,9 +242,12 @@ function saveCategory(): void {
       valueLabel:
         categoryStatisticsMode.value === 'count'
           ? undefined
-          : categoryValueLabel.value.trim() || undefined,
+          : categoryStatisticsMode.value === 'rating'
+            ? categoryValueLabel.value.trim() || '評分'
+            : categoryValueLabel.value.trim() || undefined,
+      valueMax: categoryStatisticsMode.value === 'rating' ? ratingMax : undefined,
       valueUnit:
-        categoryStatisticsMode.value === 'count'
+        categoryStatisticsMode.value === 'count' || categoryStatisticsMode.value === 'rating'
           ? undefined
           : categoryValueUnit.value.trim() || undefined,
     })
@@ -238,9 +262,12 @@ function saveCategory(): void {
       valueLabel:
         categoryStatisticsMode.value === 'count'
           ? undefined
-          : categoryValueLabel.value.trim() || undefined,
+          : categoryStatisticsMode.value === 'rating'
+            ? categoryValueLabel.value.trim() || '評分'
+            : categoryValueLabel.value.trim() || undefined,
+      valueMax: categoryStatisticsMode.value === 'rating' ? ratingMax : undefined,
       valueUnit:
-        categoryStatisticsMode.value === 'count'
+        categoryStatisticsMode.value === 'count' || categoryStatisticsMode.value === 'rating'
           ? undefined
           : categoryValueUnit.value.trim() || undefined,
     })
@@ -259,6 +286,7 @@ function addCategoryTemplate(template: CategoryTemplate): void {
     isArchived: false,
     statisticsMode: template.statisticsMode,
     valueLabel: template.valueLabel,
+    valueMax: template.valueMax,
     valueUnit: template.valueUnit,
   })
 }
@@ -976,8 +1004,8 @@ async function submitImportLocalData(): Promise<void> {
           aria-labelledby="category-template-title"
         >
           <div class="template-picker__header">
-            <h2 id="category-template-title">可加入的追蹤模板</h2>
-            <span>選擇你想追蹤的項目</span>
+            <h2 id="category-template-title">預設追蹤模板</h2>
+            <span>選擇你想追蹤的項目或自行新增</span>
           </div>
 
           <div class="template-picker__list">
@@ -1236,6 +1264,7 @@ async function submitImportLocalData(): Promise<void> {
               <option value="count">只計次數</option>
               <option value="sum">數值加總</option>
               <option value="measurement">量測趨勢</option>
+              <option value="rating">1-10 評分</option>
             </select>
           </label>
 
@@ -1246,11 +1275,26 @@ async function submitImportLocalData(): Promise<void> {
                 v-model="categoryValueLabel"
                 class="field__control"
                 type="text"
-                placeholder="例如：飲水量、體重、劑量"
+                :placeholder="
+                  categoryStatisticsMode === 'rating' ? '評分' : '例如：飲水量、體重、劑量'
+                "
               />
             </label>
 
-            <label class="field">
+            <label v-if="categoryStatisticsMode === 'rating'" class="field">
+              <span class="field__label">評分最大值</span>
+              <input
+                v-model="categoryValueMax"
+                class="field__control"
+                type="number"
+                inputmode="numeric"
+                min="2"
+                step="1"
+                required
+              />
+            </label>
+
+            <label v-if="categoryStatisticsMode !== 'rating'" class="field">
               <span class="field__label">單位</span>
               <input
                 v-model="categoryValueUnit"

@@ -25,8 +25,18 @@ const modalCategory = computed(
 const shouldShowNumericValue = computed(
   () =>
     modalCategory.value?.statisticsMode === 'sum' ||
-    modalCategory.value?.statisticsMode === 'measurement',
+    modalCategory.value?.statisticsMode === 'measurement' ||
+    modalCategory.value?.statisticsMode === 'rating',
 )
+const isRatingValue = computed(() => modalCategory.value?.statisticsMode === 'rating')
+const ratingMax = computed(() => getRatingMax(modalCategory.value))
+const ratingDisplayValue = computed(() => {
+  const value = Number(editingNumericValue.value)
+
+  return Number.isInteger(value) && value >= 1 && value <= ratingMax.value
+    ? value
+    : getDefaultRatingValue(ratingMax.value)
+})
 const isCategoryChangeConfirmOpen = computed(() => Boolean(pendingCategoryId.value))
 const groupedActiveCategories = computed(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
@@ -51,6 +61,16 @@ watch(
   { immediate: true },
 )
 
+watch(
+  modalCategory,
+  (category) => {
+    if (category?.statisticsMode === 'rating' && !String(editingNumericValue.value).trim()) {
+      editingNumericValue.value = getDefaultRatingValue(getRatingMax(category))
+    }
+  },
+  { immediate: true },
+)
+
 function closeEditEvent(): void {
   catTrackerStore.closeEditEvent()
 }
@@ -71,9 +91,23 @@ function saveEditingEvent(): void {
   const hasCategoryChanged = selectedCategoryId.value !== editingEvent.value.categoryId
   const selectedCategory = categoriesById.value.get(selectedCategoryId.value)
   const shouldSaveNumericValue =
-    selectedCategory?.statisticsMode === 'sum' || selectedCategory?.statisticsMode === 'measurement'
+    selectedCategory?.statisticsMode === 'sum' ||
+    selectedCategory?.statisticsMode === 'measurement' ||
+    selectedCategory?.statisticsMode === 'rating'
   const trimmedNumericValue = String(editingNumericValue.value).trim()
-  const numericValue = trimmedNumericValue ? Number(trimmedNumericValue) : undefined
+  const numericValue = trimmedNumericValue
+    ? Number(trimmedNumericValue)
+    : selectedCategory?.statisticsMode === 'rating'
+      ? getDefaultRatingValue(getRatingMax(selectedCategory))
+      : undefined
+  const isValidRatingValue =
+    selectedCategory?.statisticsMode !== 'rating' ||
+    (typeof numericValue === 'number' &&
+      Number.isInteger(numericValue) &&
+      numericValue >= 1 &&
+      numericValue <= getRatingMax(selectedCategory))
+  const shouldPersistNumericValue =
+    shouldSaveNumericValue && Number.isFinite(numericValue) && isValidRatingValue
 
   catTrackerStore.updateEvent(editingEvent.value.id, {
     categoryId: selectedCategoryId.value,
@@ -81,7 +115,7 @@ function saveEditingEvent(): void {
     title: editingTitle.value.trim() || undefined,
     note: editingNote.value.trim() || undefined,
     values:
-      shouldSaveNumericValue && Number.isFinite(numericValue)
+      shouldPersistNumericValue
         ? { amount: numericValue }
         : hasCategoryChanged
           ? {}
@@ -151,6 +185,16 @@ function getNumericValueText(values?: Record<string, unknown>): string {
   const amount = values?.amount
 
   return typeof amount === 'number' && Number.isFinite(amount) ? String(amount) : ''
+}
+
+function getRatingMax(category?: EventCategory): number {
+  return typeof category?.valueMax === 'number' && Number.isInteger(category.valueMax) && category.valueMax >= 2
+    ? category.valueMax
+    : 10
+}
+
+function getDefaultRatingValue(max: number): number {
+  return Math.ceil(max / 2)
 }
 
 function toDateTimeLocalValue(dateTime: string): string {
@@ -253,7 +297,26 @@ function fromDateTimeLocalValue(value: string): string {
             {{ modalCategory?.valueLabel || '數值' }}
             <template v-if="modalCategory?.valueUnit">({{ modalCategory.valueUnit }})</template>
           </span>
+          <div v-if="isRatingValue" class="rating-control">
+            <input
+              v-model.number="editingNumericValue"
+              class="rating-slider"
+              type="range"
+              min="1"
+              :max="ratingMax"
+              step="1"
+            />
+            <div class="rating-ticks" aria-hidden="true">
+              <span v-for="value in ratingMax" :key="value"></span>
+            </div>
+            <div class="rating-scale" aria-hidden="true">
+              <span>1</span>
+              <span>{{ ratingMax }}</span>
+            </div>
+            <span class="rating-current">目前評分：{{ ratingDisplayValue }}</span>
+          </div>
           <input
+            v-else
             v-model="editingNumericValue"
             class="field__control"
             type="number"
@@ -534,6 +597,48 @@ function fromDateTimeLocalValue(value: string): string {
 .field__control--textarea {
   min-height: 120px;
   resize: vertical;
+}
+
+.rating-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--category-color);
+}
+
+.rating-control {
+  --rating-thumb-size: 30px;
+
+  display: grid;
+  gap: 6px;
+}
+
+.rating-ticks {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 calc(var(--rating-thumb-size) / 2);
+}
+
+.rating-ticks span {
+  width: 1px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+}
+
+.rating-scale {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 calc(var(--rating-thumb-size) / 2);
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.rating-current {
+  color: var(--color-text);
+  font-size: 0.9375rem;
+  font-weight: 800;
 }
 
 .event-form__actions {

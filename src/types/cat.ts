@@ -26,6 +26,7 @@ export interface EventCategory {
   statisticsMode: CategoryStatisticsMode
   valueLabel?: string
   valueUnit?: string
+  valueMax?: number
   createdAt: string
   updatedAt: string
 }
@@ -45,7 +46,7 @@ export interface CatEvent {
 
 export type EventCategoryGroup = '飲食' | '健康' | '行為' | '日常' | '醫療'
 
-export type CategoryStatisticsMode = 'count' | 'sum' | 'measurement'
+export type CategoryStatisticsMode = 'count' | 'sum' | 'measurement' | 'rating'
 
 export type CatSex = 'male' | 'female'
 
@@ -103,6 +104,7 @@ export type CreateCategoryInput = Pick<EventCategory, 'name'> &
       | 'statisticsMode'
       | 'templateId'
       | 'valueLabel'
+      | 'valueMax'
       | 'valueUnit'
     >
   >
@@ -120,6 +122,7 @@ export type UpdateCategoryInput = Partial<
     | 'statisticsMode'
     | 'templateId'
     | 'valueLabel'
+    | 'valueMax'
     | 'valueUnit'
   >
 >

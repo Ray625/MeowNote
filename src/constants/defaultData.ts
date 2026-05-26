@@ -120,6 +120,7 @@ export interface CategoryTemplate {
   colorId: CategoryColorId
   statisticsMode: CategoryStatisticsMode
   valueLabel?: string
+  valueMax?: number
   valueUnit?: string
 }
 
@@ -151,8 +152,24 @@ export const CATEGORY_TEMPLATES: readonly CategoryTemplate[] = [
     valueLabel: '飲水量',
     valueUnit: 'ml',
   },
-  { id: 'appetite', name: '食欲變化', group: '健康', colorId: 'orange', statisticsMode: 'count' },
-  { id: 'energy', name: '精神狀況', group: '健康', colorId: 'teal', statisticsMode: 'count' },
+  {
+    id: 'appetite',
+    name: '食慾',
+    group: '健康',
+    colorId: 'orange',
+    statisticsMode: 'rating',
+    valueLabel: '評分',
+    valueMax: 10,
+  },
+  {
+    id: 'energy',
+    name: '精神狀態',
+    group: '健康',
+    colorId: 'teal',
+    statisticsMode: 'rating',
+    valueLabel: '評分',
+    valueMax: 10,
+  },
   { id: 'vomit', name: '嘔吐', group: '健康', colorId: 'red', statisticsMode: 'count' },
   { id: 'diarrhea', name: '腹瀉', group: '健康', colorId: 'pink', statisticsMode: 'count' },
   { id: 'urinary', name: '泌尿異常', group: '健康', colorId: 'amber', statisticsMode: 'count' },
@@ -246,6 +263,7 @@ export function createDefaultCategories(now: string): EventCategory[] {
     sortOrder: index,
     statisticsMode: category.statisticsMode,
     valueLabel: category.valueLabel,
+    valueMax: category.valueMax,
     valueUnit: category.valueUnit,
     createdAt: now,
     updatedAt: now,
@@ -269,6 +287,7 @@ export function createCategoryFromTemplate(
     sortOrder,
     statisticsMode: template.statisticsMode,
     valueLabel: template.valueLabel,
+    valueMax: template.valueMax,
     valueUnit: template.valueUnit,
     createdAt: now,
     updatedAt: now,
@@ -286,7 +305,8 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
         colorId: getCategoryColorId(category.colorId),
         isQuickAction: false,
         isArchived: true,
-        statisticsMode,
+    statisticsMode,
+    valueMax: category.valueMax,
       }
     }
 
@@ -295,6 +315,7 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
       colorId: getCategoryColorId(category.colorId),
       isArchived: category.isArchived ?? false,
       statisticsMode,
+      valueMax: category.valueMax,
     }
   }
 
@@ -314,6 +335,7 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
       defaultCategory.statisticsMode,
     ),
     valueLabel: category.valueLabel ?? defaultCategory.valueLabel,
+    valueMax: category.valueMax ?? defaultCategory.valueMax,
     valueUnit: category.valueUnit ?? defaultCategory.valueUnit,
   }
 }
@@ -383,7 +405,12 @@ export function getCategoryStatisticsMode(
   statisticsMode?: CategoryStatisticsMode | string,
   fallbackStatisticsMode: CategoryStatisticsMode = DEFAULT_CATEGORY_STATISTICS_MODE,
 ): CategoryStatisticsMode {
-  if (statisticsMode === 'count' || statisticsMode === 'sum' || statisticsMode === 'measurement') {
+  if (
+    statisticsMode === 'count' ||
+    statisticsMode === 'sum' ||
+    statisticsMode === 'measurement' ||
+    statisticsMode === 'rating'
+  ) {
     return statisticsMode
   }
 

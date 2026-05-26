@@ -38,6 +38,7 @@ export interface SupabaseEventCategoryRow {
   sort_order: number
   statistics_mode: string
   value_label: string | null
+  value_max: number | null
   value_unit: string | null
   created_at: string
   updated_at: string
@@ -117,6 +118,7 @@ export function toInsertEventCategoryRow(
     sort_order: category.sortOrder,
     statistics_mode: category.statisticsMode,
     value_label: category.valueLabel ?? null,
+    value_max: category.valueMax ?? null,
     value_unit: category.valueUnit ?? null,
   }
 }
@@ -135,6 +137,7 @@ export function fromEventCategoryRow(row: SupabaseEventCategoryRow): EventCatego
     sortOrder: row.sort_order,
     statisticsMode: isCategoryStatisticsMode(row.statistics_mode) ? row.statistics_mode : 'count',
     valueLabel: row.value_label ?? undefined,
+    valueMax: row.value_max ?? undefined,
     valueUnit: row.value_unit ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -223,7 +226,7 @@ function isCategoryColorId(value: string | null): value is CategoryColorId {
 }
 
 function isCategoryStatisticsMode(value: string | null): value is CategoryStatisticsMode {
-  return value === 'count' || value === 'sum' || value === 'measurement'
+  return value === 'count' || value === 'sum' || value === 'measurement' || value === 'rating'
 }
 
 function isEventSeverity(value: number | null): value is NonNullable<CatEvent['severity']> {
