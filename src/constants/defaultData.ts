@@ -156,8 +156,6 @@ export const CATEGORY_TEMPLATES: readonly CategoryTemplate[] = [
   { id: 'vomit', name: '嘔吐', group: '健康', colorId: 'red', statisticsMode: 'count' },
   { id: 'diarrhea', name: '腹瀉', group: '健康', colorId: 'pink', statisticsMode: 'count' },
   { id: 'urinary', name: '泌尿異常', group: '健康', colorId: 'amber', statisticsMode: 'count' },
-  { id: 'attack', name: '攻擊', group: '行為', colorId: 'purple', statisticsMode: 'count' },
-  { id: 'vocalization', name: '嚎叫', group: '行為', colorId: 'blue', statisticsMode: 'count' },
   {
     id: 'inappropriate-elimination',
     name: '不當排洩',
@@ -165,7 +163,6 @@ export const CATEGORY_TEMPLATES: readonly CategoryTemplate[] = [
     colorId: 'amber',
     statisticsMode: 'count',
   },
-  { id: 'hiding', name: '躲藏', group: '行為', colorId: 'teal', statisticsMode: 'count' },
   {
     id: 'night-activity',
     name: '半夜不睡',

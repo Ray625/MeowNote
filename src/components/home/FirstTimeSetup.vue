@@ -16,7 +16,7 @@ type SetupStep = 'profile' | 'templates'
 
 const catName = ref('')
 const catAvatarId = ref<CatAvatarId>(DEFAULT_CAT_AVATAR_ID)
-const selectedTemplateIds = ref<string[]>(['vomit', 'diarrhea', 'water', 'medication', 'vet-visit'])
+const selectedTemplateIds = ref<string[]>(['water', 'medication'])
 const setupStep = ref<SetupStep>('profile')
 
 const groupedTemplates = CATEGORY_GROUP_ORDER.map((group) => ({
@@ -26,6 +26,15 @@ const groupedTemplates = CATEGORY_GROUP_ORDER.map((group) => ({
 
 function selectCatAvatar(avatarId: CatAvatarId): void {
   catAvatarId.value = avatarId
+}
+
+function toggleTemplate(templateId: string): void {
+  if (selectedTemplateIds.value.includes(templateId)) {
+    selectedTemplateIds.value = selectedTemplateIds.value.filter((id) => id !== templateId)
+    return
+  }
+
+  selectedTemplateIds.value = [...selectedTemplateIds.value, templateId]
 }
 
 function goToTemplateStep(): void {
@@ -73,7 +82,10 @@ function startTracking(): void {
 
 <template>
   <section class="first-time-setup" aria-labelledby="first-time-setup-title">
-    <form class="setup-form" @submit.prevent="setupStep === 'profile' ? goToTemplateStep() : startTracking()">
+    <form
+      class="setup-form"
+      @submit.prevent="setupStep === 'profile' ? goToTemplateStep() : startTracking()"
+    >
       <div class="setup-preview" aria-hidden="true">
         <img
           :src="getCatAvatarOption(catAvatarId).image"
@@ -137,16 +149,29 @@ function startTracking(): void {
           <div class="template-groups">
             <section v-for="group in groupedTemplates" :key="group.group" class="template-group">
               <h2>{{ group.group }}</h2>
-              <label v-for="template in group.templates" :key="template.id" class="template-option">
-                <input v-model="selectedTemplateIds" type="checkbox" :value="template.id" />
-                <span>{{ template.name }}</span>
-              </label>
+              <div class="template-options">
+                <button
+                  v-for="template in group.templates"
+                  :key="template.id"
+                  class="template-option"
+                  :class="{ 'template-option--selected': selectedTemplateIds.includes(template.id) }"
+                  type="button"
+                  :aria-pressed="selectedTemplateIds.includes(template.id)"
+                  @click="toggleTemplate(template.id)"
+                >
+                  {{ template.name }}
+                </button>
+              </div>
             </section>
           </div>
         </div>
 
         <div class="setup-actions">
-          <button class="ui-button ui-button--secondary setup-submit" type="button" @click="goToProfileStep">
+          <button
+            class="ui-button ui-button--secondary setup-submit"
+            type="button"
+            @click="goToProfileStep"
+          >
             上一步
           </button>
           <button class="ui-button ui-button--primary setup-submit" type="submit">
@@ -254,11 +279,36 @@ function startTracking(): void {
   font-size: 0.875rem;
 }
 
-.template-option {
+.template-options {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.template-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
   font-weight: 700;
+}
+
+.template-option:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.template-option--selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-background);
 }
 
 .cat-avatar-option {
