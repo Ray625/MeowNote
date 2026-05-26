@@ -202,7 +202,8 @@ function isCatAvatarId(value: string | null): value is CatAvatarId {
     value === 'siamese' ||
     value === 'cream' ||
     value === 'blue' ||
-    value === 'mackerel'
+    value === 'mackerel' ||
+    value === 'abyssinian'
   )
 }
 

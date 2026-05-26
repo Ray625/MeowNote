@@ -66,6 +66,7 @@ export type CatAvatarId =
   | 'cream'
   | 'blue'
   | 'mackerel'
+  | 'abyssinian'
 
 export type CategoryColorId =
   | 'red'

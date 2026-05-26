@@ -1,3 +1,4 @@
+import catAbyssinianImage from '@/assets/cat-avatars/cat-abyssinian.png'
 import catBengalImage from '@/assets/cat-avatars/cat-bengal.png'
 import catBlackImage from '@/assets/cat-avatars/cat-black.png'
 import catBlueImage from '@/assets/cat-avatars/cat-blue.png'
@@ -28,21 +29,22 @@ export const DEFAULT_CAT_ID = 'default-cat'
 export const CATEGORY_GROUP_ORDER: EventCategoryGroup[] = ['飲食', '健康', '行為', '日常', '醫療']
 
 export const CAT_AVATAR_OPTIONS = [
-  { id: 'orange', label: '橘', image: catOrangeImage },
-  { id: 'tabby', label: '虎斑', image: catTabbyImage },
-  { id: 'calico', label: '三花', image: catCalicoImage },
-  { id: 'tortoiseshell', label: '玳瑁', image: catTortoiseshellImage },
   { id: 'black', label: '黑', image: catBlackImage },
   { id: 'white', label: '白', image: catWhiteImage },
   { id: 'brown', label: '棕白', image: catBrownImage },
-  { id: 'gray', label: '銀灰', image: catGrayImage },
   { id: 'tuxedo', label: '賓士', image: catTuxedoImage },
+  { id: 'gray', label: '銀灰', image: catGrayImage },
+  { id: 'orange', label: '橘', image: catOrangeImage },
+  { id: 'calico', label: '三花', image: catCalicoImage },
+  { id: 'tortoiseshell', label: '玳瑁', image: catTortoiseshellImage },
+  { id: 'tabby', label: '虎斑', image: catTabbyImage },
+  { id: 'abyssinian', label: '赤棕', image: catAbyssinianImage },
+  { id: 'mackerel', label: '銀虎斑', image: catMackerelImage },
+  { id: 'siamese', label: '重點色', image: catSiameseImage },
+  { id: 'cream', label: '奶白', image: catCreamImage },
   { id: 'bengal', label: '豹貓', image: catBengalImage },
   { id: 'ragdoll', label: '布偶', image: catRagdollImage },
-  { id: 'siamese', label: '暹羅', image: catSiameseImage },
-  { id: 'cream', label: '奶白', image: catCreamImage },
   { id: 'blue', label: '藍貓', image: catBlueImage },
-  { id: 'mackerel', label: '銀虎斑', image: catMackerelImage },
 ] as const satisfies ReadonlyArray<{
   id: CatAvatarId
   label: string
@@ -305,8 +307,8 @@ export function normalizeDefaultCategory(category: EventCategory): EventCategory
         colorId: getCategoryColorId(category.colorId),
         isQuickAction: false,
         isArchived: true,
-    statisticsMode,
-    valueMax: category.valueMax,
+        statisticsMode,
+        valueMax: category.valueMax,
       }
     }
 
