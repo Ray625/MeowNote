@@ -56,6 +56,18 @@ export interface MeasurementStats {
   latestOccurredAt: string
 }
 
+export interface RatingStats {
+  category: EventCategory
+  mode: 'rating'
+  interval: 'day' | 'week'
+  latestValue: number
+  maxValue: number
+  minValue: number
+  sampleCount: number
+  points: MeasurementPoint[]
+  latestOccurredAt: string
+}
+
 export interface CountTrendStatsInput {
   categories: EventCategory[]
   events: CatEvent[]
@@ -75,6 +87,15 @@ export interface SumDailyStatsInput {
 }
 
 export interface MeasurementStatsInput {
+  categories: EventCategory[]
+  events: CatEvent[]
+  catId: string
+  categoryId: string
+  interval?: 'day' | 'week'
+  referenceDate?: Date
+}
+
+export interface RatingStatsInput {
   categories: EventCategory[]
   events: CatEvent[]
   catId: string
@@ -315,6 +336,70 @@ export function getMeasurementStats({
   return {
     category,
     mode: 'measurement',
+    interval,
+    latestValue: latest.value,
+    maxValue: Math.max(...values),
+    minValue: Math.min(...values),
+    sampleCount: scopedEvents.length,
+    points,
+    latestOccurredAt: latest.event.occurredAt,
+  }
+}
+
+export function getRatingStats({
+  categories,
+  events,
+  catId,
+  categoryId,
+  interval = 'week',
+  referenceDate = new Date(),
+}: RatingStatsInput): RatingStats | undefined {
+  if (!catId || !categoryId) {
+    return undefined
+  }
+
+  const category = categories.find((item) => item.id === categoryId && item.statisticsMode === 'rating')
+
+  if (!category) {
+    return undefined
+  }
+
+  const anchorStart = startOfDay(referenceDate)
+  const rangeStart = interval === 'day' ? anchorStart : addDays(anchorStart, -6)
+  const rangeEnd = addDays(anchorStart, 1)
+  const scopedEvents = events
+    .filter((event) => event.catId === catId && event.categoryId === categoryId)
+    .map((event) => ({ event, value: getNumericAmount(event.values) }))
+    .filter((item): item is { event: CatEvent; value: number } => {
+      if (typeof item.value !== 'number') {
+        return false
+      }
+
+      const occurredAt = new Date(item.event.occurredAt)
+
+      return occurredAt >= rangeStart && occurredAt < rangeEnd
+    })
+    .sort((a, b) => a.event.occurredAt.localeCompare(b.event.occurredAt))
+
+  if (scopedEvents.length === 0) {
+    return undefined
+  }
+
+  const values = scopedEvents.map((item) => item.value)
+  const latest = scopedEvents[scopedEvents.length - 1]!
+  const points =
+    interval === 'day'
+      ? scopedEvents.map(({ event, value }) => ({
+          key: event.id,
+          label: formatTimeLabel(new Date(event.occurredAt)),
+          occurredAt: event.occurredAt,
+          value,
+        }))
+      : createMeasurementWeekPoints(rangeStart, scopedEvents)
+
+  return {
+    category,
+    mode: 'rating',
     interval,
     latestValue: latest.value,
     maxValue: Math.max(...values),

@@ -5,14 +5,16 @@ import { getCategoryColorValue } from '@/constants/defaultData'
 import {
   getCountTrendStats,
   getMeasurementStats,
+  getRatingStats,
   getSumDailyStats,
   type CountCategoryStats,
   type MeasurementStats,
+  type RatingStats,
   type SumDailyStats,
 } from '@/services/catTrackerStats'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
-type StatsMode = 'count' | 'sum' | 'measurement'
+type StatsMode = 'count' | 'sum' | 'measurement' | 'rating'
 type CountInterval = 'day' | 'week' | 'month'
 type MeasurementInterval = 'day' | 'week'
 
@@ -21,9 +23,11 @@ const { categories, events, selectedCat, selectedCatId } = storeToRefs(catTracke
 const statsMode = ref<StatsMode>('count')
 const countInterval = ref<CountInterval>('week')
 const measurementInterval = ref<MeasurementInterval>('week')
+const ratingInterval = ref<MeasurementInterval>('week')
 const selectedCountCategoryId = ref('')
 const selectedSumCategoryId = ref('')
 const selectedMeasurementCategoryId = ref('')
+const selectedRatingCategoryId = ref('')
 const statsReferenceDate = ref(new Date())
 
 const periodCount = computed(() =>
@@ -43,6 +47,10 @@ const currentRange = computed(() => {
     return getStatsRange(statsReferenceDate.value, 'day', 1)
   }
 
+  if (statsMode.value === 'rating' && ratingInterval.value === 'day') {
+    return getStatsRange(statsReferenceDate.value, 'day', 1)
+  }
+
   return getStatsRange(statsReferenceDate.value, 'day', 7)
 })
 const rangeTitle = computed(
@@ -57,7 +65,7 @@ const modeTitle = computed(() => {
     return '每日總量'
   }
 
-  return '量測趨勢'
+  return statsMode.value === 'measurement' ? '量測趨勢' : '評分趨勢'
 })
 const categoryCountText = computed(() => {
   if (statsMode.value === 'count') {
@@ -68,7 +76,9 @@ const categoryCountText = computed(() => {
     return `${sumCategories.value.length} 個分類`
   }
 
-  return `${measurementCategories.value.length} 個分類`
+  return statsMode.value === 'measurement'
+    ? `${measurementCategories.value.length} 個分類`
+    : `${ratingCategories.value.length} 個分類`
 })
 
 const countStats = computed(() =>
@@ -111,6 +121,21 @@ const selectedMeasurementStats = computed(() =>
     catId: selectedCatId.value,
     categoryId: selectedMeasurementCategoryId.value,
     interval: measurementInterval.value,
+    referenceDate: statsReferenceDate.value,
+  }),
+)
+const ratingCategories = computed(() =>
+  categories.value
+    .filter((category) => category.statisticsMode === 'rating' && !category.isArchived)
+    .sort((a, b) => a.sortOrder - b.sortOrder),
+)
+const selectedRatingStats = computed(() =>
+  getRatingStats({
+    categories: categories.value,
+    events: events.value,
+    catId: selectedCatId.value,
+    categoryId: selectedRatingCategoryId.value,
+    interval: ratingInterval.value,
     referenceDate: statsReferenceDate.value,
   }),
 )
@@ -160,6 +185,21 @@ watch(
   { immediate: true },
 )
 
+watch(
+  ratingCategories,
+  (categoryList) => {
+    if (categoryList.length === 0) {
+      selectedRatingCategoryId.value = ''
+      return
+    }
+
+    if (!categoryList.some((category) => category.id === selectedRatingCategoryId.value)) {
+      selectedRatingCategoryId.value = categoryList[0]?.id ?? ''
+    }
+  },
+  { immediate: true },
+)
+
 function getStatsStyle(stats: CountCategoryStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
@@ -178,7 +218,19 @@ function getMeasurementStatsStyle(stats: MeasurementStats): Record<string, strin
   }
 }
 
+function getRatingStatsStyle(stats: RatingStats): Record<string, string> {
+  return {
+    '--category-color': getCategoryColorValue(stats.category),
+  }
+}
+
 function getMeasurementChartStyle(stats: MeasurementStats): Record<string, string> {
+  return {
+    '--measurement-point-count': String(Math.max(stats.points.length, 1)),
+  }
+}
+
+function getRatingChartStyle(stats: RatingStats): Record<string, string> {
   return {
     '--measurement-point-count': String(Math.max(stats.points.length, 1)),
   }
@@ -245,6 +297,10 @@ function getMeasurementText(value: number, stats: MeasurementStats): string {
   return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
 }
 
+function getRatingText(value: number, stats: RatingStats): string {
+  return `${formatAmount(value)} / ${stats.category.valueMax ?? 10}`
+}
+
 function getMeasurementPointStyle(
   value: number | undefined,
   stats: MeasurementStats,
@@ -259,12 +315,33 @@ function getMeasurementPointStyle(
   return { '--measurement-point-offset': `${offset}%` }
 }
 
+function getRatingPointStyle(value: number | undefined, stats: RatingStats): Record<string, string> {
+  if (typeof value !== 'number') {
+    return { '--measurement-point-offset': '50%' }
+  }
+
+  const maxValue = stats.category.valueMax ?? 10
+  const ratio = Math.max(0, Math.min(value / maxValue, 1))
+  const offset = 100 - Math.round(ratio * 100)
+
+  return { '--measurement-point-offset': `${offset}%` }
+}
+
 function showPreviousRange(): void {
   if (statsMode.value === 'measurement') {
     statsReferenceDate.value = shiftDate(
       statsReferenceDate.value,
       'day',
       measurementInterval.value === 'day' ? -1 : -7,
+    )
+    return
+  }
+
+  if (statsMode.value === 'rating') {
+    statsReferenceDate.value = shiftDate(
+      statsReferenceDate.value,
+      'day',
+      ratingInterval.value === 'day' ? -1 : -7,
     )
     return
   }
@@ -281,6 +358,15 @@ function showNextRange(): void {
       statsReferenceDate.value,
       'day',
       measurementInterval.value === 'day' ? 1 : 7,
+    )
+    return
+  }
+
+  if (statsMode.value === 'rating') {
+    statsReferenceDate.value = shiftDate(
+      statsReferenceDate.value,
+      'day',
+      ratingInterval.value === 'day' ? 1 : 7,
     )
     return
   }
@@ -398,6 +484,16 @@ function formatRangeDate(date: Date): string {
         >
           測量
         </button>
+        <button
+          class="mode-tab"
+          :class="{ 'mode-tab--active': statsMode === 'rating' }"
+          type="button"
+          role="tab"
+          :aria-selected="statsMode === 'rating'"
+          @click="statsMode = 'rating'"
+        >
+          評分
+        </button>
       </div>
 
       <div v-if="statsMode === 'count'" class="stats-controls">
@@ -455,7 +551,7 @@ function formatRangeDate(date: Date): string {
         </label>
       </div>
 
-      <div v-else class="stats-controls">
+      <div v-else-if="statsMode === 'measurement'" class="stats-controls">
         <label class="stats-field">
           <span>紀錄項目</span>
           <select v-model="selectedMeasurementCategoryId">
@@ -491,6 +587,40 @@ function formatRangeDate(date: Date): string {
             role="tab"
             :aria-selected="measurementInterval === 'week'"
             @click="measurementInterval = 'week'"
+          >
+            週
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="stats-controls">
+        <label class="stats-field">
+          <span>紀錄項目</span>
+          <select v-model="selectedRatingCategoryId">
+            <option v-for="category in ratingCategories" :key="category.id" :value="category.id">
+              {{ category.name }}
+            </option>
+          </select>
+        </label>
+
+        <div class="interval-tabs interval-tabs--measurement" role="tablist" aria-label="評分統計區間">
+          <button
+            class="interval-tab"
+            :class="{ 'interval-tab--active': ratingInterval === 'day' }"
+            type="button"
+            role="tab"
+            :aria-selected="ratingInterval === 'day'"
+            @click="ratingInterval = 'day'"
+          >
+            日
+          </button>
+          <button
+            class="interval-tab"
+            :class="{ 'interval-tab--active': ratingInterval === 'week' }"
+            type="button"
+            role="tab"
+            :aria-selected="ratingInterval === 'week'"
+            @click="ratingInterval = 'week'"
           >
             週
           </button>
@@ -670,13 +800,71 @@ function formatRangeDate(date: Date): string {
         </article>
       </div>
 
+      <div v-else-if="statsMode === 'rating' && selectedRatingStats" class="count-stats-list">
+        <article
+          :key="selectedRatingStats.category.id"
+          class="count-card"
+          :style="getRatingStatsStyle(selectedRatingStats)"
+        >
+          <div class="count-card__summary">
+            <div>
+              <h3>{{ selectedRatingStats.category.name }}</h3>
+              <p>最近評分 {{ getRatingText(selectedRatingStats.latestValue, selectedRatingStats) }}</p>
+            </div>
+          </div>
+
+          <div class="stats-metrics">
+            <div>
+              <span>最高</span>
+              <strong>{{ getRatingText(selectedRatingStats.maxValue, selectedRatingStats) }}</strong>
+            </div>
+            <div>
+              <span>最低</span>
+              <strong>{{ getRatingText(selectedRatingStats.minValue, selectedRatingStats) }}</strong>
+            </div>
+            <div>
+              <span>筆數</span>
+              <strong>{{ selectedRatingStats.sampleCount }}</strong>
+            </div>
+          </div>
+
+          <div
+            class="measurement-chart"
+            aria-label="評分趨勢"
+            :style="getRatingChartStyle(selectedRatingStats)"
+          >
+            <div v-for="point in selectedRatingStats.points" :key="point.key" class="measurement-point">
+              <div class="measurement-point__track">
+                <span
+                  v-if="typeof point.value === 'number'"
+                  class="measurement-point__dot"
+                  :style="getRatingPointStyle(point.value, selectedRatingStats)"
+                  :title="`${point.label}: ${getRatingText(point.value, selectedRatingStats)}`"
+                ></span>
+              </div>
+              <small>
+                {{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}
+              </small>
+              <em>{{ point.label }}</em>
+            </div>
+          </div>
+
+          <div class="count-card__meta">
+            <span>最近 {{ formatLatestDate(selectedRatingStats.latestOccurredAt) }}</span>
+            <span>{{ ratingInterval === 'day' ? '單日多筆' : '每日最後一筆' }}</span>
+          </div>
+        </article>
+      </div>
+
       <p v-else class="empty-state">
         {{
           statsMode === 'count'
             ? '最近還沒有可統計的次數紀錄。'
             : statsMode === 'sum'
               ? '最近還沒有可統計的加總紀錄。'
-              : '最近還沒有可統計的測量紀錄。'
+              : statsMode === 'measurement'
+                ? '最近還沒有可統計的測量紀錄。'
+                : '最近還沒有可統計的評分紀錄。'
         }}
       </p>
     </section>
@@ -753,7 +941,7 @@ function formatRangeDate(date: Date): string {
 
 .mode-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 8px;
