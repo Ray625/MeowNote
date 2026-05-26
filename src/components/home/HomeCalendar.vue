@@ -342,6 +342,13 @@ function selectMonth(monthIndex: number): void {
   color: var(--color-text);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .calendar-mode-tab:not(.calendar-mode-tab--active):hover {
+    background: var(--color-primary-light);
+    color: var(--color-text);
+  }
+}
+
 .cat-switcher {
   position: relative;
   justify-self: start;

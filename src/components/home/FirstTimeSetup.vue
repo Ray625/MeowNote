@@ -300,15 +300,18 @@ function startTracking(): void {
   font-weight: 700;
 }
 
-.template-option:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
-}
-
 .template-option--selected {
   border-color: var(--color-primary);
   background: var(--color-primary);
   color: var(--color-background);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .template-option:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+    color: var(--color-text);
+  }
 }
 
 .cat-avatar-option {
