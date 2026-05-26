@@ -1228,7 +1228,7 @@ async function submitImportLocalData(): Promise<void> {
             </select>
           </label>
 
-          <label class="field">
+          <div class="field">
             <span class="field__label">顏色</span>
             <div class="color-palette" role="radiogroup" aria-label="分類顏色">
               <button
@@ -1251,7 +1251,7 @@ async function submitImportLocalData(): Promise<void> {
                 <span class="color-swatch__dot" aria-hidden="true"></span>
               </button>
             </div>
-          </label>
+          </div>
 
           <label class="toggle-field">
             <input v-model="isQuickAction" type="checkbox" />
