@@ -1261,10 +1261,10 @@ async function submitImportLocalData(): Promise<void> {
           <label class="field">
             <span class="field__label">統計方式</span>
             <select v-model="categoryStatisticsMode" class="field__control">
-              <option value="count">只計次數</option>
-              <option value="sum">數值加總</option>
-              <option value="measurement">量測趨勢</option>
-              <option value="rating">1-10 評分</option>
+              <option value="count">發生次數</option>
+              <option value="sum">累積數量</option>
+              <option value="measurement">量測紀錄</option>
+              <option value="rating">狀態評分</option>
             </select>
           </label>
 

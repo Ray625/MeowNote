@@ -47,7 +47,7 @@ export interface MeasurementPoint {
 export interface MeasurementStats {
   category: EventCategory
   mode: 'measurement'
-  interval: 'day' | 'week'
+  interval: 'day' | 'week' | 'month'
   latestValue: number
   maxValue: number
   minValue: number
@@ -59,7 +59,7 @@ export interface MeasurementStats {
 export interface RatingStats {
   category: EventCategory
   mode: 'rating'
-  interval: 'day' | 'week'
+  interval: 'day' | 'week' | 'month'
   latestValue: number
   maxValue: number
   minValue: number
@@ -91,7 +91,7 @@ export interface MeasurementStatsInput {
   events: CatEvent[]
   catId: string
   categoryId: string
-  interval?: 'day' | 'week'
+  interval?: 'day' | 'week' | 'month'
   referenceDate?: Date
 }
 
@@ -100,7 +100,7 @@ export interface RatingStatsInput {
   events: CatEvent[]
   catId: string
   categoryId: string
-  interval?: 'day' | 'week'
+  interval?: 'day' | 'week' | 'month'
   referenceDate?: Date
 }
 
@@ -301,7 +301,8 @@ export function getMeasurementStats({
   }
 
   const anchorStart = startOfDay(referenceDate)
-  const rangeStart = interval === 'day' ? anchorStart : addDays(anchorStart, -6)
+  const rangeStart =
+    interval === 'day' ? anchorStart : interval === 'week' ? addDays(anchorStart, -6) : addDays(anchorStart, -29)
   const rangeEnd = addDays(anchorStart, 1)
   const scopedEvents = events
     .filter((event) => event.catId === catId && event.categoryId === categoryId)
@@ -331,7 +332,9 @@ export function getMeasurementStats({
           occurredAt: event.occurredAt,
           value,
         }))
-      : createMeasurementWeekPoints(rangeStart, scopedEvents)
+      : interval === 'week'
+        ? createMeasurementWeekPoints(rangeStart, scopedEvents)
+        : createMeasurementPeriodPoints(scopedEvents)
 
   return {
     category,
@@ -358,14 +361,17 @@ export function getRatingStats({
     return undefined
   }
 
-  const category = categories.find((item) => item.id === categoryId && item.statisticsMode === 'rating')
+  const category = categories.find(
+    (item) => item.id === categoryId && item.statisticsMode === 'rating',
+  )
 
   if (!category) {
     return undefined
   }
 
   const anchorStart = startOfDay(referenceDate)
-  const rangeStart = interval === 'day' ? anchorStart : addDays(anchorStart, -6)
+  const rangeStart =
+    interval === 'day' ? anchorStart : interval === 'week' ? addDays(anchorStart, -6) : addDays(anchorStart, -29)
   const rangeEnd = addDays(anchorStart, 1)
   const scopedEvents = events
     .filter((event) => event.catId === catId && event.categoryId === categoryId)
@@ -395,7 +401,9 @@ export function getRatingStats({
           occurredAt: event.occurredAt,
           value,
         }))
-      : createMeasurementWeekPoints(rangeStart, scopedEvents)
+      : interval === 'week'
+        ? createMeasurementWeekPoints(rangeStart, scopedEvents)
+        : createMeasurementPeriodPoints(scopedEvents)
 
   return {
     category,
@@ -421,6 +429,27 @@ function createSumDayBuckets(start: Date, days: number): SumDailyBucket[] {
       start: bucketStart,
       end: bucketEnd,
       total: 0,
+    }
+  })
+}
+
+function createMeasurementPeriodPoints(
+  scopedEvents: Array<{ event: CatEvent; value: number }>,
+): MeasurementPoint[] {
+  const latestByDate = new Map<string, { event: CatEvent; value: number }>()
+
+  for (const item of scopedEvents) {
+    latestByDate.set(toDateKey(new Date(item.event.occurredAt)), item)
+  }
+
+  return Array.from(latestByDate.entries()).map(([key, latest]) => {
+    const date = new Date(latest.event.occurredAt)
+
+    return {
+      key,
+      label: formatDayLabel(date),
+      occurredAt: latest.event.occurredAt,
+      value: latest.value,
     }
   })
 }

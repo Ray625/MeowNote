@@ -16,14 +16,15 @@ import { useCatTrackerStore } from '@/stores/catTracker'
 
 type StatsMode = 'count' | 'sum' | 'measurement' | 'rating'
 type CountInterval = 'day' | 'week' | 'month'
-type MeasurementInterval = 'day' | 'week'
+type ValueTrendInterval = 'day' | 'week' | 'month'
+type MeasurementInterval = 'week' | 'month'
 
 const catTrackerStore = useCatTrackerStore()
 const { categories, events, selectedCat, selectedCatId } = storeToRefs(catTrackerStore)
 const statsMode = ref<StatsMode>('count')
 const countInterval = ref<CountInterval>('week')
 const measurementInterval = ref<MeasurementInterval>('week')
-const ratingInterval = ref<MeasurementInterval>('week')
+const ratingInterval = ref<ValueTrendInterval>('week')
 const selectedCountCategoryId = ref('')
 const selectedSumCategoryId = ref('')
 const selectedMeasurementCategoryId = ref('')
@@ -43,12 +44,20 @@ const currentRange = computed(() => {
     return getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value)
   }
 
-  if (statsMode.value === 'measurement' && measurementInterval.value === 'day') {
+  if (statsMode.value === 'rating' && ratingInterval.value === 'day') {
     return getStatsRange(statsReferenceDate.value, 'day', 1)
   }
 
-  if (statsMode.value === 'rating' && ratingInterval.value === 'day') {
-    return getStatsRange(statsReferenceDate.value, 'day', 1)
+  if (statsMode.value === 'measurement') {
+    return getStatsRange(
+      statsReferenceDate.value,
+      'day',
+      measurementInterval.value === 'month' ? 30 : 7,
+    )
+  }
+
+  if (statsMode.value === 'rating') {
+    return getStatsRange(statsReferenceDate.value, 'day', ratingInterval.value === 'month' ? 30 : 7)
   }
 
   return getStatsRange(statsReferenceDate.value, 'day', 7)
@@ -58,14 +67,14 @@ const rangeTitle = computed(
 )
 const modeTitle = computed(() => {
   if (statsMode.value === 'count') {
-    return '次數趨勢'
+    return '發生次數'
   }
 
   if (statsMode.value === 'sum') {
-    return '每日總量'
+    return '累積數量'
   }
 
-  return statsMode.value === 'measurement' ? '量測趨勢' : '評分趨勢'
+  return statsMode.value === 'measurement' ? '量測紀錄' : '狀態評分'
 })
 const categoryCountText = computed(() => {
   if (statsMode.value === 'count') {
@@ -293,6 +302,12 @@ function getAmountText(value: number, stats: SumDailyStats): string {
   return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
 }
 
+function getDailyAverageText(stats: SumDailyStats): string {
+  const recordedDays = stats.buckets.filter((bucket) => bucket.total > 0).length
+
+  return getAmountText(stats.rangeTotal / Math.max(recordedDays, 1), stats)
+}
+
 function getMeasurementText(value: number, stats: MeasurementStats): string {
   return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
 }
@@ -301,30 +316,113 @@ function getRatingText(value: number, stats: RatingStats): string {
   return `${formatAmount(value)} / ${stats.category.valueMax ?? 10}`
 }
 
-function getMeasurementPointStyle(
-  value: number | undefined,
-  stats: MeasurementStats,
-): Record<string, string> {
-  if (typeof value !== 'number' || stats.maxValue === stats.minValue) {
-    return { '--measurement-point-offset': '50%' }
-  }
+function getMeasurementLinePoints(stats: MeasurementStats): string {
+  return stats.points
+    .map((point, index) => {
+      if (typeof point.value !== 'number') {
+        return ''
+      }
 
-  const ratio = (value - stats.minValue) / (stats.maxValue - stats.minValue)
-  const offset = 100 - Math.round(ratio * 100)
+      const position = getTrendPointPosition(
+        index,
+        stats.points.length,
+        point.value,
+        stats.minValue,
+        stats.maxValue,
+      )
 
-  return { '--measurement-point-offset': `${offset}%` }
+      return `${position.x},${position.y}`
+    })
+    .filter(Boolean)
+    .join(' ')
 }
 
-function getRatingPointStyle(value: number | undefined, stats: RatingStats): Record<string, string> {
-  if (typeof value !== 'number') {
-    return { '--measurement-point-offset': '50%' }
+function getRatingLinePoints(stats: RatingStats): string {
+  return stats.points
+    .map((point, index) => {
+      if (typeof point.value !== 'number') {
+        return ''
+      }
+
+      const position = getTrendPointPosition(
+        index,
+        stats.points.length,
+        point.value,
+        0,
+        stats.category.valueMax ?? 10,
+      )
+
+      return `${position.x},${position.y}`
+    })
+    .filter(Boolean)
+    .join(' ')
+}
+
+function getMeasurementPointPosition(
+  index: number,
+  pointCount: number,
+  value: number,
+  stats: MeasurementStats,
+): { x: number; y: number } {
+  return getTrendPointPosition(index, pointCount, value, stats.minValue, stats.maxValue)
+}
+
+function getMeasurementDotStyle(
+  index: number,
+  pointCount: number,
+  value: number,
+  stats: MeasurementStats,
+): Record<string, string> {
+  const position = getMeasurementPointPosition(index, pointCount, value, stats)
+
+  return {
+    left: `${position.x}%`,
+    top: `${position.y}%`,
   }
+}
 
-  const maxValue = stats.category.valueMax ?? 10
-  const ratio = Math.max(0, Math.min(value / maxValue, 1))
-  const offset = 100 - Math.round(ratio * 100)
+function getRatingPointPosition(
+  index: number,
+  pointCount: number,
+  value: number,
+  stats: RatingStats,
+): { x: number; y: number } {
+  return getTrendPointPosition(index, pointCount, value, 0, stats.category.valueMax ?? 10)
+}
 
-  return { '--measurement-point-offset': `${offset}%` }
+function getRatingDotStyle(
+  index: number,
+  pointCount: number,
+  value: number,
+  stats: RatingStats,
+): Record<string, string> {
+  const position = getRatingPointPosition(index, pointCount, value, stats)
+
+  return {
+    left: `${position.x}%`,
+    top: `${position.y}%`,
+  }
+}
+
+function getTrendPointPosition(
+  index: number,
+  pointCount: number,
+  value: number,
+  minValue: number,
+  maxValue: number,
+): { x: number; y: number } {
+  const x = pointCount <= 1 ? 50 : 8 + (index / (pointCount - 1)) * 84
+  const ratio = maxValue === minValue ? 0.5 : (value - minValue) / (maxValue - minValue)
+  const y = 92 - Math.max(0, Math.min(ratio, 1)) * 84
+
+  return {
+    x: Number(x.toFixed(2)),
+    y: Number(y.toFixed(2)),
+  }
+}
+
+function getValueTrendShift(interval: ValueTrendInterval): number {
+  return interval === 'day' ? 1 : interval === 'week' ? 7 : 30
 }
 
 function showPreviousRange(): void {
@@ -332,7 +430,7 @@ function showPreviousRange(): void {
     statsReferenceDate.value = shiftDate(
       statsReferenceDate.value,
       'day',
-      measurementInterval.value === 'day' ? -1 : -7,
+      -getValueTrendShift(measurementInterval.value),
     )
     return
   }
@@ -341,7 +439,7 @@ function showPreviousRange(): void {
     statsReferenceDate.value = shiftDate(
       statsReferenceDate.value,
       'day',
-      ratingInterval.value === 'day' ? -1 : -7,
+      -getValueTrendShift(ratingInterval.value),
     )
     return
   }
@@ -357,7 +455,7 @@ function showNextRange(): void {
     statsReferenceDate.value = shiftDate(
       statsReferenceDate.value,
       'day',
-      measurementInterval.value === 'day' ? 1 : 7,
+      getValueTrendShift(measurementInterval.value),
     )
     return
   }
@@ -366,7 +464,7 @@ function showNextRange(): void {
     statsReferenceDate.value = shiftDate(
       statsReferenceDate.value,
       'day',
-      ratingInterval.value === 'day' ? 1 : 7,
+      getValueTrendShift(ratingInterval.value),
     )
     return
   }
@@ -462,7 +560,7 @@ function formatRangeDate(date: Date): string {
           :aria-selected="statsMode === 'count'"
           @click="statsMode = 'count'"
         >
-          計次
+          發生次數
         </button>
         <button
           class="mode-tab"
@@ -472,7 +570,7 @@ function formatRangeDate(date: Date): string {
           :aria-selected="statsMode === 'sum'"
           @click="statsMode = 'sum'"
         >
-          加總
+          累積數量
         </button>
         <button
           class="mode-tab"
@@ -482,7 +580,7 @@ function formatRangeDate(date: Date): string {
           :aria-selected="statsMode === 'measurement'"
           @click="statsMode = 'measurement'"
         >
-          測量
+          量測紀錄
         </button>
         <button
           class="mode-tab"
@@ -492,7 +590,7 @@ function formatRangeDate(date: Date): string {
           :aria-selected="statsMode === 'rating'"
           @click="statsMode = 'rating'"
         >
-          評分
+          狀態評分
         </button>
       </div>
 
@@ -572,16 +670,6 @@ function formatRangeDate(date: Date): string {
         >
           <button
             class="interval-tab"
-            :class="{ 'interval-tab--active': measurementInterval === 'day' }"
-            type="button"
-            role="tab"
-            :aria-selected="measurementInterval === 'day'"
-            @click="measurementInterval = 'day'"
-          >
-            日
-          </button>
-          <button
-            class="interval-tab"
             :class="{ 'interval-tab--active': measurementInterval === 'week' }"
             type="button"
             role="tab"
@@ -589,6 +677,16 @@ function formatRangeDate(date: Date): string {
             @click="measurementInterval = 'week'"
           >
             週
+          </button>
+          <button
+            class="interval-tab"
+            :class="{ 'interval-tab--active': measurementInterval === 'month' }"
+            type="button"
+            role="tab"
+            :aria-selected="measurementInterval === 'month'"
+            @click="measurementInterval = 'month'"
+          >
+            月
           </button>
         </div>
       </div>
@@ -603,7 +701,7 @@ function formatRangeDate(date: Date): string {
           </select>
         </label>
 
-        <div class="interval-tabs interval-tabs--measurement" role="tablist" aria-label="評分統計區間">
+        <div class="interval-tabs interval-tabs--rating" role="tablist" aria-label="評分統計區間">
           <button
             class="interval-tab"
             :class="{ 'interval-tab--active': ratingInterval === 'day' }"
@@ -623,6 +721,16 @@ function formatRangeDate(date: Date): string {
             @click="ratingInterval = 'week'"
           >
             週
+          </button>
+          <button
+            class="interval-tab"
+            :class="{ 'interval-tab--active': ratingInterval === 'month' }"
+            type="button"
+            role="tab"
+            :aria-selected="ratingInterval === 'month'"
+            @click="ratingInterval = 'month'"
+          >
+            月
           </button>
         </div>
       </div>
@@ -689,7 +797,7 @@ function formatRangeDate(date: Date): string {
           <div class="count-card__summary">
             <div>
               <h3>{{ selectedSumStats.category.name }}</h3>
-              <p>區間總量 {{ getAmountText(selectedSumStats.rangeTotal, selectedSumStats) }}</p>
+              <p>每日平均 {{ getDailyAverageText(selectedSumStats) }}</p>
             </div>
           </div>
 
@@ -773,29 +881,50 @@ function formatRangeDate(date: Date): string {
             aria-label="量測趨勢"
             :style="getMeasurementChartStyle(selectedMeasurementStats)"
           >
-            <div
-              v-for="point in selectedMeasurementStats.points"
-              :key="point.key"
-              class="measurement-point"
-            >
-              <div class="measurement-point__track">
+            <div class="trend-plot">
+              <svg
+                class="trend-chart"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <polyline
+                  class="trend-chart__line"
+                  :points="getMeasurementLinePoints(selectedMeasurementStats)"
+                />
+              </svg>
+              <template v-for="(point, index) in selectedMeasurementStats.points" :key="point.key">
                 <span
                   v-if="typeof point.value === 'number'"
-                  class="measurement-point__dot"
-                  :style="getMeasurementPointStyle(point.value, selectedMeasurementStats)"
+                  class="trend-chart__dot"
+                  :style="
+                    getMeasurementDotStyle(
+                      index,
+                      selectedMeasurementStats.points.length,
+                      point.value,
+                      selectedMeasurementStats,
+                    )
+                  "
                   :title="`${point.label}: ${getMeasurementText(point.value, selectedMeasurementStats)}`"
                 ></span>
+              </template>
+            </div>
+
+            <div class="trend-labels">
+              <div
+                v-for="point in selectedMeasurementStats.points"
+                :key="point.key"
+                class="trend-label"
+              >
+                <small>{{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}</small>
+                <em>{{ point.label }}</em>
               </div>
-              <small>
-                {{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}
-              </small>
-              <em>{{ point.label }}</em>
             </div>
           </div>
 
           <div class="count-card__meta">
             <span>最近 {{ formatLatestDate(selectedMeasurementStats.latestOccurredAt) }}</span>
-            <span>{{ measurementInterval === 'day' ? '單日多筆' : '每日最後一筆' }}</span>
+            <span>只顯示有紀錄日期</span>
           </div>
         </article>
       </div>
@@ -833,25 +962,46 @@ function formatRangeDate(date: Date): string {
             aria-label="評分趨勢"
             :style="getRatingChartStyle(selectedRatingStats)"
           >
-            <div v-for="point in selectedRatingStats.points" :key="point.key" class="measurement-point">
-              <div class="measurement-point__track">
+            <div class="trend-plot">
+              <svg
+                class="trend-chart"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <polyline
+                  class="trend-chart__line"
+                  :points="getRatingLinePoints(selectedRatingStats)"
+                />
+              </svg>
+              <template v-for="(point, index) in selectedRatingStats.points" :key="point.key">
                 <span
                   v-if="typeof point.value === 'number'"
-                  class="measurement-point__dot"
-                  :style="getRatingPointStyle(point.value, selectedRatingStats)"
+                  class="trend-chart__dot"
+                  :style="
+                    getRatingDotStyle(
+                      index,
+                      selectedRatingStats.points.length,
+                      point.value,
+                      selectedRatingStats,
+                    )
+                  "
                   :title="`${point.label}: ${getRatingText(point.value, selectedRatingStats)}`"
                 ></span>
+              </template>
+            </div>
+
+            <div class="trend-labels">
+              <div v-for="point in selectedRatingStats.points" :key="point.key" class="trend-label">
+                <small>{{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}</small>
+                <em>{{ point.label }}</em>
               </div>
-              <small>
-                {{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}
-              </small>
-              <em>{{ point.label }}</em>
             </div>
           </div>
 
           <div class="count-card__meta">
             <span>最近 {{ formatLatestDate(selectedRatingStats.latestOccurredAt) }}</span>
-            <span>{{ ratingInterval === 'day' ? '單日多筆' : '每日最後一筆' }}</span>
+            <span>{{ ratingInterval === 'day' ? '單日多筆' : '只顯示有紀錄日期' }}</span>
           </div>
         </article>
       </div>
@@ -1022,6 +1172,10 @@ function formatRangeDate(date: Date): string {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.interval-tabs--rating {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .interval-tab {
   min-height: 40px;
   border: 0;
@@ -1155,33 +1309,45 @@ function formatRangeDate(date: Date): string {
 
 .measurement-chart {
   display: grid;
-  grid-template-columns: repeat(var(--measurement-point-count, 7), minmax(0, 1fr));
-  align-items: end;
-  gap: 6px;
-  min-height: 112px;
+  gap: 8px;
+  min-height: 140px;
 }
 
-.measurement-point {
-  display: grid;
-  align-items: end;
-  gap: 4px;
-  min-width: 0;
-  justify-items: center;
-}
-
-.measurement-point__track {
+.trend-plot {
   position: relative;
   width: 100%;
-  max-width: 20px;
-  height: 56px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--category-color) 12%, var(--color-background));
+  height: 96px;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent,
+      transparent 48%,
+      color-mix(in srgb, var(--category-color) 14%, transparent) 49%,
+      transparent 51%,
+      transparent
+    ),
+    color-mix(in srgb, var(--category-color) 5%, var(--color-background));
 }
 
-.measurement-point__dot {
+.trend-chart {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.trend-chart__line {
+  fill: none;
+  stroke: var(--category-color);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-chart__dot {
   position: absolute;
-  top: var(--measurement-point-offset);
-  left: 50%;
   width: 12px;
   height: 12px;
   border: 2px solid var(--color-surface);
@@ -1190,13 +1356,26 @@ function formatRangeDate(date: Date): string {
   transform: translate(-50%, -50%);
 }
 
-.measurement-point small {
+.trend-labels {
+  display: grid;
+  grid-template-columns: repeat(var(--measurement-point-count, 7), minmax(0, 1fr));
+  gap: 6px;
+}
+
+.trend-label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  justify-items: center;
+}
+
+.trend-label small {
   color: var(--color-muted);
   font-size: 0.75rem;
   font-weight: 800;
 }
 
-.measurement-point em {
+.trend-label em {
   overflow: hidden;
   max-width: 100%;
   color: var(--color-muted);
