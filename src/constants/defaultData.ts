@@ -51,7 +51,7 @@ export const CAT_AVATAR_OPTIONS = [
   image: string
 }>
 
-export const DEFAULT_CAT_AVATAR_ID = 'orange' satisfies CatAvatarId
+export const DEFAULT_CAT_AVATAR_ID = 'black' satisfies CatAvatarId
 
 export const CATEGORY_COLOR_OPTIONS = [
   {
