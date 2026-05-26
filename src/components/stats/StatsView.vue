@@ -4,21 +4,26 @@ import { storeToRefs } from 'pinia'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import {
   getCountTrendStats,
+  getMeasurementStats,
   getSumDailyStats,
   type CountCategoryStats,
+  type MeasurementStats,
   type SumDailyStats,
 } from '@/services/catTrackerStats'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
-type StatsMode = 'count' | 'sum'
+type StatsMode = 'count' | 'sum' | 'measurement'
 type CountInterval = 'day' | 'week' | 'month'
+type MeasurementInterval = 'day' | 'week'
 
 const catTrackerStore = useCatTrackerStore()
 const { categories, events, selectedCat, selectedCatId } = storeToRefs(catTrackerStore)
 const statsMode = ref<StatsMode>('count')
 const countInterval = ref<CountInterval>('week')
+const measurementInterval = ref<MeasurementInterval>('week')
 const selectedCountCategoryId = ref('')
 const selectedSumCategoryId = ref('')
+const selectedMeasurementCategoryId = ref('')
 const statsReferenceDate = ref(new Date())
 
 const periodCount = computed(() =>
@@ -29,14 +34,42 @@ const periodUnitText = computed(() =>
 )
 const recentPeriodText = computed(() => `最近 ${periodCount.value} ${periodUnitText.value}`)
 const previousPeriodText = computed(() => `前 ${periodCount.value} ${periodUnitText.value}`)
-const currentRange = computed(() =>
-  statsMode.value === 'count'
-    ? getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value)
-    : getStatsRange(statsReferenceDate.value, 'day', 7),
-)
+const currentRange = computed(() => {
+  if (statsMode.value === 'count') {
+    return getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value)
+  }
+
+  if (statsMode.value === 'measurement' && measurementInterval.value === 'day') {
+    return getStatsRange(statsReferenceDate.value, 'day', 1)
+  }
+
+  return getStatsRange(statsReferenceDate.value, 'day', 7)
+})
 const rangeTitle = computed(
   () => `${formatRangeDate(currentRange.value.start)} - ${formatRangeDate(currentRange.value.end)}`,
 )
+const modeTitle = computed(() => {
+  if (statsMode.value === 'count') {
+    return '次數趨勢'
+  }
+
+  if (statsMode.value === 'sum') {
+    return '每日總量'
+  }
+
+  return '量測趨勢'
+})
+const categoryCountText = computed(() => {
+  if (statsMode.value === 'count') {
+    return `${countStats.value.length} 個分類`
+  }
+
+  if (statsMode.value === 'sum') {
+    return `${sumCategories.value.length} 個分類`
+  }
+
+  return `${measurementCategories.value.length} 個分類`
+})
 
 const countStats = computed(() =>
   getCountTrendStats({
@@ -48,8 +81,8 @@ const countStats = computed(() =>
     referenceDate: statsReferenceDate.value,
   }),
 )
-const selectedCountStats = computed(
-  () => countStats.value.find((stats) => stats.category.id === selectedCountCategoryId.value),
+const selectedCountStats = computed(() =>
+  countStats.value.find((stats) => stats.category.id === selectedCountCategoryId.value),
 )
 const sumCategories = computed(() =>
   categories.value
@@ -64,6 +97,21 @@ const selectedSumStats = computed(() =>
     categoryId: selectedSumCategoryId.value,
     referenceDate: statsReferenceDate.value,
     days: 7,
+  }),
+)
+const measurementCategories = computed(() =>
+  categories.value
+    .filter((category) => category.statisticsMode === 'measurement' && !category.isArchived)
+    .sort((a, b) => a.sortOrder - b.sortOrder),
+)
+const selectedMeasurementStats = computed(() =>
+  getMeasurementStats({
+    categories: categories.value,
+    events: events.value,
+    catId: selectedCatId.value,
+    categoryId: selectedMeasurementCategoryId.value,
+    interval: measurementInterval.value,
+    referenceDate: statsReferenceDate.value,
   }),
 )
 
@@ -97,6 +145,21 @@ watch(
   { immediate: true },
 )
 
+watch(
+  measurementCategories,
+  (categoryList) => {
+    if (categoryList.length === 0) {
+      selectedMeasurementCategoryId.value = ''
+      return
+    }
+
+    if (!categoryList.some((category) => category.id === selectedMeasurementCategoryId.value)) {
+      selectedMeasurementCategoryId.value = categoryList[0]?.id ?? ''
+    }
+  },
+  { immediate: true },
+)
+
 function getStatsStyle(stats: CountCategoryStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
@@ -106,6 +169,18 @@ function getStatsStyle(stats: CountCategoryStats): Record<string, string> {
 function getSumStatsStyle(stats: SumDailyStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
+  }
+}
+
+function getMeasurementStatsStyle(stats: MeasurementStats): Record<string, string> {
+  return {
+    '--category-color': getCategoryColorValue(stats.category),
+  }
+}
+
+function getMeasurementChartStyle(stats: MeasurementStats): Record<string, string> {
+  return {
+    '--measurement-point-count': String(Math.max(stats.points.length, 1)),
   }
 }
 
@@ -166,7 +241,34 @@ function getAmountText(value: number, stats: SumDailyStats): string {
   return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
 }
 
+function getMeasurementText(value: number, stats: MeasurementStats): string {
+  return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
+}
+
+function getMeasurementPointStyle(
+  value: number | undefined,
+  stats: MeasurementStats,
+): Record<string, string> {
+  if (typeof value !== 'number' || stats.maxValue === stats.minValue) {
+    return { '--measurement-point-offset': '50%' }
+  }
+
+  const ratio = (value - stats.minValue) / (stats.maxValue - stats.minValue)
+  const offset = 100 - Math.round(ratio * 100)
+
+  return { '--measurement-point-offset': `${offset}%` }
+}
+
 function showPreviousRange(): void {
+  if (statsMode.value === 'measurement') {
+    statsReferenceDate.value = shiftDate(
+      statsReferenceDate.value,
+      'day',
+      measurementInterval.value === 'day' ? -1 : -7,
+    )
+    return
+  }
+
   statsReferenceDate.value =
     statsMode.value === 'count'
       ? shiftDate(statsReferenceDate.value, countInterval.value, -periodCount.value)
@@ -174,6 +276,15 @@ function showPreviousRange(): void {
 }
 
 function showNextRange(): void {
+  if (statsMode.value === 'measurement') {
+    statsReferenceDate.value = shiftDate(
+      statsReferenceDate.value,
+      'day',
+      measurementInterval.value === 'day' ? 1 : 7,
+    )
+    return
+  }
+
   statsReferenceDate.value =
     statsMode.value === 'count'
       ? shiftDate(statsReferenceDate.value, countInterval.value, periodCount.value)
@@ -247,13 +358,13 @@ function formatRangeDate(date: Date): string {
   <section class="stats-view" aria-labelledby="stats-title">
     <header class="stats-header">
       <h1 id="stats-title">統計</h1>
-      <p>{{ selectedCat?.name ?? '目前寵物' }} · {{ statsMode === 'count' ? '次數趨勢' : '每日總量' }}</p>
+      <p>{{ selectedCat?.name ?? '目前寵物' }} · {{ modeTitle }}</p>
     </header>
 
     <section class="stats-section" aria-labelledby="count-stats-title">
       <div class="stats-section__header">
         <h2 id="count-stats-title">追蹤統計</h2>
-        <span>{{ statsMode === 'count' ? `${countStats.length} 個分類` : `${sumCategories.length} 個分類` }}</span>
+        <span>{{ categoryCountText }}</span>
       </div>
 
       <div class="mode-tabs" role="tablist" aria-label="統計方式">
@@ -265,7 +376,7 @@ function formatRangeDate(date: Date): string {
           :aria-selected="statsMode === 'count'"
           @click="statsMode = 'count'"
         >
-          次數
+          計次
         </button>
         <button
           class="mode-tab"
@@ -276,6 +387,16 @@ function formatRangeDate(date: Date): string {
           @click="statsMode = 'sum'"
         >
           加總
+        </button>
+        <button
+          class="mode-tab"
+          :class="{ 'mode-tab--active': statsMode === 'measurement' }"
+          type="button"
+          role="tab"
+          :aria-selected="statsMode === 'measurement'"
+          @click="statsMode = 'measurement'"
+        >
+          測量
         </button>
       </div>
 
@@ -323,12 +444,23 @@ function formatRangeDate(date: Date): string {
         </div>
       </div>
 
-      <div v-else class="stats-controls stats-controls--single">
+      <div v-else-if="statsMode === 'sum'" class="stats-controls stats-controls--single">
         <label class="stats-field">
           <span>紀錄項目</span>
           <select v-model="selectedSumCategoryId">
+            <option v-for="category in sumCategories" :key="category.id" :value="category.id">
+              {{ category.name }}
+            </option>
+          </select>
+        </label>
+      </div>
+
+      <div v-else class="stats-controls">
+        <label class="stats-field">
+          <span>紀錄項目</span>
+          <select v-model="selectedMeasurementCategoryId">
             <option
-              v-for="category in sumCategories"
+              v-for="category in measurementCategories"
               :key="category.id"
               :value="category.id"
             >
@@ -336,6 +468,33 @@ function formatRangeDate(date: Date): string {
             </option>
           </select>
         </label>
+
+        <div
+          class="interval-tabs interval-tabs--measurement"
+          role="tablist"
+          aria-label="測量統計區間"
+        >
+          <button
+            class="interval-tab"
+            :class="{ 'interval-tab--active': measurementInterval === 'day' }"
+            type="button"
+            role="tab"
+            :aria-selected="measurementInterval === 'day'"
+            @click="measurementInterval = 'day'"
+          >
+            日
+          </button>
+          <button
+            class="interval-tab"
+            :class="{ 'interval-tab--active': measurementInterval === 'week' }"
+            type="button"
+            role="tab"
+            :aria-selected="measurementInterval === 'week'"
+            @click="measurementInterval = 'week'"
+          >
+            週
+          </button>
+        </div>
       </div>
 
       <div class="range-controls" aria-label="統計日期區間">
@@ -347,11 +506,7 @@ function formatRangeDate(date: Date): string {
           ‹
         </button>
         <strong>{{ rangeTitle }}</strong>
-        <button
-          class="ui-button ui-button--icon range-button"
-          type="button"
-          @click="showNextRange"
-        >
+        <button class="ui-button ui-button--icon range-button" type="button" @click="showNextRange">
           ›
         </button>
       </div>
@@ -372,7 +527,11 @@ function formatRangeDate(date: Date): string {
             </strong>
           </div>
 
-          <div class="count-bars" aria-label="近期趨勢" :style="getCountBarsStyle(selectedCountStats)">
+          <div
+            class="count-bars"
+            aria-label="近期趨勢"
+            :style="getCountBarsStyle(selectedCountStats)"
+          >
             <div v-for="bucket in selectedCountStats.buckets" :key="bucket.key" class="count-bar">
               <span
                 class="count-bar__fill"
@@ -402,13 +561,14 @@ function formatRangeDate(date: Date): string {
               <h3>{{ selectedSumStats.category.name }}</h3>
               <p>區間總量 {{ getAmountText(selectedSumStats.rangeTotal, selectedSumStats) }}</p>
             </div>
-            <strong>{{ getAmountText(selectedSumStats.currentDayTotal, selectedSumStats) }}</strong>
           </div>
 
           <div class="stats-metrics">
             <div>
               <span>區間最後日</span>
-              <strong>{{ getAmountText(selectedSumStats.currentDayTotal, selectedSumStats) }}</strong>
+              <strong>{{
+                getAmountText(selectedSumStats.currentDayTotal, selectedSumStats)
+              }}</strong>
             </div>
             <div>
               <span>最高單日</span>
@@ -438,8 +598,86 @@ function formatRangeDate(date: Date): string {
         </article>
       </div>
 
+      <div
+        v-else-if="statsMode === 'measurement' && selectedMeasurementStats"
+        class="count-stats-list"
+      >
+        <article
+          :key="selectedMeasurementStats.category.id"
+          class="count-card"
+          :style="getMeasurementStatsStyle(selectedMeasurementStats)"
+        >
+          <div class="count-card__summary">
+            <div>
+              <h3>{{ selectedMeasurementStats.category.name }}</h3>
+              <p>
+                最近量測
+                {{
+                  getMeasurementText(selectedMeasurementStats.latestValue, selectedMeasurementStats)
+                }}
+              </p>
+            </div>
+          </div>
+
+          <div class="stats-metrics">
+            <div>
+              <span>最高</span>
+              <strong>{{
+                getMeasurementText(selectedMeasurementStats.maxValue, selectedMeasurementStats)
+              }}</strong>
+            </div>
+            <div>
+              <span>最低</span>
+              <strong>{{
+                getMeasurementText(selectedMeasurementStats.minValue, selectedMeasurementStats)
+              }}</strong>
+            </div>
+            <div>
+              <span>筆數</span>
+              <strong>{{ selectedMeasurementStats.sampleCount }}</strong>
+            </div>
+          </div>
+
+          <div
+            class="measurement-chart"
+            aria-label="量測趨勢"
+            :style="getMeasurementChartStyle(selectedMeasurementStats)"
+          >
+            <div
+              v-for="point in selectedMeasurementStats.points"
+              :key="point.key"
+              class="measurement-point"
+            >
+              <div class="measurement-point__track">
+                <span
+                  v-if="typeof point.value === 'number'"
+                  class="measurement-point__dot"
+                  :style="getMeasurementPointStyle(point.value, selectedMeasurementStats)"
+                  :title="`${point.label}: ${getMeasurementText(point.value, selectedMeasurementStats)}`"
+                ></span>
+              </div>
+              <small>
+                {{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}
+              </small>
+              <em>{{ point.label }}</em>
+            </div>
+          </div>
+
+          <div class="count-card__meta">
+            <span>最近 {{ formatLatestDate(selectedMeasurementStats.latestOccurredAt) }}</span>
+            <span>{{ measurementInterval === 'day' ? '單日多筆' : '每日最後一筆' }}</span>
+          </div>
+        </article>
+      </div>
+
       <p v-else class="empty-state">
-        {{ statsMode === 'count' ? '最近還沒有可統計的次數紀錄。' : '最近還沒有可統計的加總紀錄。' }}
+        {{
+          statsMode === 'count'
+            ? '最近還沒有可統計的次數紀錄。'
+            : statsMode === 'sum'
+              ? '最近還沒有可統計的加總紀錄。'
+              : '最近還沒有可統計的測量紀錄。'
+        }}
       </p>
     </section>
   </section>
@@ -515,7 +753,7 @@ function formatRangeDate(date: Date): string {
 
 .mode-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -590,6 +828,10 @@ function formatRangeDate(date: Date): string {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-background);
+}
+
+.interval-tabs--measurement {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .interval-tab {
@@ -714,6 +956,59 @@ function formatRangeDate(date: Date): string {
 }
 
 .count-bar em {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.measurement-chart {
+  display: grid;
+  grid-template-columns: repeat(var(--measurement-point-count, 7), minmax(0, 1fr));
+  align-items: end;
+  gap: 6px;
+  min-height: 112px;
+}
+
+.measurement-point {
+  display: grid;
+  align-items: end;
+  gap: 4px;
+  min-width: 0;
+  justify-items: center;
+}
+
+.measurement-point__track {
+  position: relative;
+  width: 100%;
+  max-width: 20px;
+  height: 56px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--category-color) 12%, var(--color-background));
+}
+
+.measurement-point__dot {
+  position: absolute;
+  top: var(--measurement-point-offset);
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-surface);
+  border-radius: 999px;
+  background: var(--category-color);
+  transform: translate(-50%, -50%);
+}
+
+.measurement-point small {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.measurement-point em {
   overflow: hidden;
   max-width: 100%;
   color: var(--color-muted);

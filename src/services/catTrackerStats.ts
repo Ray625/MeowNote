@@ -37,6 +37,25 @@ export interface SumDailyStats {
   latestOccurredAt?: string
 }
 
+export interface MeasurementPoint {
+  key: string
+  label: string
+  occurredAt?: string
+  value?: number
+}
+
+export interface MeasurementStats {
+  category: EventCategory
+  mode: 'measurement'
+  interval: 'day' | 'week'
+  latestValue: number
+  maxValue: number
+  minValue: number
+  sampleCount: number
+  points: MeasurementPoint[]
+  latestOccurredAt: string
+}
+
 export interface CountTrendStatsInput {
   categories: EventCategory[]
   events: CatEvent[]
@@ -53,6 +72,15 @@ export interface SumDailyStatsInput {
   categoryId: string
   referenceDate?: Date
   days?: number
+}
+
+export interface MeasurementStatsInput {
+  categories: EventCategory[]
+  events: CatEvent[]
+  catId: string
+  categoryId: string
+  interval?: 'day' | 'week'
+  referenceDate?: Date
 }
 
 export function getCountTrendStats({
@@ -231,6 +259,72 @@ export function getSumDailyStats({
   }
 }
 
+export function getMeasurementStats({
+  categories,
+  events,
+  catId,
+  categoryId,
+  interval = 'week',
+  referenceDate = new Date(),
+}: MeasurementStatsInput): MeasurementStats | undefined {
+  if (!catId || !categoryId) {
+    return undefined
+  }
+
+  const category = categories.find(
+    (item) => item.id === categoryId && item.statisticsMode === 'measurement',
+  )
+
+  if (!category) {
+    return undefined
+  }
+
+  const anchorStart = startOfDay(referenceDate)
+  const rangeStart = interval === 'day' ? anchorStart : addDays(anchorStart, -6)
+  const rangeEnd = addDays(anchorStart, 1)
+  const scopedEvents = events
+    .filter((event) => event.catId === catId && event.categoryId === categoryId)
+    .map((event) => ({ event, value: getNumericAmount(event.values) }))
+    .filter((item): item is { event: CatEvent; value: number } => {
+      if (typeof item.value !== 'number') {
+        return false
+      }
+
+      const occurredAt = new Date(item.event.occurredAt)
+
+      return occurredAt >= rangeStart && occurredAt < rangeEnd
+    })
+    .sort((a, b) => a.event.occurredAt.localeCompare(b.event.occurredAt))
+
+  if (scopedEvents.length === 0) {
+    return undefined
+  }
+
+  const values = scopedEvents.map((item) => item.value)
+  const latest = scopedEvents[scopedEvents.length - 1]!
+  const points =
+    interval === 'day'
+      ? scopedEvents.map(({ event, value }) => ({
+          key: event.id,
+          label: formatTimeLabel(new Date(event.occurredAt)),
+          occurredAt: event.occurredAt,
+          value,
+        }))
+      : createMeasurementWeekPoints(rangeStart, scopedEvents)
+
+  return {
+    category,
+    mode: 'measurement',
+    interval,
+    latestValue: latest.value,
+    maxValue: Math.max(...values),
+    minValue: Math.min(...values),
+    sampleCount: scopedEvents.length,
+    points,
+    latestOccurredAt: latest.event.occurredAt,
+  }
+}
+
 function createSumDayBuckets(start: Date, days: number): SumDailyBucket[] {
   return Array.from({ length: days }, (_, index) => {
     const bucketStart = addDays(start, index)
@@ -242,6 +336,30 @@ function createSumDayBuckets(start: Date, days: number): SumDailyBucket[] {
       start: bucketStart,
       end: bucketEnd,
       total: 0,
+    }
+  })
+}
+
+function createMeasurementWeekPoints(
+  start: Date,
+  scopedEvents: Array<{ event: CatEvent; value: number }>,
+): MeasurementPoint[] {
+  const latestByDate = new Map<string, { event: CatEvent; value: number }>()
+
+  for (const item of scopedEvents) {
+    latestByDate.set(toDateKey(new Date(item.event.occurredAt)), item)
+  }
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(start, index)
+    const key = toDateKey(date)
+    const latest = latestByDate.get(key)
+
+    return {
+      key,
+      label: formatDayLabel(date),
+      occurredAt: latest?.event.occurredAt,
+      value: latest?.value,
     }
   })
 }
@@ -346,6 +464,10 @@ function formatWeekLabel(date: Date): string {
 
 function formatDayLabel(date: Date): string {
   return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function formatTimeLabel(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 function formatMonthLabel(date: Date): string {
