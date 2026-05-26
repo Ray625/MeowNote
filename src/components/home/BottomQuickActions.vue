@@ -109,14 +109,24 @@ function selectGroup(group: EventCategoryGroup): void {
 
   <nav class="bottom-navigation" aria-label="主要操作">
     <div class="bottom-navigation__inner">
-      <button
-        class="bottom-navigation__item"
-        :class="{ 'bottom-navigation__item--active': activeTab === 'calendar' }"
-        type="button"
-        @click="catTrackerStore.setActiveTab('calendar')"
-      >
-        月曆
-      </button>
+      <div class="bottom-navigation__group bottom-navigation__group--left">
+        <button
+          class="bottom-navigation__item"
+          :class="{ 'bottom-navigation__item--active': activeTab === 'calendar' }"
+          type="button"
+          @click="catTrackerStore.setActiveTab('calendar')"
+        >
+          月曆
+        </button>
+        <button
+          class="bottom-navigation__item"
+          :class="{ 'bottom-navigation__item--active': activeTab === 'stats' }"
+          type="button"
+          @click="catTrackerStore.setActiveTab('stats')"
+        >
+          統計
+        </button>
+      </div>
       <button
         class="ui-button ui-button--primary add-button"
         type="button"
@@ -126,14 +136,16 @@ function selectGroup(group: EventCategoryGroup): void {
       >
         +
       </button>
-      <button
-        class="bottom-navigation__item"
-        :class="{ 'bottom-navigation__item--active': activeTab === 'settings' }"
-        type="button"
-        @click="catTrackerStore.setActiveTab('settings')"
-      >
-        設定
-      </button>
+      <div class="bottom-navigation__group bottom-navigation__group--right">
+        <button
+          class="bottom-navigation__item"
+          :class="{ 'bottom-navigation__item--active': activeTab === 'settings' }"
+          type="button"
+          @click="catTrackerStore.setActiveTab('settings')"
+        >
+          設定
+        </button>
+      </div>
     </div>
   </nav>
 </template>
@@ -249,6 +261,20 @@ function selectGroup(group: EventCategoryGroup): void {
   align-items: center;
   margin: 0 auto;
   text-align: center;
+}
+
+.bottom-navigation__group {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+}
+
+.bottom-navigation__group--left {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bottom-navigation__group--right {
+  grid-template-columns: 1fr;
 }
 
 .bottom-navigation__item {

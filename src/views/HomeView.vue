@@ -9,6 +9,7 @@ import FirstTimeSetup from '@/components/home/FirstTimeSetup.vue'
 import HomeCalendar from '@/components/home/HomeCalendar.vue'
 import MonthlyEventList from '@/components/home/MonthlyEventList.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
+import StatsView from '@/components/stats/StatsView.vue'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
 import { useTheme } from '@/composables/useTheme'
@@ -70,6 +71,7 @@ function refreshRemoteDataWhenVisible(): void {
       />
       <MonthlyEventList v-else />
     </template>
+    <StatsView v-else-if="activeTab === 'stats'" />
     <SettingsView v-else />
     <BottomQuickActions v-if="!needsFirstTimeSetup" />
     <EventEditModal v-if="!needsFirstTimeSetup" />

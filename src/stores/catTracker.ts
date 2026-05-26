@@ -32,7 +32,7 @@ import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { getEventValueText } from '@/utils/eventValues'
 import { createId } from '@/utils/id'
 
-type MainTab = 'calendar' | 'settings'
+type MainTab = 'calendar' | 'stats' | 'settings'
 type CalendarDisplayMode = 'calendar' | 'list'
 
 export interface CalendarDay {
