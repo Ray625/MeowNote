@@ -207,9 +207,7 @@ export const CATEGORY_TEMPLATES: readonly CategoryTemplate[] = [
     name: '用藥',
     group: '醫療',
     colorId: 'purple',
-    statisticsMode: 'sum',
-    valueLabel: '劑量',
-    valueUnit: '',
+    statisticsMode: 'count',
   },
   {
     id: 'weight',
@@ -219,15 +217,6 @@ export const CATEGORY_TEMPLATES: readonly CategoryTemplate[] = [
     statisticsMode: 'measurement',
     valueLabel: '體重',
     valueUnit: 'kg',
-  },
-  {
-    id: 'temperature',
-    name: '體溫',
-    group: '健康',
-    colorId: 'red',
-    statisticsMode: 'measurement',
-    valueLabel: '體溫',
-    valueUnit: '°C',
   },
 ] as const
 

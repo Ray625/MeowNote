@@ -335,14 +335,6 @@ function fromDateTimeLocalValue(value: string): string {
           ></textarea>
         </label>
 
-        <button
-          class="ui-button ui-button--danger danger-button"
-          type="button"
-          @click="deleteEditingEvent"
-        >
-          刪除紀錄
-        </button>
-
         <div class="event-form__actions">
           <button
             class="ui-button ui-button--secondary secondary-button"
@@ -353,6 +345,14 @@ function fromDateTimeLocalValue(value: string): string {
           </button>
           <button class="ui-button ui-button--primary primary-button" type="submit">儲存</button>
         </div>
+
+        <button
+          class="ui-button ui-button--danger danger-button"
+          type="button"
+          @click="deleteEditingEvent"
+        >
+          刪除紀錄
+        </button>
       </form>
     </section>
 

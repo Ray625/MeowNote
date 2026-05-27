@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import CatSwitcher from '@/components/common/CatSwitcher.vue'
+import TodayButton from '@/components/common/TodayButton.vue'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import {
   getCountTrendStats,
@@ -18,18 +20,23 @@ type StatsMode = 'count' | 'sum' | 'measurement' | 'rating'
 type CountInterval = 'day' | 'week' | 'month'
 type ValueTrendInterval = 'day' | 'week' | 'month'
 type MeasurementInterval = 'week' | 'month'
+type RangePickerMode = 'day' | 'week' | 'twoMonth' | 'month' | 'halfYear'
 
 const catTrackerStore = useCatTrackerStore()
-const { categories, events, selectedCat, selectedCatId } = storeToRefs(catTrackerStore)
-const statsMode = ref<StatsMode>('count')
+const { categories, events, selectedCatId } = storeToRefs(catTrackerStore)
 const countInterval = ref<CountInterval>('week')
 const measurementInterval = ref<MeasurementInterval>('week')
 const ratingInterval = ref<ValueTrendInterval>('week')
-const selectedCountCategoryId = ref('')
-const selectedSumCategoryId = ref('')
-const selectedMeasurementCategoryId = ref('')
-const selectedRatingCategoryId = ref('')
+const selectedStatsCategoryId = ref('')
 const statsReferenceDate = ref(new Date())
+const isRangePickerOpen = ref(false)
+const rangePickerYear = ref(statsReferenceDate.value.getFullYear())
+const rangePickerMonth = ref(statsReferenceDate.value.getMonth())
+
+const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+  index,
+  label: new Intl.DateTimeFormat('zh-TW', { month: 'long' }).format(new Date(2024, index, 1)),
+}))
 
 const periodCount = computed(() =>
   countInterval.value === 'day' ? 7 : countInterval.value === 'week' ? 8 : 6,
@@ -39,8 +46,16 @@ const periodUnitText = computed(() =>
 )
 const recentPeriodText = computed(() => `最近 ${periodCount.value} ${periodUnitText.value}`)
 const previousPeriodText = computed(() => `前 ${periodCount.value} ${periodUnitText.value}`)
+const selectedStatsCategory = computed(() =>
+  statCategories.value.find((category) => category.id === selectedStatsCategoryId.value),
+)
+const statsMode = computed<StatsMode>(() => selectedStatsCategory.value?.statisticsMode ?? 'count')
 const currentRange = computed(() => {
   if (statsMode.value === 'count') {
+    if (countInterval.value === 'day') {
+      return getStatsRange(statsReferenceDate.value, 'week', 1)
+    }
+
     return getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value)
   }
 
@@ -65,31 +80,156 @@ const currentRange = computed(() => {
 const rangeTitle = computed(
   () => `${formatRangeDate(currentRange.value.start)} - ${formatRangeDate(currentRange.value.end)}`,
 )
-const modeTitle = computed(() => {
+const nextRangeReferenceDate = computed(() => getNextRangeReferenceDate())
+const canShowNextRange = computed(
+  () => getStatsRangeStart(nextRangeReferenceDate.value) <= startOfDay(new Date()),
+)
+const rangePickerMonthIndex = computed(() => statsReferenceDate.value.getMonth())
+const rangePickerMode = computed<RangePickerMode>(() => {
   if (statsMode.value === 'count') {
-    return '發生次數'
+    if (countInterval.value === 'day') {
+      return 'week'
+    }
+
+    if (countInterval.value === 'week') {
+      return 'twoMonth'
+    }
+
+    return 'halfYear'
   }
 
   if (statsMode.value === 'sum') {
-    return '累積數量'
+    return 'week'
   }
 
-  return statsMode.value === 'measurement' ? '量測紀錄' : '狀態評分'
+  if (statsMode.value === 'measurement') {
+    return measurementInterval.value === 'week' ? 'week' : 'month'
+  }
+
+  if (ratingInterval.value === 'day') {
+    return 'day'
+  }
+
+  return ratingInterval.value === 'week' ? 'week' : 'month'
 })
-const categoryCountText = computed(() => {
-  if (statsMode.value === 'count') {
-    return `${countStats.value.length} 個分類`
+const rangePickerLabel = computed(() => {
+  if (rangePickerMode.value === 'day') {
+    return '選擇日期'
   }
 
-  if (statsMode.value === 'sum') {
-    return `${sumCategories.value.length} 個分類`
+  if (rangePickerMode.value === 'week') {
+    return '選擇週區間'
   }
 
-  return statsMode.value === 'measurement'
-    ? `${measurementCategories.value.length} 個分類`
-    : `${ratingCategories.value.length} 個分類`
+  if (rangePickerMode.value === 'twoMonth') {
+    return '選擇雙月區間'
+  }
+
+  if (rangePickerMode.value === 'halfYear') {
+    return '選擇半年區間'
+  }
+
+  return '選擇月份'
 })
+const shouldShowRangePickerHint = computed(
+  () => !(statsMode.value === 'count' && countInterval.value === 'day'),
+)
+const rangePickerMonthLabel = computed(
+  () =>
+    `${rangePickerYear.value}年${new Intl.DateTimeFormat('zh-TW', { month: 'long' }).format(
+      new Date(rangePickerYear.value, rangePickerMonth.value, 1),
+    )}`,
+)
+const rangePickerDays = computed(() => {
+  const daysInMonth = new Date(rangePickerYear.value, rangePickerMonth.value + 1, 0).getDate()
 
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(rangePickerYear.value, rangePickerMonth.value, index + 1)
+
+    return {
+      key: formatDateInputValue(date),
+      label: String(index + 1),
+      date,
+    }
+  })
+})
+const rangePickerWeeks = computed(() => {
+  const weeks = new Map<string, { key: string; label: string; start: Date; end: Date }>()
+  const daysInMonth = new Date(rangePickerYear.value, rangePickerMonth.value + 1, 0).getDate()
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const start = startOfWeek(new Date(rangePickerYear.value, rangePickerMonth.value, day))
+    const end = addDays(start, 6)
+    const key = formatDateInputValue(start)
+
+    weeks.set(key, {
+      key,
+      label: `${formatRangeDate(start)} - ${formatRangeDate(end)}`,
+      start,
+      end,
+    })
+  }
+
+  return Array.from(weeks.values())
+})
+const twoMonthOptions = computed(() =>
+  Array.from({ length: 6 }, (_, index) => {
+    const startMonth = index * 2
+    const start = new Date(rangePickerYear.value, startMonth, 1)
+    const end = new Date(rangePickerYear.value, startMonth + 2, 0)
+
+    return {
+      startMonth,
+      label: `${startMonth + 1}-${startMonth + 2}月`,
+      start,
+      end,
+    }
+  }),
+)
+const halfYearOptions = computed(() => [
+  {
+    key: 'first',
+    label: '上半年',
+    start: new Date(rangePickerYear.value, 0, 1),
+    end: new Date(rangePickerYear.value, 6, 0),
+  },
+  {
+    key: 'second',
+    label: '下半年',
+    start: new Date(rangePickerYear.value, 6, 1),
+    end: new Date(rangePickerYear.value, 12, 0),
+  },
+])
+const recordedCategoryIds = computed(
+  () =>
+    new Set(
+      events.value
+        .filter((event) => event.catId === selectedCatId.value)
+        .map((event) => event.categoryId),
+    ),
+)
+const statCategories = computed(() =>
+  categories.value
+    .filter((category) => recordedCategoryIds.value.has(category.id))
+    .filter((category) =>
+      ['count', 'sum', 'measurement', 'rating'].includes(category.statisticsMode),
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder),
+)
+const groupedStatCategories = computed(() => {
+  const groups = new Map<string, typeof statCategories.value>()
+
+  for (const category of statCategories.value) {
+    const group = category.group ?? '其他'
+
+    groups.set(group, [...(groups.get(group) ?? []), category])
+  }
+
+  return Array.from(groups.entries()).map(([group, groupCategories]) => ({
+    group,
+    categories: groupCategories,
+  }))
+})
 const countStats = computed(() =>
   getCountTrendStats({
     categories: categories.value,
@@ -101,109 +241,61 @@ const countStats = computed(() =>
   }),
 )
 const selectedCountStats = computed(() =>
-  countStats.value.find((stats) => stats.category.id === selectedCountCategoryId.value),
-)
-const sumCategories = computed(() =>
-  categories.value
-    .filter((category) => category.statisticsMode === 'sum' && !category.isArchived)
-    .sort((a, b) => a.sortOrder - b.sortOrder),
+  countStats.value.find((stats) => stats.category.id === selectedStatsCategoryId.value),
 )
 const selectedSumStats = computed(() =>
   getSumDailyStats({
     categories: categories.value,
     events: events.value,
     catId: selectedCatId.value,
-    categoryId: selectedSumCategoryId.value,
+    categoryId: selectedStatsCategoryId.value,
     referenceDate: statsReferenceDate.value,
     days: 7,
   }),
-)
-const measurementCategories = computed(() =>
-  categories.value
-    .filter((category) => category.statisticsMode === 'measurement' && !category.isArchived)
-    .sort((a, b) => a.sortOrder - b.sortOrder),
 )
 const selectedMeasurementStats = computed(() =>
   getMeasurementStats({
     categories: categories.value,
     events: events.value,
     catId: selectedCatId.value,
-    categoryId: selectedMeasurementCategoryId.value,
+    categoryId: selectedStatsCategoryId.value,
     interval: measurementInterval.value,
     referenceDate: statsReferenceDate.value,
   }),
-)
-const ratingCategories = computed(() =>
-  categories.value
-    .filter((category) => category.statisticsMode === 'rating' && !category.isArchived)
-    .sort((a, b) => a.sortOrder - b.sortOrder),
 )
 const selectedRatingStats = computed(() =>
   getRatingStats({
     categories: categories.value,
     events: events.value,
     catId: selectedCatId.value,
-    categoryId: selectedRatingCategoryId.value,
+    categoryId: selectedStatsCategoryId.value,
     interval: ratingInterval.value,
     referenceDate: statsReferenceDate.value,
   }),
 )
 
 watch(
-  countStats,
-  (statsList) => {
-    if (statsList.length === 0) {
-      selectedCountCategoryId.value = ''
+  statCategories,
+  (categoryList) => {
+    if (categoryList.length === 0) {
+      selectedStatsCategoryId.value = ''
       return
     }
 
-    if (!statsList.some((stats) => stats.category.id === selectedCountCategoryId.value)) {
-      selectedCountCategoryId.value = statsList[0]?.category.id ?? ''
+    if (!categoryList.some((category) => category.id === selectedStatsCategoryId.value)) {
+      selectedStatsCategoryId.value = categoryList[0]?.id ?? ''
     }
   },
   { immediate: true },
 )
 
 watch(
-  sumCategories,
-  (categoryList) => {
-    if (categoryList.length === 0) {
-      selectedSumCategoryId.value = ''
-      return
-    }
+  [selectedStatsCategoryId, selectedCatId],
+  ([categoryId]) => {
+    const latestDate = getLatestCategoryEventDate(categoryId)
 
-    if (!categoryList.some((category) => category.id === selectedSumCategoryId.value)) {
-      selectedSumCategoryId.value = categoryList[0]?.id ?? ''
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  measurementCategories,
-  (categoryList) => {
-    if (categoryList.length === 0) {
-      selectedMeasurementCategoryId.value = ''
-      return
-    }
-
-    if (!categoryList.some((category) => category.id === selectedMeasurementCategoryId.value)) {
-      selectedMeasurementCategoryId.value = categoryList[0]?.id ?? ''
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  ratingCategories,
-  (categoryList) => {
-    if (categoryList.length === 0) {
-      selectedRatingCategoryId.value = ''
-      return
-    }
-
-    if (!categoryList.some((category) => category.id === selectedRatingCategoryId.value)) {
-      selectedRatingCategoryId.value = categoryList[0]?.id ?? ''
+    if (latestDate) {
+      statsReferenceDate.value = latestDate
     }
   },
   { immediate: true },
@@ -231,6 +323,16 @@ function getRatingStatsStyle(stats: RatingStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
   }
+}
+
+function getLatestCategoryEventDate(categoryId: string): Date | null {
+  const latestEvent = events.value
+    .filter((event) => event.catId === selectedCatId.value && event.categoryId === categoryId)
+    .sort(
+      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+    )[0]
+
+  return latestEvent ? new Date(latestEvent.occurredAt) : null
 }
 
 function getMeasurementChartStyle(stats: MeasurementStats): Record<string, string> {
@@ -425,6 +527,97 @@ function getValueTrendShift(interval: ValueTrendInterval): number {
   return interval === 'day' ? 1 : interval === 'week' ? 7 : 30
 }
 
+function syncRangePicker(): void {
+  rangePickerYear.value = statsReferenceDate.value.getFullYear()
+  rangePickerMonth.value = statsReferenceDate.value.getMonth()
+}
+
+function toggleRangePicker(): void {
+  if (!isRangePickerOpen.value) {
+    syncRangePicker()
+  }
+
+  isRangePickerOpen.value = !isRangePickerOpen.value
+}
+
+function changeRangePickerYear(delta: number): void {
+  rangePickerYear.value += delta
+}
+
+function changeRangePickerMonth(delta: number): void {
+  const next = new Date(rangePickerYear.value, rangePickerMonth.value + delta, 1)
+
+  rangePickerYear.value = next.getFullYear()
+  rangePickerMonth.value = next.getMonth()
+}
+
+function closeRangePickerWithReference(date: Date): void {
+  statsReferenceDate.value = date
+  isRangePickerOpen.value = false
+}
+
+function selectRangeDay(date: Date): void {
+  closeRangePickerWithReference(date)
+}
+
+function selectRangeWeek(end: Date): void {
+  closeRangePickerWithReference(end)
+}
+
+function selectRangeMonth(monthIndex: number): void {
+  const today = new Date()
+  const isCurrentMonth =
+    rangePickerYear.value === today.getFullYear() && monthIndex === today.getMonth()
+
+  closeRangePickerWithReference(
+    isCurrentMonth ? today : new Date(rangePickerYear.value, monthIndex + 1, 0),
+  )
+}
+
+function selectRangeTwoMonth(end: Date): void {
+  closeRangePickerWithReference(getCappedReferenceDate(end))
+}
+
+function selectRangeHalfYear(end: Date): void {
+  closeRangePickerWithReference(getCappedReferenceDate(end))
+}
+
+function getCappedReferenceDate(end: Date): Date {
+  const today = startOfDay(new Date())
+
+  return end > today ? today : end
+}
+
+function isReferenceDate(date: Date): boolean {
+  return formatDateInputValue(statsReferenceDate.value) === formatDateInputValue(date)
+}
+
+function isReferenceInRange(start: Date, end: Date): boolean {
+  const reference = startOfDay(statsReferenceDate.value)
+
+  return reference >= start && reference <= end
+}
+
+function isFutureRange(start: Date): boolean {
+  return startOfDay(start) > startOfDay(new Date())
+}
+
+function hasRecordInRange(start: Date, end: Date): boolean {
+  const rangeStart = startOfDay(start).getTime()
+  const rangeEnd = addDays(startOfDay(end), 1).getTime()
+
+  return events.value.some((event) => {
+    const occurredAt = new Date(event.occurredAt).getTime()
+
+    return (
+      event.catId === selectedCatId.value &&
+      event.categoryId === selectedStatsCategoryId.value &&
+      occurredAt >= rangeStart &&
+      occurredAt < rangeEnd
+    )
+  })
+}
+
 function showPreviousRange(): void {
   if (statsMode.value === 'measurement') {
     statsReferenceDate.value = shiftDate(
@@ -451,28 +644,58 @@ function showPreviousRange(): void {
 }
 
 function showNextRange(): void {
-  if (statsMode.value === 'measurement') {
-    statsReferenceDate.value = shiftDate(
-      statsReferenceDate.value,
-      'day',
-      getValueTrendShift(measurementInterval.value),
-    )
+  if (!canShowNextRange.value) {
     return
+  }
+
+  statsReferenceDate.value = nextRangeReferenceDate.value
+}
+
+function getNextRangeReferenceDate(): Date {
+  if (statsMode.value === 'measurement') {
+    return shiftDate(statsReferenceDate.value, 'day', getValueTrendShift(measurementInterval.value))
   }
 
   if (statsMode.value === 'rating') {
-    statsReferenceDate.value = shiftDate(
-      statsReferenceDate.value,
-      'day',
-      getValueTrendShift(ratingInterval.value),
-    )
-    return
+    return shiftDate(statsReferenceDate.value, 'day', getValueTrendShift(ratingInterval.value))
   }
 
-  statsReferenceDate.value =
-    statsMode.value === 'count'
-      ? shiftDate(statsReferenceDate.value, countInterval.value, periodCount.value)
-      : shiftDate(statsReferenceDate.value, 'day', 7)
+  return statsMode.value === 'count'
+    ? shiftDate(statsReferenceDate.value, countInterval.value, periodCount.value)
+    : shiftDate(statsReferenceDate.value, 'day', 7)
+}
+
+function showTodayRange(): void {
+  statsReferenceDate.value = new Date()
+  isRangePickerOpen.value = false
+}
+
+function getStatsRangeStart(referenceDate: Date): Date {
+  if (statsMode.value === 'count') {
+    if (countInterval.value === 'day') {
+      return getStatsRange(referenceDate, 'week', 1).start
+    }
+
+    return getStatsRange(referenceDate, countInterval.value, periodCount.value).start
+  }
+
+  if (statsMode.value === 'rating' && ratingInterval.value === 'day') {
+    return getStatsRange(referenceDate, 'day', 1).start
+  }
+
+  if (statsMode.value === 'measurement') {
+    return getStatsRange(
+      referenceDate,
+      'day',
+      measurementInterval.value === 'month' ? 30 : 7,
+    ).start
+  }
+
+  if (statsMode.value === 'rating') {
+    return getStatsRange(referenceDate, 'day', ratingInterval.value === 'month' ? 30 : 7).start
+  }
+
+  return getStatsRange(referenceDate, 'day', 7).start
 }
 
 function getStatsRange(referenceDate: Date, interval: CountInterval, periods: number) {
@@ -536,75 +759,53 @@ function addMonths(date: Date, months: number): Date {
 function formatRangeDate(date: Date): string {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
 }
+
+function formatDateInputValue(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day}`
+}
 </script>
 
 <template>
   <section class="stats-view" aria-labelledby="stats-title">
     <header class="stats-header">
-      <h1 id="stats-title">統計</h1>
-      <p>{{ selectedCat?.name ?? '目前寵物' }} · {{ modeTitle }}</p>
+      <CatSwitcher />
+
+      <div class="stats-header__title">
+        <h1 id="stats-title">統計</h1>
+      </div>
+
+      <TodayButton @click="showTodayRange" />
     </header>
 
-    <section class="stats-section" aria-labelledby="count-stats-title">
-      <div class="stats-section__header">
-        <h2 id="count-stats-title">追蹤統計</h2>
-        <span>{{ categoryCountText }}</span>
-      </div>
-
-      <div class="mode-tabs" role="tablist" aria-label="統計方式">
-        <button
-          class="mode-tab"
-          :class="{ 'mode-tab--active': statsMode === 'count' }"
-          type="button"
-          role="tab"
-          :aria-selected="statsMode === 'count'"
-          @click="statsMode = 'count'"
-        >
-          發生次數
-        </button>
-        <button
-          class="mode-tab"
-          :class="{ 'mode-tab--active': statsMode === 'sum' }"
-          type="button"
-          role="tab"
-          :aria-selected="statsMode === 'sum'"
-          @click="statsMode = 'sum'"
-        >
-          累積數量
-        </button>
-        <button
-          class="mode-tab"
-          :class="{ 'mode-tab--active': statsMode === 'measurement' }"
-          type="button"
-          role="tab"
-          :aria-selected="statsMode === 'measurement'"
-          @click="statsMode = 'measurement'"
-        >
-          量測紀錄
-        </button>
-        <button
-          class="mode-tab"
-          :class="{ 'mode-tab--active': statsMode === 'rating' }"
-          type="button"
-          role="tab"
-          :aria-selected="statsMode === 'rating'"
-          @click="statsMode = 'rating'"
-        >
-          狀態評分
-        </button>
-      </div>
-
-      <div v-if="statsMode === 'count'" class="stats-controls">
-        <label class="stats-field">
-          <span>紀錄項目</span>
-          <select v-model="selectedCountCategoryId">
-            <option v-for="stats in countStats" :key="stats.category.id" :value="stats.category.id">
-              {{ stats.category.name }}
-            </option>
+    <section class="stats-section" aria-labelledby="stats-item-label">
+      <div class="stats-controls">
+        <label class="stats-field" id="stats-item-label">
+          <div class="stats-field__label-row">
+            <span>紀錄項目</span>
+            <small>僅顯示實際有紀錄的分類</small>
+          </div>
+          <select v-model="selectedStatsCategoryId">
+            <optgroup
+              v-for="group in groupedStatCategories"
+              :key="group.group"
+              :label="group.group"
+            >
+              <option v-for="category in group.categories" :key="category.id" :value="category.id">
+                {{ category.name }}
+              </option>
+            </optgroup>
           </select>
         </label>
 
-        <div class="interval-tabs" role="tablist" aria-label="統計區間">
+        <div
+          v-if="statsMode === 'count'"
+          class="interval-tabs"
+          role="tablist"
+          aria-label="統計區間"
+        >
           <button
             class="interval-tab"
             :class="{ 'interval-tab--active': countInterval === 'day' }"
@@ -636,34 +837,9 @@ function formatRangeDate(date: Date): string {
             月
           </button>
         </div>
-      </div>
-
-      <div v-else-if="statsMode === 'sum'" class="stats-controls stats-controls--single">
-        <label class="stats-field">
-          <span>紀錄項目</span>
-          <select v-model="selectedSumCategoryId">
-            <option v-for="category in sumCategories" :key="category.id" :value="category.id">
-              {{ category.name }}
-            </option>
-          </select>
-        </label>
-      </div>
-
-      <div v-else-if="statsMode === 'measurement'" class="stats-controls">
-        <label class="stats-field">
-          <span>紀錄項目</span>
-          <select v-model="selectedMeasurementCategoryId">
-            <option
-              v-for="category in measurementCategories"
-              :key="category.id"
-              :value="category.id"
-            >
-              {{ category.name }}
-            </option>
-          </select>
-        </label>
 
         <div
+          v-else-if="statsMode === 'measurement'"
           class="interval-tabs interval-tabs--measurement"
           role="tablist"
           aria-label="測量統計區間"
@@ -689,19 +865,13 @@ function formatRangeDate(date: Date): string {
             月
           </button>
         </div>
-      </div>
 
-      <div v-else class="stats-controls">
-        <label class="stats-field">
-          <span>紀錄項目</span>
-          <select v-model="selectedRatingCategoryId">
-            <option v-for="category in ratingCategories" :key="category.id" :value="category.id">
-              {{ category.name }}
-            </option>
-          </select>
-        </label>
-
-        <div class="interval-tabs interval-tabs--rating" role="tablist" aria-label="評分統計區間">
+        <div
+          v-else-if="statsMode === 'rating'"
+          class="interval-tabs interval-tabs--rating"
+          role="tablist"
+          aria-label="評分統計區間"
+        >
           <button
             class="interval-tab"
             :class="{ 'interval-tab--active': ratingInterval === 'day' }"
@@ -743,8 +913,210 @@ function formatRangeDate(date: Date): string {
         >
           ‹
         </button>
-        <strong>{{ rangeTitle }}</strong>
-        <button class="ui-button ui-button--icon range-button" type="button" @click="showNextRange">
+        <div class="range-picker">
+          <button
+            class="range-title-button"
+            type="button"
+            :aria-expanded="isRangePickerOpen"
+            aria-haspopup="dialog"
+            @click="toggleRangePicker"
+          >
+            <span>{{ rangeTitle }}</span>
+            <span class="range-title-button__chevron" aria-hidden="true">▾</span>
+          </button>
+
+          <div
+            v-if="isRangePickerOpen"
+            class="range-picker-menu"
+            role="dialog"
+            aria-label="切換統計區間"
+          >
+            <div v-if="rangePickerMode !== 'week'" class="range-picker-menu__year">
+              <button
+                class="ui-button ui-button--icon range-picker-menu__year-button"
+                type="button"
+                aria-label="上一年"
+                @click="changeRangePickerYear(-1)"
+              >
+                ‹
+              </button>
+              <strong>{{ rangePickerYear }}年</strong>
+              <button
+                class="ui-button ui-button--icon range-picker-menu__year-button"
+                type="button"
+                aria-label="下一年"
+                @click="changeRangePickerYear(1)"
+              >
+                ›
+              </button>
+            </div>
+
+            <p v-if="shouldShowRangePickerHint" class="range-picker-menu__hint">
+              {{ rangePickerLabel }}
+            </p>
+
+            <div
+              v-if="rangePickerMode === 'day' || rangePickerMode === 'week'"
+              class="range-picker-menu__month-nav"
+            >
+              <button
+                class="ui-button ui-button--icon range-picker-menu__year-button"
+                type="button"
+                aria-label="上一個月"
+                @click="changeRangePickerMonth(-1)"
+              >
+                ‹
+              </button>
+              <strong>{{ rangePickerMonthLabel }}</strong>
+              <button
+                class="ui-button ui-button--icon range-picker-menu__year-button"
+                type="button"
+                aria-label="下一個月"
+                @click="changeRangePickerMonth(1)"
+              >
+                ›
+              </button>
+            </div>
+
+            <div
+              v-if="rangePickerMode === 'day'"
+              class="range-picker-menu__days"
+              aria-label="選擇日期"
+            >
+              <button
+                v-for="day in rangePickerDays"
+                :key="day.key"
+                class="range-picker-menu__day"
+                :class="{ 'range-picker-menu__month--selected': isReferenceDate(day.date) }"
+                :disabled="isFutureRange(day.date)"
+                type="button"
+                @click="selectRangeDay(day.date)"
+              >
+                <span
+                  v-if="hasRecordInRange(day.date, day.date)"
+                  class="range-picker-menu__record-dot"
+                  aria-hidden="true"
+                ></span>
+                {{ day.label }}
+              </button>
+            </div>
+
+            <div
+              v-else-if="rangePickerMode === 'week'"
+              class="range-picker-menu__weeks"
+              aria-label="選擇週區間"
+            >
+              <button
+                v-for="week in rangePickerWeeks"
+                :key="week.key"
+                class="range-picker-menu__week"
+                :class="{
+                  'range-picker-menu__month--selected': isReferenceInRange(week.start, week.end),
+                }"
+                :disabled="isFutureRange(week.start)"
+                type="button"
+                @click="selectRangeWeek(week.end)"
+              >
+                <span
+                  v-if="hasRecordInRange(week.start, week.end)"
+                  class="range-picker-menu__record-dot"
+                  aria-hidden="true"
+                ></span>
+                {{ week.label }}
+              </button>
+            </div>
+
+            <div
+              v-else-if="rangePickerMode === 'twoMonth'"
+              class="range-picker-menu__months"
+              aria-label="選擇雙月區間"
+            >
+              <button
+                v-for="period in twoMonthOptions"
+                :key="period.startMonth"
+                class="range-picker-menu__month"
+                :class="{
+                  'range-picker-menu__month--selected': isReferenceInRange(
+                    period.start,
+                    period.end,
+                  ),
+                }"
+                :disabled="isFutureRange(period.start)"
+                type="button"
+                @click="selectRangeTwoMonth(period.end)"
+              >
+                <span
+                  v-if="hasRecordInRange(period.start, period.end)"
+                  class="range-picker-menu__record-dot"
+                  aria-hidden="true"
+                ></span>
+                {{ period.label }}
+              </button>
+            </div>
+
+            <div
+              v-else-if="rangePickerMode === 'halfYear'"
+              class="range-picker-menu__months range-picker-menu__months--two"
+              aria-label="選擇半年區間"
+            >
+              <button
+                v-for="period in halfYearOptions"
+                :key="period.key"
+                class="range-picker-menu__month"
+                :class="{
+                  'range-picker-menu__month--selected': isReferenceInRange(
+                    period.start,
+                    period.end,
+                  ),
+                }"
+                :disabled="isFutureRange(period.start)"
+                type="button"
+                @click="selectRangeHalfYear(period.end)"
+              >
+                <span
+                  v-if="hasRecordInRange(period.start, period.end)"
+                  class="range-picker-menu__record-dot"
+                  aria-hidden="true"
+                ></span>
+                {{ period.label }}
+              </button>
+            </div>
+
+            <div v-else class="range-picker-menu__months" aria-label="選擇月份">
+              <button
+                v-for="month in monthOptions"
+                :key="month.index"
+                class="range-picker-menu__month"
+                :class="{
+                  'range-picker-menu__month--selected':
+                    rangePickerYear === statsReferenceDate.getFullYear() &&
+                    month.index === rangePickerMonthIndex,
+                }"
+                :disabled="isFutureRange(new Date(rangePickerYear, month.index, 1))"
+                type="button"
+                @click="selectRangeMonth(month.index)"
+              >
+                <span
+                  v-if="
+                    hasRecordInRange(
+                      new Date(rangePickerYear, month.index, 1),
+                      new Date(rangePickerYear, month.index + 1, 0),
+                    )
+                  "
+                  class="range-picker-menu__record-dot"
+                  aria-hidden="true"
+                ></span>
+                {{ month.label }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <button
+          class="ui-button ui-button--icon range-button"
+          type="button"
+          :disabled="!canShowNextRange"
+          @click="showNextRange"
+        >
           ›
         </button>
       </div>
@@ -916,7 +1288,9 @@ function formatRangeDate(date: Date): string {
                 :key="point.key"
                 class="trend-label"
               >
-                <small>{{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}</small>
+                <small>{{
+                  typeof point.value === 'number' ? formatAmount(point.value) : '-'
+                }}</small>
                 <em>{{ point.label }}</em>
               </div>
             </div>
@@ -938,18 +1312,24 @@ function formatRangeDate(date: Date): string {
           <div class="count-card__summary">
             <div>
               <h3>{{ selectedRatingStats.category.name }}</h3>
-              <p>最近評分 {{ getRatingText(selectedRatingStats.latestValue, selectedRatingStats) }}</p>
+              <p>
+                最近評分 {{ getRatingText(selectedRatingStats.latestValue, selectedRatingStats) }}
+              </p>
             </div>
           </div>
 
           <div class="stats-metrics">
             <div>
               <span>最高</span>
-              <strong>{{ getRatingText(selectedRatingStats.maxValue, selectedRatingStats) }}</strong>
+              <strong>{{
+                getRatingText(selectedRatingStats.maxValue, selectedRatingStats)
+              }}</strong>
             </div>
             <div>
               <span>最低</span>
-              <strong>{{ getRatingText(selectedRatingStats.minValue, selectedRatingStats) }}</strong>
+              <strong>{{
+                getRatingText(selectedRatingStats.minValue, selectedRatingStats)
+              }}</strong>
             </div>
             <div>
               <span>筆數</span>
@@ -993,7 +1373,9 @@ function formatRangeDate(date: Date): string {
 
             <div class="trend-labels">
               <div v-for="point in selectedRatingStats.points" :key="point.key" class="trend-label">
-                <small>{{ typeof point.value === 'number' ? formatAmount(point.value) : '-' }}</small>
+                <small>{{
+                  typeof point.value === 'number' ? formatAmount(point.value) : '-'
+                }}</small>
                 <em>{{ point.label }}</em>
               </div>
             </div>
@@ -1009,12 +1391,12 @@ function formatRangeDate(date: Date): string {
       <p v-else class="empty-state">
         {{
           statsMode === 'count'
-            ? '最近還沒有可統計的次數紀錄。'
+            ? '區間沒有可統計的次數紀錄。'
             : statsMode === 'sum'
-              ? '最近還沒有可統計的加總紀錄。'
+              ? '區間沒有可統計的加總紀錄。'
               : statsMode === 'measurement'
-                ? '最近還沒有可統計的測量紀錄。'
-                : '最近還沒有可統計的評分紀錄。'
+                ? '區間沒有可統計的測量紀錄。'
+                : '區間沒有可統計的評分紀錄。'
         }}
       </p>
     </section>
@@ -1031,24 +1413,28 @@ function formatRangeDate(date: Date): string {
 
 .stats-header {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
   padding: 14px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
 }
 
-.stats-header h1,
-.stats-header p {
+.stats-header__title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: center;
+}
+
+.stats-header__title h1 {
   margin: 0;
 }
 
-.stats-header h1 {
+.stats-header__title h1 {
   font-size: 1.4rem;
-}
-
-.stats-header p {
-  color: var(--color-muted);
 }
 
 .stats-section {
@@ -1056,24 +1442,10 @@ function formatRangeDate(date: Date): string {
   gap: 10px;
 }
 
-.stats-section__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.stats-section__header h2,
-.stats-section__header span,
 .empty-state {
   margin: 0;
 }
 
-.stats-section__header h2 {
-  font-size: 1.05rem;
-}
-
-.stats-section__header span,
 .empty-state {
   color: var(--color-muted);
 }
@@ -1120,11 +1492,204 @@ function formatRangeDate(date: Date): string {
   gap: 8px;
 }
 
-.range-controls strong {
+.range-controls > strong {
   min-width: 0;
   color: var(--color-text);
   font-size: 0.95rem;
   text-align: center;
+}
+
+.range-picker {
+  position: relative;
+  min-width: 0;
+  text-align: center;
+}
+
+.range-title-button {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.range-title-button:hover {
+  color: var(--color-primary-dark);
+}
+
+.range-title-button span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.range-title-button__chevron {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.range-picker-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  width: min(278px, calc(100vw - 28px));
+  gap: 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 18px 44px var(--shadow-color);
+  transform: translateX(-50%);
+}
+
+.range-picker-menu__year {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.range-picker-menu__hint {
+  margin: -2px 0 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.range-picker-menu__month-nav {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.range-picker-menu__year-button {
+  width: 36px;
+  height: 36px;
+  font-size: 1.25rem;
+}
+
+.range-picker-menu__months {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.range-picker-menu__months--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.range-picker-menu__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.range-picker-menu__weeks {
+  display: grid;
+  gap: 8px;
+}
+
+.range-picker-menu__month {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.range-picker-menu__day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.range-picker-menu__week {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.range-picker-menu__record-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+
+.range-picker-menu__month:hover,
+.range-picker-menu__day:hover,
+.range-picker-menu__week:hover,
+.range-picker-menu__month--selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.range-picker-menu__month:disabled,
+.range-picker-menu__day:disabled,
+.range-picker-menu__week:disabled {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-background) 72%, transparent);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.range-picker-menu__month:disabled:hover,
+.range-picker-menu__day:disabled:hover,
+.range-picker-menu__week:disabled:hover {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-background) 72%, transparent);
 }
 
 .range-button {
@@ -1134,15 +1699,44 @@ function formatRangeDate(date: Date): string {
   line-height: 1;
 }
 
+.range-button:disabled {
+  border-color: var(--color-border);
+  background: var(--color-disabled-surface);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.range-button:disabled:hover {
+  border-color: var(--color-border);
+  background: var(--color-disabled-surface);
+  color: var(--color-muted);
+}
+
 .stats-field {
   display: grid;
   gap: 6px;
 }
 
-.stats-field span {
+.stats-field__label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stats-field__label-row span {
   color: var(--color-text);
   font-size: 0.875rem;
   font-weight: 800;
+}
+
+.stats-field__label-row small {
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: right;
 }
 
 .stats-field select {

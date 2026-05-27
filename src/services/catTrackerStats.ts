@@ -121,19 +121,19 @@ export function getCountTrendStats({
   const categoryById = new Map(countCategories.map((category) => [category.id, category]))
   const anchorStart =
     interval === 'day'
-      ? startOfDay(referenceDate)
+      ? startOfWeek(referenceDate)
       : interval === 'week'
         ? startOfWeek(referenceDate)
         : startOfMonth(referenceDate)
   const recentStart =
     interval === 'day'
-      ? addDays(anchorStart, -(periods - 1))
+      ? anchorStart
       : interval === 'week'
         ? addWeeks(anchorStart, -(periods - 1))
         : addMonths(anchorStart, -(periods - 1))
   const recentEnd =
     interval === 'day'
-      ? addDays(anchorStart, 1)
+      ? addDays(anchorStart, periods)
       : interval === 'week'
         ? addWeeks(anchorStart, 1)
         : addMonths(anchorStart, 1)
