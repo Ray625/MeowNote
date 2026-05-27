@@ -328,9 +328,7 @@ function getRatingStatsStyle(stats: RatingStats): Record<string, string> {
 function getLatestCategoryEventDate(categoryId: string): Date | null {
   const latestEvent = events.value
     .filter((event) => event.catId === selectedCatId.value && event.categoryId === categoryId)
-    .sort(
-      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-    )[0]
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())[0]
 
   return latestEvent ? new Date(latestEvent.occurredAt) : null
 }
@@ -684,11 +682,7 @@ function getStatsRangeStart(referenceDate: Date): Date {
   }
 
   if (statsMode.value === 'measurement') {
-    return getStatsRange(
-      referenceDate,
-      'day',
-      measurementInterval.value === 'month' ? 30 : 7,
-    ).start
+    return getStatsRange(referenceDate, 'day', measurementInterval.value === 'month' ? 30 : 7).start
   }
 
   if (statsMode.value === 'rating') {
@@ -1434,7 +1428,7 @@ function formatDateInputValue(date: Date): string {
 }
 
 .stats-header__title h1 {
-  font-size: 1.4rem;
+  font-size: 1rem;
 }
 
 .stats-section {
