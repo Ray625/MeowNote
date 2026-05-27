@@ -1,432 +1,245 @@
-# MeowNote - MVP v1 Spec
+# MeowNote v1 Product Spec
 
-## Historical Note
+MeowNote is a cat health and behavior tracking app.
 
-This document captures early MVP product direction. Some implementation details have evolved.
+The product is not a diary. It is an event-based tracking system for recurring health, behavior, food, medication, and care records.
 
-For current technical documentation, see:
+For technical details, see:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Data Model](docs/DATA_MODEL.md)
+- [Supabase Schema](docs/SUPABASE_SCHEMA.sql)
 
-## Product Direction
+## Product Goal
 
-Build a cat health and behavior tracking app for serious cat owners.
+Help cat owners build a reliable habit of recording meaningful events quickly, then review those records later through calendar, list, search, and statistics views.
 
-The core product principle is:
+Core principle:
 
 > Quick-first, detail-later.
 
-Users should be able to record an event in a few seconds. Details can be added later.
+## Current v1 Scope
 
-This app is not a pet diary. It is an event-based health and behavior tracking system.
+The current app supports:
 
----
+- first-time setup with cat name and selected tracking templates
+- local storage persistence before login
+- optional Supabase account sync after login
+- email/password authentication through Supabase
+- one active notebook per account
+- local data import into an empty remote notebook
+- automatic remote sync for cats, categories, and events after remote IDs are established
+- calendar view and monthly list view
+- event search by category name, title, note, and value text
+- quick record panel
+- event edit/delete modal
+- pet profile management
+- category/template management
+- dark/light theme toggle
+- stats page for count, sum, measurement, and rating categories
 
-## MVP Goal
+## Primary Workflows
 
-Build a frontend-only MVP that allows users to:
+### First-Time Setup
 
-1. Create or use a default cat
-2. Quickly record an event by clicking a category button
-3. View today's records
-4. Add optional details later
-5. View records on a simple calendar
-6. See basic monthly statistics
+1. User enters a cat name.
+2. User chooses tracking templates grouped by category group.
+3. Selected templates become actual user categories.
+4. The app should not create every predefined template automatically.
 
-No backend for MVP v1.
+Default selected templates should stay minimal. Current default direction is 飲水 and 用藥 only.
 
-Use localStorage for persistence.
+### Quick Record
 
----
-
-## Tech Stack
-
-Use:
-
-- Vue 3
-- TypeScript
-- Pinia
-- Vue Router optional
-- localStorage
-- date-fns optional
-
-Do not use backend, API, auth, or database in this version.
-
----
-
-## Core UX Principle
-
-Recording an event should require as few steps as possible.
-
-Ideal daily flow:
+Quick record is optimized for the fastest common path:
 
 ```txt
-Open app → tap "Vomiting" → record created
-
-The app should automatically fill:
-
-cat: selected/default cat
-occurredAt: current date and time
-category: selected category
-
-Optional fields such as note and severity should not be required.
-
-Data Models
-
-Create these TypeScript interfaces.
-
-export interface Cat {
-  id: string
-  name: string
-  avatarUrl?: string
-  note?: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface EventCategory {
-  id: string
-  name: string
-  color?: string
-  icon?: string
-  isDefault: boolean
-  isQuickAction: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CatEvent {
-  id: string
-  catId: string
-  categoryId: string
-  occurredAt: string
-  severity?: 1 | 2 | 3 | 4 | 5
-  note?: string
-  createdAt: string
-  updatedAt: string
-}
-Default Data
-
-On first app load, if no data exists, initialize:
-
-Default Cat
-{
-  id: 'default-cat',
-  name: '我的貓',
-  createdAt: now,
-  updatedAt: now
-}
-Default Categories
-
-Create default quick categories:
-
-嘔吐
-軟便
-食慾差
-嚎叫
-攻擊
-用藥
-
-Also allow more categories later:
-
-躲藏
-亂尿
-過度舔毛
-看診
-驅蟲
-疫苗
-外出訓練
-剪指甲訓練
-
-For MVP, the quick categories are enough.
-
-Main Pages / Views
-1. Home View
-
-Purpose:
-
-Allow user to quickly record events.
-
-Content:
-
-目前貓咪：我的貓
-
-今天要記錄什麼？
-
-[ 嘔吐 ] [ 軟便 ] [ 食慾差 ]
-[ 嚎叫 ] [ 攻擊 ] [ 用藥 ]
-[ + 自訂分類 ]
-
-今日紀錄
-15:42 嘔吐
-13:10 軟便
-09:00 用藥
+tap + -> choose category -> event created
+```
 
 Behavior:
 
-Clicking a category button immediately creates a CatEvent.
-occurredAt should be current date/time.
-catId should be the selected cat.
-categoryId should be the clicked category.
-After creating, show a small success message.
-Newly created event should appear in today's list immediately.
-2. Today Events List
+- use the selected cat
+- use the currently selected calendar date and current time
+- create an event immediately for count categories
+- open the edit modal after creation for numeric categories where a value is expected
+- close the quick record panel after creation
 
-Show all events from today.
+Quick categories come from enabled, non-archived categories where `isQuickAction` is true.
 
-Each event item should show:
+When selected quick categories span multiple category groups, group tabs should appear. Empty groups should not be shown.
 
-time
-category name
-cat name
-severity if exists
-note preview if exists
+### Calendar And List Views
 
-Each event should be clickable to edit details.
+The calendar screen supports:
 
-3. Event Detail / Edit Modal
+- selected cat switcher
+- calendar/list display mode
+- month navigation
+- today button
+- search entry point
+- date cells with event counts
+- selected date timeline
 
-User can edit optional details.
+The monthly list view groups events by date. Within a date, events should be sorted from earliest to latest.
 
-Fields:
+Search should find events by:
 
-category
-cat
-occurred date/time
-severity
-note
+- category name
+- title
+- note
+- value text
 
-Actions:
+Search results should use a compact list layout:
 
-save
-delete
-cancel
+- line 1: date/time
+- line 2: category and title/value
+- line 3: note
+- category color shown on the left
 
-Important:
+### Event Editing
 
-Quick record should not open this modal automatically.
-The modal is only opened when user chooses to edit.
+Events can store optional detail fields:
 
-4. Category Management
+- category
+- date/time
+- title
+- severity
+- note
+- numeric values
 
-MVP basic version:
+Changing an event category should immediately update the value input UI.
 
-Allow user to create a custom category.
+If the new category is incompatible with the old numeric value, save with `values = {}`. Do not preserve numeric values whose meaning changed.
 
-Fields:
+### Category Management
 
-name
-color optional
-quick action toggle optional
+Categories are user-customizable tracking templates.
 
-If quick action is enabled, show it on Home quick buttons.
+Users can:
 
-No need for advanced category management in MVP.
+- enable/disable categories
+- toggle quick action visibility
+- choose category group
+- choose color
+- choose statistics mode
+- set numeric value label
+- set value unit
+- set rating max value
+- create custom categories
+- archive or delete unused categories
 
-5. Simple Calendar View
+Deletion behavior:
 
-Purpose:
+- if a category has events, archive it and remove it from quick actions
+- if a category has no events, hard-delete it
+- restoring an archived category should make it active again
 
-Let user see which days have records.
+### Pet Management
 
-Requirements:
+Pet profiles are intentionally lightweight.
 
-Show current month
-Mark dates that have events
-Clicking a date shows events on that date
-No need for complex UI
+Fields such as birthday, sex, neuter status, weight, and note are optional.
 
-A simple custom calendar is acceptable.
+Deletion behavior:
 
-6. Basic Stats View
+- if a pet has events, archive it
+- if a pet has no events, hard-delete it
+- archived pets should still be selectable for historical review, but cannot create new events
 
-Purpose:
+### Account And Sync
 
-Show simple monthly event statistics.
+The app is local-first.
 
-Requirements:
+Before login:
 
-current month total event count
-count by category
-count by cat
+- data lives in localStorage
+- IDs should be UUIDs created locally
 
-Example:
+After login:
 
-本月紀錄：12 筆
+- Supabase session should be retained by the Supabase client
+- if remote notebook is empty, import local data once
+- if remote notebook has data, load remote data
+- after remote data is loaded/imported, creates/updates/deletes should sync automatically
 
-分類統計：
-嘔吐：3
-軟便：2
-嚎叫：4
+Current sync scope:
 
-貓咪統計：
-我的貓：12
-Pinia Store
+- cats
+- event categories
+- cat events
 
-Create a main store, for example:
+The remote model is notebook-based so a future sharing feature can let multiple users manage the same notebook.
 
-useCatTrackerStore
+## Statistics
 
-State:
+Stats are driven by each category's `statisticsMode`.
 
-cats: Cat[]
-categories: EventCategory[]
-events: CatEvent[]
-selectedCatId: string
+The Stats page should:
 
-Actions:
+- use the shared cat switcher
+- show only categories with actual records for the selected cat
+- jump to the selected category's latest recorded period when switching category
+- provide a 今日 button that returns to the period containing today
+- disable future-only ranges
+- mark range picker options that contain records
 
-initializeStore()
-addCat(name: string)
-addCategory(payload)
-quickAddEvent(categoryId: string)
-updateEvent(eventId: string, payload)
-deleteEvent(eventId: string)
-setSelectedCat(catId: string)
+### `count` - 發生次數
 
-Getters:
+For frequency-only events such as 嘔吐, 腹瀉, 夜間活動, 外出.
 
-selectedCat
-quickCategories
-todayEvents
-eventsByDate
-currentMonthEvents
-monthlyCategoryStats
-monthlyCatStats
+Useful views:
 
-Persistence:
+- day interval: 7 days
+- week interval: 8 weeks
+- month interval: 6 months
 
-Save cats, categories, events, selectedCatId to localStorage.
-Load from localStorage on app startup.
-If no data exists, initialize default data.
-Folder Structure Suggestion
-src/
-  main.ts
-  App.vue
+The chart should emphasize period totals and comparison with the previous period. Daily average is not useful for this mode.
 
-  types/
-    tracker.ts
+### `sum` - 累積數量
 
-  stores/
-    catTracker.ts
+For additive numeric values such as 飲水量, 食物量, medication dosage.
 
-  views/
-    HomeView.vue
-    CalendarView.vue
-    StatsView.vue
+Current useful view:
 
-  components/
-    QuickEventButtons.vue
-    TodayEventList.vue
-    EventEditModal.vue
-    CategoryCreateModal.vue
-    SimpleCalendar.vue
-    StatsSummary.vue
+- last 7 days
+- daily total bars
+- daily average calculated only from days with records
 
-  utils/
-    date.ts
-    id.ts
-    storage.ts
-Implementation Order
+Do not use empty days in average calculations.
 
-Follow this order:
+### `measurement` - 量測紀錄
 
-Step 1
+For independent measurements such as 體重 or 體溫.
 
-Set up Vue 3 + TypeScript + Pinia.
+Useful views:
 
-Step 2
+- week: show all 7 days
+- month: show only dates that have records
 
-Create TypeScript models:
+Do not calculate accumulated totals for measurement categories.
 
-Cat
-EventCategory
-CatEvent
-Step 3
+### `rating` - 狀態評分
 
-Create Pinia store with default cat and default categories.
+For subjective scores such as 精神狀態 and 食慾.
 
-Step 4
+Behavior:
 
-Implement localStorage persistence.
+- value input is required when rating mode is selected
+- default value label is 評分
+- minimum score is 1
+- max score is category-configurable, default 10
+- score must be an integer
 
-Step 5
+Stats should be shown like measurement trends, using point/line charts.
 
-Build HomeView.
+## Out Of Scope For Current v1
 
-Must include:
+These are intentional later items:
 
-selected/default cat display
-quick category buttons
-today event list
-Step 6
-
-Implement quickAddEvent.
-
-Clicking a category should immediately add an event.
-
-Step 7
-
-Implement EventEditModal.
-
-User can edit:
-
-time
-category
-cat
-severity
-note
-Step 8
-
-Implement custom category creation.
-
-Step 9
-
-Implement simple calendar view.
-
-Step 10
-
-Implement basic stats view.
-
-Design Requirements
-
-Keep UI simple and clear.
-
-Prioritize:
-
-fast recording
-readable daily records
-minimal required input
-no heavy onboarding
-no required cat profile fields
-
-Avoid:
-
-forcing user to fill cat birthday, breed, weight, sex, vaccine status
-opening long forms before user can record
-requiring login
-requiring backend
-complicated navigation
-MVP Acceptance Criteria
-
-The MVP is complete when:
-
-User can open the app and immediately see quick event buttons.
-User can click one button and create an event.
-The event appears in today's list.
-User can edit the event details later.
-User can create a custom category.
-Data remains after page refresh.
-Calendar shows dates with events.
-Stats page shows current month category counts.
-Product Notes
-
-The first version should validate this core hypothesis:
-
-Users are more likely to maintain long-term records if event creation takes only a few seconds.
-
-Do not overbuild medical records, reminders, backend, login, or charts yet.
-
-The MVP should focus on making the recording habit easy to start.
-```
+- full notebook sharing UI
+- role management UI
+- push notifications
+- veterinary document storage
+- medical diagnosis workflows
+- advanced analytics beyond the current statistics modes
