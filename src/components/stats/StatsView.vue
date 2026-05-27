@@ -15,6 +15,7 @@ import {
   type SumDailyStats,
 } from '@/services/catTrackerStats'
 import { useCatTrackerStore } from '@/stores/catTracker'
+import type { EventCategory } from '@/types'
 
 type StatsMode = 'count' | 'sum' | 'measurement' | 'rating'
 type CountInterval = 'day' | 'week' | 'month'
@@ -30,6 +31,7 @@ const ratingInterval = ref<ValueTrendInterval>('week')
 const selectedStatsCategoryId = ref('')
 const statsReferenceDate = ref(new Date())
 const isRangePickerOpen = ref(false)
+const isStatsCategoryMenuOpen = ref(false)
 const rangePickerYear = ref(statsReferenceDate.value.getFullYear())
 const rangePickerMonth = ref(statsReferenceDate.value.getMonth())
 
@@ -279,11 +281,13 @@ watch(
   (categoryList) => {
     if (categoryList.length === 0) {
       selectedStatsCategoryId.value = ''
+      isStatsCategoryMenuOpen.value = false
       return
     }
 
     if (!categoryList.some((category) => category.id === selectedStatsCategoryId.value)) {
       selectedStatsCategoryId.value = categoryList[0]?.id ?? ''
+      isStatsCategoryMenuOpen.value = false
     }
   },
   { immediate: true },
@@ -322,6 +326,12 @@ function getMeasurementStatsStyle(stats: MeasurementStats): Record<string, strin
 function getRatingStatsStyle(stats: RatingStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
+  }
+}
+
+function getCategoryOptionStyle(category?: EventCategory): Record<string, string> {
+  return {
+    '--category-color': getCategoryColorValue(category),
   }
 }
 
@@ -536,6 +546,19 @@ function toggleRangePicker(): void {
   }
 
   isRangePickerOpen.value = !isRangePickerOpen.value
+}
+
+function toggleStatsCategoryMenu(): void {
+  if (statCategories.value.length === 0) {
+    return
+  }
+
+  isStatsCategoryMenuOpen.value = !isStatsCategoryMenuOpen.value
+}
+
+function selectStatsCategory(categoryId: string): void {
+  selectedStatsCategoryId.value = categoryId
+  isStatsCategoryMenuOpen.value = false
 }
 
 function changeRangePickerYear(delta: number): void {
@@ -776,23 +799,66 @@ function formatDateInputValue(date: Date): string {
 
     <section class="stats-section" aria-labelledby="stats-item-label">
       <div class="stats-controls">
-        <label class="stats-field" id="stats-item-label">
+        <div class="stats-field">
           <div class="stats-field__label-row">
-            <span>紀錄項目</span>
+            <span id="stats-item-label">紀錄項目</span>
             <small>僅顯示實際有紀錄的分類</small>
           </div>
-          <select v-model="selectedStatsCategoryId">
-            <optgroup
-              v-for="group in groupedStatCategories"
-              :key="group.group"
-              :label="group.group"
+
+          <div class="stats-category-select">
+            <button
+              class="stats-category-trigger"
+              type="button"
+              :disabled="statCategories.length === 0"
+              :aria-expanded="isStatsCategoryMenuOpen"
+              aria-haspopup="listbox"
+              @click="toggleStatsCategoryMenu"
             >
-              <option v-for="category in group.categories" :key="category.id" :value="category.id">
-                {{ category.name }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
+              <span
+                v-if="selectedStatsCategory"
+                class="stats-category-dot"
+                :style="getCategoryOptionStyle(selectedStatsCategory)"
+                aria-hidden="true"
+              ></span>
+              <span class="stats-category-trigger__name">
+                {{ selectedStatsCategory?.name ?? '尚無紀錄項目' }}
+              </span>
+              <span class="stats-category-trigger__chevron" aria-hidden="true">▾</span>
+            </button>
+
+            <div
+              v-if="isStatsCategoryMenuOpen"
+              class="stats-category-menu"
+              role="listbox"
+              aria-labelledby="stats-item-label"
+            >
+              <section
+                v-for="group in groupedStatCategories"
+                :key="group.group"
+                class="stats-category-menu__group"
+              >
+                <h3>{{ group.group }}</h3>
+                <button
+                  v-for="category in group.categories"
+                  :key="category.id"
+                  class="stats-category-option"
+                  :class="{ 'stats-category-option--selected': category.id === selectedStatsCategoryId }"
+                  :style="getCategoryOptionStyle(category)"
+                  type="button"
+                  role="option"
+                  :aria-selected="category.id === selectedStatsCategoryId"
+                  @click="selectStatsCategory(category.id)"
+                >
+                  <span class="stats-category-option__check" aria-hidden="true">
+                    {{ category.id === selectedStatsCategoryId ? '✓' : '' }}
+                  </span>
+                  <span class="stats-category-dot" aria-hidden="true"></span>
+                  <span class="stats-category-option__name">{{ category.name }}</span>
+                </button>
+              </section>
+            </div>
+          </div>
+        </div>
 
         <div
           v-if="statsMode === 'count'"
@@ -1733,7 +1799,16 @@ function formatDateInputValue(date: Date): string {
   text-align: right;
 }
 
-.stats-field select {
+.stats-category-select {
+  position: relative;
+  min-width: 0;
+}
+
+.stats-category-trigger {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   min-height: 40px;
@@ -1742,8 +1817,105 @@ function formatDateInputValue(date: Date): string {
   padding: 0 10px;
   background: var(--color-surface);
   color: var(--color-text);
+  cursor: pointer;
   font: inherit;
   font-weight: 700;
+}
+
+.stats-category-trigger:disabled {
+  background: var(--color-disabled-surface);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.stats-category-trigger__name {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-category-trigger__chevron {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.stats-category-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--category-color);
+}
+
+.stats-category-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  z-index: 8;
+  display: grid;
+  max-height: min(360px, 48dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 8px;
+  background: var(--color-surface);
+  box-shadow: 0 18px 44px var(--shadow-color);
+}
+
+.stats-category-menu__group {
+  display: grid;
+  gap: 4px;
+}
+
+.stats-category-menu__group + .stats-category-menu__group {
+  margin-top: 8px;
+}
+
+.stats-category-menu__group h3 {
+  margin: 0;
+  padding: 4px 8px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.stats-category-option {
+  display: grid;
+  grid-template-columns: 18px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.stats-category-option:hover,
+.stats-category-option--selected {
+  border-color: color-mix(in srgb, var(--category-color) 34%, var(--color-border));
+  background: color-mix(in srgb, var(--category-color) 10%, var(--color-surface));
+}
+
+.stats-category-option__check {
+  color: var(--category-color);
+  font-weight: 900;
+}
+
+.stats-category-option__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .interval-tabs {

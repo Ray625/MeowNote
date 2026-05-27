@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import FixedSelect from '@/components/common/FixedSelect.vue'
 import {
   CAT_AVATAR_OPTIONS,
   CATEGORY_COLOR_OPTIONS,
@@ -67,6 +68,7 @@ const { isBootstrappingRemoteData, refreshRemoteCatTracker, remoteRefreshError }
   useRemoteCatTrackerRefresh()
 
 type SettingsSection = 'account' | 'categories' | 'pets'
+type SelectOption = { value: string; label: string }
 
 const rememberedEmail = readJson<string>(REMEMBERED_EMAIL_STORAGE_KEY, '')
 const settingsSection = ref<SettingsSection>('categories')
@@ -152,6 +154,28 @@ const deleteCatMessage = computed(() =>
     : `確定刪除「${pendingDeleteCat.value?.name}」？`,
 )
 const isSettingsModalOpen = computed(() => isCategoryModalOpen.value || isCatModalOpen.value)
+const categoryGroupOptions = computed<SelectOption[]>(() =>
+  CATEGORY_GROUP_ORDER.map((group) => ({
+    value: group,
+    label: group,
+  })),
+)
+const categoryStatisticsModeOptions: SelectOption[] = [
+  { value: 'count', label: '發生次數' },
+  { value: 'sum', label: '累積數量' },
+  { value: 'measurement', label: '量測紀錄' },
+  { value: 'rating', label: '狀態評分' },
+]
+const catSexOptions: SelectOption[] = [
+  { value: '', label: '未設定' },
+  { value: 'male', label: '男生' },
+  { value: 'female', label: '女生' },
+]
+const catIsNeuteredOptions: SelectOption[] = [
+  { value: '', label: '未設定' },
+  { value: 'yes', label: '已絕育' },
+  { value: 'no', label: '未絕育' },
+]
 const availableCategoryTemplates = computed(() => {
   const existingTemplateIds = new Set(
     categories.value.map((category) => category.templateId).filter(Boolean),
@@ -1219,14 +1243,10 @@ async function submitImportLocalData(): Promise<void> {
             <input v-model="categoryName" class="field__control" type="text" required />
           </label>
 
-          <label class="field">
+          <div class="field">
             <span class="field__label">群組</span>
-            <select v-model="categoryGroup" class="field__control">
-              <option v-for="group in CATEGORY_GROUP_ORDER" :key="group" :value="group">
-                {{ group }}
-              </option>
-            </select>
-          </label>
+            <FixedSelect v-model="categoryGroup" :options="categoryGroupOptions" />
+          </div>
 
           <div class="field">
             <span class="field__label">顏色</span>
@@ -1258,15 +1278,10 @@ async function submitImportLocalData(): Promise<void> {
             <span>顯示在快速紀錄</span>
           </label>
 
-          <label class="field">
+          <div class="field">
             <span class="field__label">統計方式</span>
-            <select v-model="categoryStatisticsMode" class="field__control">
-              <option value="count">發生次數</option>
-              <option value="sum">累積數量</option>
-              <option value="measurement">量測紀錄</option>
-              <option value="rating">狀態評分</option>
-            </select>
-          </label>
+            <FixedSelect v-model="categoryStatisticsMode" :options="categoryStatisticsModeOptions" />
+          </div>
 
           <template v-if="categoryStatisticsMode !== 'count'">
             <label class="field">
@@ -1357,14 +1372,10 @@ async function submitImportLocalData(): Promise<void> {
               <input v-model="catBirthday" class="field__control" type="date" />
             </label>
 
-            <label class="field">
+            <div class="field">
               <span class="field__label">性別</span>
-              <select v-model="catSex" class="field__control">
-                <option value="">未設定</option>
-                <option value="male">男生</option>
-                <option value="female">女生</option>
-              </select>
-            </label>
+              <FixedSelect v-model="catSex" :options="catSexOptions" />
+            </div>
 
             <label class="field">
               <span class="field__label">體重 kg</span>
@@ -1400,14 +1411,10 @@ async function submitImportLocalData(): Promise<void> {
               </div>
             </div>
 
-            <label class="field">
+            <div class="field">
               <span class="field__label">絕育狀態</span>
-              <select v-model="catIsNeutered" class="field__control">
-                <option value="">未設定</option>
-                <option value="yes">已絕育</option>
-                <option value="no">未絕育</option>
-              </select>
-            </label>
+              <FixedSelect v-model="catIsNeutered" :options="catIsNeuteredOptions" />
+            </div>
 
             <label class="field">
               <span class="field__label">備註</span>
