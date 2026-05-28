@@ -809,13 +809,12 @@ function formatDateInputValue(date: Date): string {
     </header>
 
     <section class="stats-section" aria-labelledby="stats-item-label">
+      <div class="stats-field__label-row">
+        <span id="stats-item-label">紀錄項目</span>
+        <small>僅顯示實際有紀錄的分類</small>
+      </div>
       <div class="stats-controls">
         <div class="stats-field">
-          <div class="stats-field__label-row">
-            <span id="stats-item-label">紀錄項目</span>
-            <small>僅顯示實際有紀錄的分類</small>
-          </div>
-
           <div ref="statsCategorySelectRef" class="stats-category-select">
             <button
               class="stats-category-trigger"
@@ -853,7 +852,9 @@ function formatDateInputValue(date: Date): string {
                   v-for="category in group.categories"
                   :key="category.id"
                   class="stats-category-option"
-                  :class="{ 'stats-category-option--selected': category.id === selectedStatsCategoryId }"
+                  :class="{
+                    'stats-category-option--selected': category.id === selectedStatsCategoryId,
+                  }"
                   :style="getCategoryOptionStyle(category)"
                   type="button"
                   role="option"
@@ -1524,8 +1525,7 @@ function formatDateInputValue(date: Date): string {
 .stats-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
+  align-items: start;
 }
 
 .stats-controls--single {
@@ -1933,6 +1933,7 @@ function formatDateInputValue(date: Date): string {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 132px;
+  margin-left: 10px;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -1948,7 +1949,7 @@ function formatDateInputValue(date: Date): string {
 }
 
 .interval-tab {
-  min-height: 40px;
+  min-height: 38px;
   border: 0;
   background: transparent;
   color: var(--color-muted);
