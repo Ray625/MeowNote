@@ -14,7 +14,8 @@ const { activeCategories, categoriesById, editingCategory, editingEvent } =
 
 const selectedCategoryId = ref('')
 const editingTitle = ref('')
-const editingOccurredAt = ref('')
+const editingOccurredDate = ref('')
+const editingOccurredTime = ref('')
 const editingNote = ref('')
 const editingNumericValue = ref<string | number>('')
 const isCategoryMenuOpen = ref(false)
@@ -46,6 +47,8 @@ const groupedActiveCategories = computed(() =>
     categories: activeCategories.value.filter((category) => category.group === group),
   })).filter((item) => item.categories.length > 0),
 )
+const occurredDateLabel = computed(() => formatDateLabel(editingOccurredDate.value))
+const occurredTimeLabel = computed(() => formatTimeLabel(editingOccurredTime.value))
 
 useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
 
@@ -58,7 +61,8 @@ watch(
   (event) => {
     selectedCategoryId.value = event?.categoryId ?? ''
     editingTitle.value = event?.title ?? ''
-    editingOccurredAt.value = event ? toDateTimeLocalValue(event.occurredAt) : ''
+    editingOccurredDate.value = event ? toDateInputValue(event.occurredAt) : ''
+    editingOccurredTime.value = event ? toTimeInputValue(event.occurredAt) : ''
     editingNote.value = event?.note ?? ''
     editingNumericValue.value = getNumericValueText(event?.values)
     isCategoryMenuOpen.value = false
@@ -89,8 +93,23 @@ function closeCategoryMenu(): void {
   isCategoryMenuOpen.value = false
 }
 
+function showNativePicker(event: MouseEvent): void {
+  const input = event.currentTarget as HTMLInputElement & { showPicker?: () => void }
+
+  if (typeof input.showPicker !== 'function') {
+    return
+  }
+
+  input.showPicker()
+}
+
 function saveEditingEvent(): void {
-  if (!editingEvent.value || !editingOccurredAt.value || !selectedCategoryId.value) {
+  if (
+    !editingEvent.value ||
+    !editingOccurredDate.value ||
+    !editingOccurredTime.value ||
+    !selectedCategoryId.value
+  ) {
     return
   }
 
@@ -117,7 +136,7 @@ function saveEditingEvent(): void {
 
   catTrackerStore.updateEvent(editingEvent.value.id, {
     categoryId: selectedCategoryId.value,
-    occurredAt: fromDateTimeLocalValue(editingOccurredAt.value),
+    occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
     title: editingTitle.value.trim() || undefined,
     note: editingNote.value.trim() || undefined,
     values:
@@ -203,15 +222,33 @@ function getDefaultRatingValue(max: number): number {
   return Math.ceil(max / 2)
 }
 
-function toDateTimeLocalValue(dateTime: string): string {
+function toDateInputValue(dateTime: string): string {
   const date = new Date(dateTime)
   const timezoneOffsetMs = date.getTimezoneOffset() * 60_000
 
-  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16)
+  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10)
 }
 
-function fromDateTimeLocalValue(value: string): string {
-  return new Date(value).toISOString()
+function toTimeInputValue(dateTime: string): string {
+  const date = new Date(dateTime)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${hours}:${minutes}`
+}
+
+function fromDateAndTimeInputValues(dateValue: string, timeValue: string): string {
+  return new Date(`${dateValue}T${timeValue}`).toISOString()
+}
+
+function formatDateLabel(value: string): string {
+  const [year, month, day] = value.split('-')
+
+  return year && month && day ? `${year}/${month}/${day}` : '選擇日期'
+}
+
+function formatTimeLabel(value: string): string {
+  return value || '選擇時間'
 }
 </script>
 
@@ -295,7 +332,34 @@ function fromDateTimeLocalValue(value: string): string {
 
         <label class="field">
           <span class="field__label">發生時間</span>
-          <input v-model="editingOccurredAt" class="field__control" type="datetime-local" />
+          <div class="datetime-fields">
+            <div class="native-picker-field">
+              <div class="datetime-display" aria-hidden="true">
+                <span class="datetime-display__label">日期</span>
+                <span class="datetime-display__value">{{ occurredDateLabel }}</span>
+              </div>
+              <input
+                v-model="editingOccurredDate"
+                class="native-picker-input"
+                type="date"
+                aria-label="選擇日期"
+                @click="showNativePicker"
+              />
+            </div>
+            <div class="native-picker-field">
+              <div class="datetime-display" aria-hidden="true">
+                <span class="datetime-display__label">時間</span>
+                <span class="datetime-display__value">{{ occurredTimeLabel }}</span>
+              </div>
+              <input
+                v-model="editingOccurredTime"
+                class="native-picker-input"
+                type="time"
+                aria-label="選擇時間"
+                @click="showNativePicker"
+              />
+            </div>
+          </div>
         </label>
 
         <label v-if="shouldShowNumericValue" class="field">
@@ -462,6 +526,8 @@ function fromDateTimeLocalValue(value: string): string {
 
 .field__control {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -474,6 +540,78 @@ function fromDateTimeLocalValue(value: string): string {
 .field__control:focus {
   border-color: var(--category-color);
   outline: 3px solid color-mix(in srgb, var(--category-color) 22%, transparent);
+}
+
+.datetime-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.native-picker-field {
+  position: relative;
+  min-width: 0;
+}
+
+.datetime-display {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  box-sizing: border-box;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.native-picker-field:hover .datetime-display {
+  border-color: var(--color-border-strong);
+  background: var(--color-primary-light);
+}
+
+.native-picker-field:focus-within .datetime-display {
+  border-color: var(--category-color);
+  outline: 3px solid color-mix(in srgb, var(--category-color) 22%, transparent);
+}
+
+.datetime-display__label {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.datetime-display__value {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-picker-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  color: transparent;
+  font-size: 16px;
 }
 
 .category-select-trigger {
@@ -672,6 +810,10 @@ function fromDateTimeLocalValue(value: string): string {
 
   .event-modal {
     padding: 16px;
+  }
+
+  .datetime-fields {
+    grid-template-columns: 1fr;
   }
 }
 </style>
