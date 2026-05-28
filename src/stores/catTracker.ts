@@ -164,6 +164,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const calendarDisplayMode = ref<CalendarDisplayMode>('calendar')
   const isEventSearchOpen = ref(false)
   const eventSearchQuery = ref('')
+  const isEventFilterOpen = ref(false)
+  const eventFilterCategoryIds = ref<string[]>([])
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
@@ -216,7 +218,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   })
 
   const todayEvents = computed(() =>
-    events.value
+    filteredSelectedCatEvents.value
       .filter((event) => event.catId === selectedCatId.value)
       .filter((event) => isSameLocalDate(event.occurredAt))
       .sort((a, b) => {
@@ -235,6 +237,31 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     () => new Map(categories.value.map((category) => [category.id, category])),
   )
   const catsById = computed(() => new Map(cats.value.map((cat) => [cat.id, cat])))
+  const eventFilterCategoryIdSet = computed(() => new Set(eventFilterCategoryIds.value))
+  const hasEventCategoryFilter = computed(() => eventFilterCategoryIds.value.length > 0)
+  const filteredSelectedCatEvents = computed(() =>
+    events.value
+      .filter((event) => event.catId === selectedCatId.value)
+      .filter(
+        (event) =>
+          !hasEventCategoryFilter.value || eventFilterCategoryIdSet.value.has(event.categoryId),
+      ),
+  )
+  const eventFilterCategories = computed(() => {
+    const categoryIds = new Set(
+      events.value
+        .filter((event) => event.catId === selectedCatId.value)
+        .map((event) => event.categoryId),
+    )
+
+    return sortCategories(categories.value.filter((category) => categoryIds.has(category.id)))
+  })
+  const groupedEventFilterCategories = computed(() =>
+    CATEGORY_GROUP_ORDER.map((group) => ({
+      group,
+      categories: eventFilterCategories.value.filter((category) => category.group === group),
+    })).filter((item) => item.categories.length > 0),
+  )
   const monthTitle = computed(() =>
     new Intl.DateTimeFormat('zh-TW', {
       month: 'long',
@@ -251,11 +278,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const eventCountByDate = computed(() => {
     const counts = new Map<string, number>()
 
-    for (const event of events.value) {
-      if (event.catId !== selectedCatId.value) {
-        continue
-      }
-
+    for (const event of filteredSelectedCatEvents.value) {
       const key = toDateKey(new Date(event.occurredAt))
       counts.set(key, (counts.get(key) ?? 0) + 1)
     }
@@ -282,8 +305,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     })
   })
   const selectedDateEvents = computed(() =>
-    events.value
-      .filter((event) => event.catId === selectedCatId.value)
+    filteredSelectedCatEvents.value
       .filter((event) => isSameDate(new Date(event.occurredAt), selectedDate.value))
       .sort((a, b) => {
         const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
@@ -308,8 +330,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const groups = new Map<string, MonthlyEventGroup>()
     const monthStart = startOfMonth(visibleMonth.value)
     const nextMonthStart = addMonths(monthStart, 1)
-    const monthEvents = events.value
-      .filter((event) => event.catId === selectedCatId.value)
+    const monthEvents = filteredSelectedCatEvents.value
       .filter((event) => {
         const occurredAt = new Date(event.occurredAt)
 
@@ -325,8 +346,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     const query = trimmedEventSearchQuery.value
-    const matchedEvents = events.value
-      .filter((event) => event.catId === selectedCatId.value)
+    const matchedEvents = filteredSelectedCatEvents.value
       .filter((event) => {
         const category = categoriesById.value.get(event.categoryId)
         const categoryName = category?.name.toLocaleLowerCase() ?? ''
@@ -469,6 +489,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function toggleEventSearch(): void {
     isEventSearchOpen.value = !isEventSearchOpen.value
 
+    if (isEventSearchOpen.value) {
+      isEventFilterOpen.value = false
+    }
+
     if (!isEventSearchOpen.value) {
       eventSearchQuery.value = ''
     }
@@ -476,7 +500,31 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function closeEventSearch(): void {
     isEventSearchOpen.value = false
+    isEventFilterOpen.value = false
     eventSearchQuery.value = ''
+  }
+
+  function openEventSearch(): void {
+    isEventSearchOpen.value = true
+    isEventFilterOpen.value = false
+  }
+
+  function toggleEventFilter(): void {
+    isEventFilterOpen.value = !isEventFilterOpen.value
+  }
+
+  function closeEventFilter(): void {
+    isEventFilterOpen.value = false
+  }
+
+  function toggleEventFilterCategory(categoryId: string): void {
+    eventFilterCategoryIds.value = eventFilterCategoryIdSet.value.has(categoryId)
+      ? eventFilterCategoryIds.value.filter((id) => id !== categoryId)
+      : [...eventFilterCategoryIds.value, categoryId]
+  }
+
+  function clearEventCategoryFilter(): void {
+    eventFilterCategoryIds.value = []
   }
 
   function getQuickRecordOccurredAt(): string {
@@ -1156,6 +1204,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     calendarDisplayMode,
     isEventSearchOpen,
     eventSearchQuery,
+    isEventFilterOpen,
+    eventFilterCategoryIds,
     selectedDate,
     visibleMonth,
     isQuickRecordOpen,
@@ -1177,6 +1227,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     catsById,
     categoriesById,
     eventsById,
+    hasEventCategoryFilter,
+    eventFilterCategories,
+    groupedEventFilterCategories,
     monthTitle,
     selectedDateTitle,
     calendarDays,
@@ -1199,6 +1252,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     setCalendarDisplayMode,
     toggleEventSearch,
     closeEventSearch,
+    openEventSearch,
+    toggleEventFilter,
+    closeEventFilter,
+    toggleEventFilterCategory,
+    clearEventCategoryFilter,
     createCat,
     updateCat,
     deleteCat,

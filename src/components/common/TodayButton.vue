@@ -8,8 +8,9 @@
 .today-button {
   justify-self: end;
   flex: 0 0 auto;
-  min-height: 32px;
-  padding: 0 10px;
+  height: 36px;
+  min-height: 0;
+  padding: 0 12px;
   font-size: 0.875rem;
 }
 </style>
