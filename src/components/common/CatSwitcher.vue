@@ -2,11 +2,17 @@
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getCatAvatarOption } from '@/constants/defaultData'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 const catTrackerStore = useCatTrackerStore()
 const { cats, selectedCat, selectedCatId } = storeToRefs(catTrackerStore)
 const isCatMenuOpen = ref(false)
+const catSwitcherRef = ref<HTMLElement>()
+
+useClickOutside(catSwitcherRef, () => {
+  isCatMenuOpen.value = false
+})
 
 function toggleCatMenu(): void {
   isCatMenuOpen.value = !isCatMenuOpen.value
@@ -19,7 +25,7 @@ function selectCat(catId: string): void {
 </script>
 
 <template>
-  <div class="cat-switcher">
+  <div ref="catSwitcherRef" class="cat-switcher">
     <button
       class="selected-cat"
       type="button"

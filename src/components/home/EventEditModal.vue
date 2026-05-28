@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -17,6 +18,7 @@ const editingOccurredAt = ref('')
 const editingNote = ref('')
 const editingNumericValue = ref<string | number>('')
 const isCategoryMenuOpen = ref(false)
+const categorySelectRef = ref<HTMLElement>()
 const pendingCategoryId = ref<string>()
 
 const modalCategory = computed(
@@ -46,6 +48,10 @@ const groupedActiveCategories = computed(() =>
 )
 
 useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
+
+useClickOutside(categorySelectRef, () => {
+  isCategoryMenuOpen.value = false
+})
 
 watch(
   editingEvent,
@@ -237,7 +243,7 @@ function fromDateTimeLocalValue(value: string): string {
       </div>
 
       <form class="event-form" @submit.prevent="saveEditingEvent">
-        <div class="field category-select-field">
+        <div ref="categorySelectRef" class="field category-select-field">
           <span class="field__label">分類</span>
           <button
             class="category-select-trigger"

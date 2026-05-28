@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import CatSwitcher from '@/components/common/CatSwitcher.vue'
 import TodayButton from '@/components/common/TodayButton.vue'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import {
   getCountTrendStats,
@@ -32,6 +33,8 @@ const selectedStatsCategoryId = ref('')
 const statsReferenceDate = ref(new Date())
 const isRangePickerOpen = ref(false)
 const isStatsCategoryMenuOpen = ref(false)
+const statsCategorySelectRef = ref<HTMLElement>()
+const rangePickerRef = ref<HTMLElement>()
 const rangePickerYear = ref(statsReferenceDate.value.getFullYear())
 const rangePickerMonth = ref(statsReferenceDate.value.getMonth())
 
@@ -39,6 +42,14 @@ const monthOptions = Array.from({ length: 12 }, (_, index) => ({
   index,
   label: new Intl.DateTimeFormat('zh-TW', { month: 'long' }).format(new Date(2024, index, 1)),
 }))
+
+useClickOutside(statsCategorySelectRef, () => {
+  isStatsCategoryMenuOpen.value = false
+})
+
+useClickOutside(rangePickerRef, () => {
+  isRangePickerOpen.value = false
+})
 
 const periodCount = computed(() =>
   countInterval.value === 'day' ? 7 : countInterval.value === 'week' ? 8 : 6,
@@ -805,7 +816,7 @@ function formatDateInputValue(date: Date): string {
             <small>僅顯示實際有紀錄的分類</small>
           </div>
 
-          <div class="stats-category-select">
+          <div ref="statsCategorySelectRef" class="stats-category-select">
             <button
               class="stats-category-trigger"
               type="button"
@@ -973,7 +984,7 @@ function formatDateInputValue(date: Date): string {
         >
           ‹
         </button>
-        <div class="range-picker">
+        <div ref="rangePickerRef" class="range-picker">
           <button
             class="range-title-button"
             type="button"

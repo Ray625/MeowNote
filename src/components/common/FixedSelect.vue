@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useClickOutside } from '@/composables/useClickOutside'
 
 export interface FixedSelectOption {
   value: string
@@ -18,6 +19,11 @@ const emit = defineEmits<{
 }>()
 
 const isOpen = ref(false)
+const selectRef = ref<HTMLElement>()
+
+useClickOutside(selectRef, () => {
+  isOpen.value = false
+})
 
 function toggleMenu(): void {
   isOpen.value = !isOpen.value
@@ -45,7 +51,7 @@ function closeOnFocusOut(event: FocusEvent): void {
 </script>
 
 <template>
-  <div class="fixed-select" @focusout="closeOnFocusOut">
+  <div ref="selectRef" class="fixed-select" @focusout="closeOnFocusOut">
     <button
       class="fixed-select__trigger"
       type="button"

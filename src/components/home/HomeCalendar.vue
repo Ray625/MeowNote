@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import CatSwitcher from '@/components/common/CatSwitcher.vue'
 import TodayButton from '@/components/common/TodayButton.vue'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 const catTrackerStore = useCatTrackerStore()
@@ -15,6 +16,7 @@ const {
   visibleMonth,
 } = storeToRefs(catTrackerStore)
 const isMonthPickerOpen = ref(false)
+const monthPickerRef = ref<HTMLElement>()
 const pickerYear = ref(visibleMonth.value.getFullYear())
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
@@ -23,6 +25,10 @@ const monthOptions = Array.from({ length: 12 }, (_, index) => ({
   label: new Intl.DateTimeFormat('zh-TW', { month: 'long' }).format(new Date(2024, index, 1)),
 }))
 const visibleMonthIndex = computed(() => visibleMonth.value.getMonth())
+
+useClickOutside(monthPickerRef, () => {
+  isMonthPickerOpen.value = false
+})
 
 function syncMonthPicker(): void {
   pickerYear.value = visibleMonth.value.getFullYear()
@@ -125,7 +131,7 @@ function selectMonth(monthIndex: number): void {
       >
         ‹
       </button>
-      <div class="month-picker">
+      <div ref="monthPickerRef" class="month-picker">
         <h1 id="calendar-title" class="month-title">
           <button
             class="month-title-button"
