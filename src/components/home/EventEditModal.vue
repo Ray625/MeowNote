@@ -49,6 +49,9 @@ const groupedActiveCategories = computed(() =>
 )
 const occurredDateLabel = computed(() => formatDateLabel(editingOccurredDate.value))
 const occurredTimeLabel = computed(() => formatTimeLabel(editingOccurredTime.value))
+const canEditEvent = computed(() =>
+  editingEvent.value ? catTrackerStore.canModifyEvent(editingEvent.value) : false,
+)
 
 useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
 
@@ -86,6 +89,10 @@ function closeEditEvent(): void {
 }
 
 function toggleCategoryMenu(): void {
+  if (!canEditEvent.value) {
+    return
+  }
+
   isCategoryMenuOpen.value = !isCategoryMenuOpen.value
 }
 
@@ -106,6 +113,7 @@ function showNativePicker(event: MouseEvent): void {
 function saveEditingEvent(): void {
   if (
     !editingEvent.value ||
+    !canEditEvent.value ||
     !editingOccurredDate.value ||
     !editingOccurredTime.value ||
     !selectedCategoryId.value
@@ -153,7 +161,7 @@ function saveEditingEvent(): void {
 }
 
 function deleteEditingEvent(): void {
-  if (!editingEvent.value) {
+  if (!editingEvent.value || !canEditEvent.value) {
     return
   }
 
@@ -167,7 +175,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 function requestCategoryChange(nextCategoryId: string): void {
-  if (!editingEvent.value) {
+  if (!editingEvent.value || !canEditEvent.value) {
     return
   }
 
@@ -263,7 +271,7 @@ function formatTimeLabel(value: string): string {
     >
       <div class="event-modal__header">
         <div>
-          <span class="event-modal__eyebrow">編輯紀錄</span>
+          <span class="event-modal__eyebrow">{{ canEditEvent ? '編輯紀錄' : '檢視紀錄' }}</span>
           <h2 id="event-modal-title" class="event-modal__title">
             <span class="category-dot" aria-hidden="true"></span>
             <span>{{ modalCategory?.name ?? '未分類' }}</span>
@@ -285,6 +293,7 @@ function formatTimeLabel(value: string): string {
           <button
             class="category-select-trigger"
             type="button"
+            :disabled="!canEditEvent"
             :aria-expanded="isCategoryMenuOpen"
             aria-haspopup="listbox"
             @click="toggleCategoryMenu"
@@ -327,7 +336,13 @@ function formatTimeLabel(value: string): string {
 
         <label class="field">
           <span class="field__label">標題</span>
-          <input v-model="editingTitle" class="field__control" type="text" maxlength="40" />
+          <input
+            v-model="editingTitle"
+            class="field__control"
+            type="text"
+            maxlength="40"
+            :disabled="!canEditEvent"
+          />
         </label>
 
         <label class="field">
@@ -343,6 +358,7 @@ function formatTimeLabel(value: string): string {
                 class="native-picker-input"
                 type="date"
                 aria-label="選擇日期"
+                :disabled="!canEditEvent"
                 @click="showNativePicker"
               />
             </div>
@@ -356,6 +372,7 @@ function formatTimeLabel(value: string): string {
                 class="native-picker-input"
                 type="time"
                 aria-label="選擇時間"
+                :disabled="!canEditEvent"
                 @click="showNativePicker"
               />
             </div>
@@ -375,6 +392,7 @@ function formatTimeLabel(value: string): string {
               min="1"
               :max="ratingMax"
               step="1"
+              :disabled="!canEditEvent"
             />
             <div class="rating-ticks" aria-hidden="true">
               <span v-for="value in ratingMax" :key="value"></span>
@@ -392,6 +410,7 @@ function formatTimeLabel(value: string): string {
             type="number"
             inputmode="decimal"
             step="any"
+            :disabled="!canEditEvent"
           />
         </label>
 
@@ -402,21 +421,29 @@ function formatTimeLabel(value: string): string {
             class="field__control field__control--textarea"
             placeholder="補充症狀、狀態或其他觀察"
             rows="5"
+            :disabled="!canEditEvent"
           ></textarea>
         </label>
 
-        <div class="event-form__actions">
+        <p v-if="!canEditEvent" class="readonly-message">
+          這筆紀錄由其他成員建立，你可以查看內容，但不能編輯或刪除。
+        </p>
+
+        <div class="event-form__actions" :class="{ 'event-form__actions--single': !canEditEvent }">
           <button
             class="ui-button ui-button--secondary secondary-button"
             type="button"
             @click="closeEditEvent"
           >
-            取消
+            {{ canEditEvent ? '取消' : '關閉' }}
           </button>
-          <button class="ui-button ui-button--primary primary-button" type="submit">儲存</button>
+          <button v-if="canEditEvent" class="ui-button ui-button--primary primary-button" type="submit">
+            儲存
+          </button>
         </div>
 
         <button
+          v-if="canEditEvent"
           class="ui-button ui-button--danger danger-button"
           type="button"
           @click="deleteEditingEvent"
@@ -542,6 +569,13 @@ function formatTimeLabel(value: string): string {
   outline: 3px solid color-mix(in srgb, var(--category-color) 22%, transparent);
 }
 
+.field__control:disabled {
+  opacity: 1;
+  color: var(--color-text);
+  -webkit-text-fill-color: var(--color-text);
+  cursor: default;
+}
+
 .datetime-fields {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
@@ -634,6 +668,16 @@ function formatTimeLabel(value: string): string {
 .category-select-trigger:hover {
   border-color: var(--color-border-strong);
   background: var(--color-primary-light);
+}
+
+.category-select-trigger:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.category-select-trigger:disabled:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
 }
 
 .category-select-trigger:focus {
@@ -785,11 +829,22 @@ function formatTimeLabel(value: string): string {
   font-weight: 800;
 }
 
+.readonly-message {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 .event-form__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 4px;
+}
+
+.event-form__actions--single {
+  grid-template-columns: 1fr;
 }
 
 .primary-button,

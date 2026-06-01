@@ -557,7 +557,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function openEditEvent(eventId: string): void {
     const event = eventsById.value.get(eventId)
 
-    if (!event || !canModifyEvent(event)) {
+    if (!event) {
       return
     }
 
@@ -1351,6 +1351,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     deleteCategory,
     restoreCategory,
     reorderCategory,
+    canModifyEvent,
     openEditEvent,
     closeEditEvent,
     openDeleteConfirm,
