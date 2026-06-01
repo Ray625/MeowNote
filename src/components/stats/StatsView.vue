@@ -525,6 +525,20 @@ function getRatingDotStyle(
   }
 }
 
+function isTodayInRange(start: Date, end: Date): boolean {
+  const today = startOfDay(new Date())
+
+  return today >= startOfDay(start) && today < startOfDay(end)
+}
+
+function isPointOnToday(point: { key: string; occurredAt?: string }): boolean {
+  if (point.occurredAt) {
+    return formatDateInputValue(new Date(point.occurredAt)) === formatDateInputValue(new Date())
+  }
+
+  return point.key === formatDateInputValue(new Date())
+}
+
 function getTrendPointPosition(
   index: number,
   pointCount: number,
@@ -1214,7 +1228,12 @@ function formatDateInputValue(date: Date): string {
             aria-label="近期趨勢"
             :style="getCountBarsStyle(selectedCountStats)"
           >
-            <div v-for="bucket in selectedCountStats.buckets" :key="bucket.key" class="count-bar">
+            <div
+              v-for="bucket in selectedCountStats.buckets"
+              :key="bucket.key"
+              class="count-bar"
+              :class="{ 'count-bar--today': isTodayInRange(bucket.start, bucket.end) }"
+            >
               <span
                 class="count-bar__fill"
                 :style="{ height: getBarHeight(bucket.count, selectedCountStats) }"
@@ -1263,7 +1282,12 @@ function formatDateInputValue(date: Date): string {
           </div>
 
           <div class="count-bars" aria-label="每日總量" :style="getSumBarsStyle(selectedSumStats)">
-            <div v-for="bucket in selectedSumStats.buckets" :key="bucket.key" class="count-bar">
+            <div
+              v-for="bucket in selectedSumStats.buckets"
+              :key="bucket.key"
+              class="count-bar"
+              :class="{ 'count-bar--today': isTodayInRange(bucket.start, bucket.end) }"
+            >
               <span
                 class="count-bar__fill"
                 :style="{ height: getSumBarHeight(bucket.total, selectedSumStats) }"
@@ -1359,6 +1383,7 @@ function formatDateInputValue(date: Date): string {
                 v-for="point in selectedMeasurementStats.points"
                 :key="point.key"
                 class="trend-label"
+                :class="{ 'trend-label--today': isPointOnToday(point) }"
               >
                 <small>{{
                   typeof point.value === 'number' ? formatAmount(point.value) : '-'
@@ -1444,7 +1469,12 @@ function formatDateInputValue(date: Date): string {
             </div>
 
             <div class="trend-labels">
-              <div v-for="point in selectedRatingStats.points" :key="point.key" class="trend-label">
+              <div
+                v-for="point in selectedRatingStats.points"
+                :key="point.key"
+                class="trend-label"
+                :class="{ 'trend-label--today': isPointOnToday(point) }"
+              >
                 <small>{{
                   typeof point.value === 'number' ? formatAmount(point.value) : '-'
                 }}</small>
@@ -2079,6 +2109,11 @@ function formatDateInputValue(date: Date): string {
   white-space: nowrap;
 }
 
+.count-bar--today em {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
 .measurement-chart {
   display: grid;
   gap: 8px;
@@ -2155,6 +2190,11 @@ function formatDateInputValue(date: Date): string {
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trend-label--today em {
+  color: var(--color-text);
+  font-weight: 800;
 }
 
 .count-card__meta {
