@@ -32,7 +32,7 @@ import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { getEventValueText } from '@/utils/eventValues'
 import { createId } from '@/utils/id'
 
-type MainTab = 'calendar' | 'stats' | 'settings'
+type MainTab = 'notebook' | 'calendar' | 'stats' | 'settings'
 type CalendarDisplayMode = 'calendar' | 'list'
 
 export interface CalendarDay {
@@ -555,7 +555,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function openEditEvent(eventId: string): void {
-    if (!eventsById.value.has(eventId)) {
+    const event = eventsById.value.get(eventId)
+
+    if (!event || !canModifyEvent(event)) {
       return
     }
 
@@ -568,7 +570,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function openDeleteConfirm(eventId: string): void {
-    if (!eventsById.value.has(eventId)) {
+    const event = eventsById.value.get(eventId)
+
+    if (!event || !canModifyEvent(event)) {
       return
     }
 
@@ -595,6 +599,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function createCat(input: CreateCatInput): Cat {
+    if (!canManageNotebookData()) {
+      throw new Error('只有 Notebook 擁有者可以新增寵物')
+    }
+
     const now = getIsoNow()
     const cat: Cat = {
       id: createId('cat'),
@@ -618,6 +626,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function updateCat(catId: string, input: UpdateCatInput): Cat | undefined {
+    if (!canManageNotebookData()) {
+      return undefined
+    }
+
     const cat = catsById.value.get(catId)
 
     if (!cat) {
@@ -634,6 +646,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function deleteCat(catId: string): void {
+    if (!canManageNotebookData()) {
+      return
+    }
+
     const cat = catsById.value.get(catId)
 
     if (!cat) {
@@ -660,6 +676,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function restoreCat(catId: string): Cat | undefined {
+    if (!canManageNotebookData()) {
+      return undefined
+    }
+
     const cat = catsById.value.get(catId)
 
     if (!cat) {
@@ -696,6 +716,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function createCategory(input: CreateCategoryInput): EventCategory {
+    if (!canManageNotebookData()) {
+      throw new Error('只有 Notebook 擁有者可以新增分類')
+    }
+
     const now = getIsoNow()
     const group = input.group ?? '飲食'
     const category: EventCategory = {
@@ -727,6 +751,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     categoryId: string,
     input: UpdateCategoryInput,
   ): EventCategory | undefined {
+    if (!canManageNotebookData()) {
+      return undefined
+    }
+
     const category = categoriesById.value.get(categoryId)
 
     if (!category) {
@@ -781,6 +809,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       severity: input.severity,
       note: input.note,
       values: input.values,
+      createdBy: remoteAuth.user.value?.id,
       createdAt: now,
       updatedAt: now,
     }
@@ -808,7 +837,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function updateEvent(eventId: string, input: UpdateCatEventInput): CatEvent | undefined {
     const event = eventsById.value.get(eventId)
 
-    if (!event) {
+    if (!event || !canModifyEvent(event)) {
       return undefined
     }
 
@@ -822,6 +851,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function deleteEvent(eventId: string): void {
+    const event = eventsById.value.get(eventId)
+
+    if (event && !canModifyEvent(event)) {
+      return
+    }
+
     const shouldDeleteRemote = shouldSyncRemoteEventId(eventId)
 
     events.value = events.value.filter((event) => event.id !== eventId)
@@ -832,6 +867,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function deleteCategory(categoryId: string): void {
+    if (!canManageNotebookData()) {
+      return
+    }
+
     const category = categoriesById.value.get(categoryId)
 
     if (!category) {
@@ -855,6 +894,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function restoreCategory(categoryId: string): EventCategory | undefined {
+    if (!canManageNotebookData()) {
+      return undefined
+    }
+
     const category = categoriesById.value.get(categoryId)
 
     if (!category) {
@@ -877,6 +920,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     targetCategoryId: string,
     position: 'before' | 'after' = 'before',
   ): void {
+    if (!canManageNotebookData()) {
+      return
+    }
+
     if (categoryId === targetCategoryId) {
       return
     }
@@ -941,6 +988,36 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function getRemoteNotebookId(): string {
     return remoteAuth.activeNotebookId.value
+  }
+
+  function canModifyEvent(event: CatEvent): boolean {
+    const notebookId = getRemoteNotebookId()
+    const currentUserId = remoteAuth.user.value?.id
+    const notebookRole = remoteAuth.activeNotebookRole.value
+
+    if (!notebookId || !currentUserId) {
+      return true
+    }
+
+    if (notebookRole === 'owner') {
+      return true
+    }
+
+    return event.createdBy === currentUserId
+  }
+
+  function canManageNotebookData(): boolean {
+    const notebookId = getRemoteNotebookId()
+    const currentUserId = remoteAuth.user.value?.id
+
+    if (!notebookId || !currentUserId) {
+      return true
+    }
+
+    return (
+      !remoteAuth.activeNotebookRole.value ||
+      remoteAuth.activeNotebookRole.value === 'owner'
+    )
   }
 
   function getFallbackSelectedCatId(excludedCatId?: string): string {

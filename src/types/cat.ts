@@ -40,6 +40,7 @@ export interface CatEvent {
   severity?: 1 | 2 | 3 | 4 | 5
   note?: string
   values?: Record<string, unknown>
+  createdBy?: string
   createdAt: string
   updatedAt: string
 }

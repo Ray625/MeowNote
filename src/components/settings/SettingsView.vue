@@ -16,13 +16,8 @@ import {
   type CategoryTemplate,
 } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
-import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useTheme } from '@/composables/useTheme'
-import {
-  importLocalCatTracker,
-  type ImportLocalCatTrackerResult,
-} from '@/services/importLocalCatTracker'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type {
   Cat,
@@ -33,56 +28,25 @@ import type {
   EventCategory,
   EventCategoryGroup,
 } from '@/types'
-import { readJson, removeJson, writeJson } from '@/utils/storage'
-
-const REMEMBERED_EMAIL_STORAGE_KEY = 'meownote:remembered-email'
-
 const catTrackerStore = useCatTrackerStore()
 const {
   categories,
   categoriesByGroup,
   cats,
-  events,
-  remoteCategorySyncError,
-  remoteCatSyncError,
-  remoteEventSyncError,
   selectedCatId,
 } = storeToRefs(catTrackerStore)
 const { isDarkMode, toggleDarkMode } = useTheme()
 const {
   activeNotebookId,
-  activeNotebookName,
-  authMessage,
-  errorMessage,
+  activeNotebookRole,
   initializeAuth,
-  isConfigured,
-  isLoading,
   isSignedIn,
-  signInWithPassword,
-  signUpWithPassword,
-  signOut,
-  updateActiveNotebookName,
-  user,
 } = useRemoteAuth()
-const { isBootstrappingRemoteData, refreshRemoteCatTracker, remoteRefreshError } =
-  useRemoteCatTrackerRefresh()
 
-type SettingsSection = 'account' | 'categories' | 'pets'
+type SettingsSection = 'categories' | 'pets'
 type SelectOption = { value: string; label: string }
 
-const rememberedEmail = readJson<string>(REMEMBERED_EMAIL_STORAGE_KEY, '')
 const settingsSection = ref<SettingsSection>('categories')
-const signInEmail = ref(rememberedEmail)
-const signInPassword = ref('')
-const shouldRememberEmail = ref(Boolean(rememberedEmail))
-const isEditingNotebookName = ref(false)
-const notebookNameDraft = ref('')
-const isImportingLocalData = ref(false)
-const isLoadingRemoteData = ref(false)
-const importResult = ref<ImportLocalCatTrackerResult>()
-const importErrorMessage = ref('')
-const remoteLoadMessage = ref('')
-const remoteLoadErrorMessage = ref('')
 const editingCategoryId = ref<string>()
 const categoryName = ref('')
 const categoryGroup = ref<EventCategoryGroup>('飲食')
@@ -133,15 +97,14 @@ const deleteCatActionLabel = computed(() =>
   pendingDeleteCatUsageCount.value > 0 ? '停用' : '刪除',
 )
 const settingsSubtitle = computed(() => {
-  if (settingsSection.value === 'account') {
-    return '管理帳戶與同步'
-  }
-
   return settingsSection.value === 'categories' ? '管理事件分類' : '管理寵物資料'
 })
-const localImportSummary = computed(
+const canManageNotebookData = computed(
   () =>
-    `${cats.value.length} 隻寵物、${categories.value.length} 個分類、${events.value.length} 筆紀錄`,
+    !activeNotebookId.value ||
+    !isSignedIn.value ||
+    !activeNotebookRole.value ||
+    activeNotebookRole.value === 'owner',
 )
 const deleteMessage = computed(() =>
   pendingDeleteUsageCount.value > 0
@@ -202,6 +165,10 @@ watch(categoryStatisticsMode, (statisticsMode) => {
 })
 
 function startCreateCategory(): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   editingCategoryId.value = undefined
   categoryName.value = ''
   categoryGroup.value = '飲食'
@@ -215,6 +182,10 @@ function startCreateCategory(): void {
 }
 
 function startEditCategory(category: EventCategory): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   editingCategoryId.value = category.id
   categoryName.value = category.name
   categoryGroup.value = category.group ?? '飲食'
@@ -241,6 +212,10 @@ function closeCategoryModal(): void {
 }
 
 function saveCategory(): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   const trimmedName = categoryName.value.trim()
 
   if (!trimmedName) {
@@ -301,6 +276,10 @@ function saveCategory(): void {
 }
 
 function addCategoryTemplate(template: CategoryTemplate): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   catTrackerStore.createCategory({
     templateId: template.id,
     name: template.name,
@@ -316,6 +295,10 @@ function addCategoryTemplate(template: CategoryTemplate): void {
 }
 
 function deleteCategory(category: EventCategory): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   pendingDeleteCategoryId.value = category.id
 }
 
@@ -339,10 +322,18 @@ function confirmDeleteCategory(): void {
 }
 
 function restoreCategory(category: EventCategory): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   catTrackerStore.restoreCategory(category.id)
 }
 
 function deleteCat(cat: Cat): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   pendingDeleteCatId.value = cat.id
 }
 
@@ -366,6 +357,10 @@ function confirmDeleteCat(): void {
 }
 
 function restoreCat(cat: Cat): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   catTrackerStore.restoreCat(cat.id)
 }
 
@@ -374,7 +369,7 @@ function switchSettingsSection(section: SettingsSection): void {
 }
 
 function startCreatePrimaryItem(): void {
-  if (settingsSection.value === 'account') {
+  if (!canManageNotebookData.value) {
     return
   }
 
@@ -391,6 +386,10 @@ function selectCategoryColor(colorId: CategoryColorId): void {
 }
 
 function startCreateCat(): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   editingCatId.value = undefined
   catName.value = ''
   catBirthday.value = ''
@@ -403,6 +402,10 @@ function startCreateCat(): void {
 }
 
 function startEditCat(cat: Cat): void {
+  if (!canManageNotebookData.value) {
+    return
+  }
+
   editingCatId.value = cat.id
   catName.value = cat.name
   catBirthday.value = cat.birthday ?? ''
@@ -653,106 +656,6 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   )
 }
 
-async function submitSignIn(): Promise<void> {
-  rememberSignInEmail()
-
-  if (await signInWithPassword(signInEmail.value, signInPassword.value)) {
-    signInPassword.value = ''
-  }
-}
-
-async function submitSignUp(): Promise<void> {
-  rememberSignInEmail()
-
-  if (await signUpWithPassword(signInEmail.value, signInPassword.value)) {
-    signInPassword.value = ''
-  }
-}
-
-async function submitSignOut(): Promise<void> {
-  if (await signOut()) {
-    signInPassword.value = ''
-    closeNotebookNameEditor()
-  }
-}
-
-function startEditNotebookName(): void {
-  notebookNameDraft.value = activeNotebookName.value || ''
-  isEditingNotebookName.value = true
-}
-
-function closeNotebookNameEditor(): void {
-  isEditingNotebookName.value = false
-  notebookNameDraft.value = ''
-}
-
-async function submitNotebookName(): Promise<void> {
-  if (await updateActiveNotebookName(notebookNameDraft.value)) {
-    closeNotebookNameEditor()
-  }
-}
-
-function rememberSignInEmail(): void {
-  const trimmedEmail = signInEmail.value.trim()
-
-  signInEmail.value = trimmedEmail
-
-  if (!shouldRememberEmail.value) {
-    removeJson(REMEMBERED_EMAIL_STORAGE_KEY)
-    return
-  }
-
-  if (trimmedEmail) {
-    writeJson(REMEMBERED_EMAIL_STORAGE_KEY, trimmedEmail)
-  }
-}
-
-async function submitLoadRemoteData(): Promise<void> {
-  if (!activeNotebookId.value) {
-    remoteLoadErrorMessage.value = 'Notebook 尚未建立完成'
-    return
-  }
-
-  isLoadingRemoteData.value = true
-  remoteLoadMessage.value = ''
-  remoteLoadErrorMessage.value = ''
-
-  try {
-    await refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { force: true })
-    remoteLoadMessage.value = `已載入 ${cats.value.length} 隻寵物、${categories.value.length} 個分類、${events.value.length} 筆紀錄。`
-  } catch (error) {
-    remoteLoadErrorMessage.value = error instanceof Error ? error.message : '載入雲端資料失敗'
-  } finally {
-    isLoadingRemoteData.value = false
-  }
-}
-
-async function submitImportLocalData(): Promise<void> {
-  if (!activeNotebookId.value || !user.value) {
-    importErrorMessage.value = 'Notebook 尚未建立完成'
-    return
-  }
-
-  isImportingLocalData.value = true
-  importResult.value = undefined
-  importErrorMessage.value = ''
-  remoteLoadMessage.value = ''
-  remoteLoadErrorMessage.value = ''
-
-  try {
-    importResult.value = await importLocalCatTracker({
-      notebookId: activeNotebookId.value,
-      cats: cats.value,
-      categories: categories.value,
-      events: events.value,
-      createdBy: user.value.id,
-    })
-  } catch (error) {
-    importErrorMessage.value = error instanceof Error ? error.message : '匯入本機資料失敗'
-  } finally {
-    isImportingLocalData.value = false
-  }
-}
 </script>
 
 <template>
@@ -791,7 +694,7 @@ async function submitImportLocalData(): Promise<void> {
             </svg>
           </button>
           <button
-            v-if="settingsSection !== 'account'"
+            v-if="canManageNotebookData"
             class="ui-button ui-button--primary compact-button"
             type="button"
             @click="startCreatePrimaryItem"
@@ -802,16 +705,6 @@ async function submitImportLocalData(): Promise<void> {
       </div>
 
       <div class="settings-tabs" role="tablist" aria-label="設定分類">
-        <button
-          class="ui-button settings-tab"
-          :class="settingsSection === 'account' ? 'ui-button--primary' : 'ui-button--secondary'"
-          type="button"
-          role="tab"
-          :aria-selected="settingsSection === 'account'"
-          @click="switchSettingsSection('account')"
-        >
-          帳戶
-        </button>
         <button
           class="ui-button settings-tab"
           :class="settingsSection === 'categories' ? 'ui-button--primary' : 'ui-button--secondary'"
@@ -836,194 +729,9 @@ async function submitImportLocalData(): Promise<void> {
     </div>
 
     <div class="settings-content">
-      <section
-        v-if="settingsSection === 'account'"
-        class="account-panel"
-        aria-labelledby="account-title"
-      >
-        <div class="account-panel__header">
-          <h2 id="account-title">同步帳戶</h2>
-          <span v-if="isSignedIn" class="account-badge">已登入</span>
-          <span v-else class="account-badge account-badge--muted">未登入</span>
-        </div>
-
-        <p v-if="!isConfigured" class="account-message">
-          Supabase 尚未設定，請確認 `.env.local` 已填入專案 URL 和 anon key。
-        </p>
-
-        <template v-else-if="isSignedIn">
-          <div class="account-details">
-            <span>Email</span>
-            <strong>{{ user?.email }}</strong>
-            <span>Notebook</span>
-            <strong>{{ activeNotebookName || '建立中' }}</strong>
-            <span>本機資料</span>
-            <strong>{{ localImportSummary }}</strong>
-            <span>同步狀態</span>
-            <strong>{{ isBootstrappingRemoteData ? '同步中' : '已連線' }}</strong>
-          </div>
-
-          <form
-            v-if="isEditingNotebookName"
-            class="notebook-name-form"
-            @submit.prevent="submitNotebookName"
-          >
-            <label class="field">
-              <span class="field__label">Notebook 名稱</span>
-              <input
-                v-model="notebookNameDraft"
-                class="field__control"
-                type="text"
-                autocomplete="off"
-                required
-                maxlength="80"
-              />
-            </label>
-            <div class="notebook-name-form__actions">
-              <button
-                class="ui-button ui-button--primary account-button"
-                type="submit"
-                :disabled="isLoading || !activeNotebookId"
-              >
-                儲存名稱
-              </button>
-              <button
-                class="ui-button ui-button--secondary account-button"
-                type="button"
-                :disabled="isLoading"
-                @click="closeNotebookNameEditor"
-              >
-                取消
-              </button>
-            </div>
-          </form>
-
-          <button
-            v-else
-            class="ui-button ui-button--secondary account-button"
-            type="button"
-            :disabled="isLoading || !activeNotebookId"
-            @click="startEditNotebookName"
-          >
-            編輯 Notebook 名稱
-          </button>
-
-          <button
-            class="ui-button ui-button--primary account-button"
-            type="button"
-            :disabled="
-              isLoading || isImportingLocalData || isBootstrappingRemoteData || !activeNotebookId
-            "
-            @click="submitImportLocalData"
-          >
-            {{ isImportingLocalData ? '上傳中' : '上傳本機資料' }}
-          </button>
-
-          <button
-            class="ui-button ui-button--secondary account-button"
-            type="button"
-            :disabled="
-              isLoading || isLoadingRemoteData || isBootstrappingRemoteData || !activeNotebookId
-            "
-            @click="submitLoadRemoteData"
-          >
-            {{ isLoadingRemoteData ? '載入中' : '載入雲端資料' }}
-          </button>
-
-          <p v-if="importResult" class="account-message">
-            已匯入 {{ importResult.catsImported }} 隻寵物、{{
-              importResult.categoriesImported
-            }}
-            個分類、{{ importResult.eventsImported }} 筆紀錄。
-            <template v-if="importResult.eventsSkipped > 0">
-              有 {{ importResult.eventsSkipped }} 筆紀錄因找不到寵物或分類而略過。
-            </template>
-          </p>
-          <p v-if="importErrorMessage" class="account-message account-message--error">
-            {{ importErrorMessage }}
-          </p>
-          <p v-if="remoteLoadMessage" class="account-message">
-            {{ remoteLoadMessage }}
-          </p>
-          <p v-if="remoteLoadErrorMessage" class="account-message account-message--error">
-            {{ remoteLoadErrorMessage }}
-          </p>
-          <p v-if="remoteRefreshError" class="account-message account-message--error">
-            自動同步失敗：{{ remoteRefreshError }}
-          </p>
-          <p v-if="remoteEventSyncError" class="account-message account-message--error">
-            事件同步失敗：{{ remoteEventSyncError }}
-          </p>
-          <p v-if="remoteCatSyncError" class="account-message account-message--error">
-            寵物同步失敗：{{ remoteCatSyncError }}
-          </p>
-          <p v-if="remoteCategorySyncError" class="account-message account-message--error">
-            分類同步失敗：{{ remoteCategorySyncError }}
-          </p>
-
-          <button
-            class="ui-button ui-button--secondary account-button"
-            type="button"
-            :disabled="isLoading"
-            @click="submitSignOut"
-          >
-            登出
-          </button>
-        </template>
-
-        <form v-else class="account-form" @submit.prevent="submitSignIn">
-          <label class="field">
-            <span class="field__label">Email</span>
-            <input
-              v-model="signInEmail"
-              class="field__control"
-              type="email"
-              autocomplete="email"
-              inputmode="email"
-              required
-            />
-          </label>
-          <label class="field">
-            <span class="field__label">密碼</span>
-            <input
-              v-model="signInPassword"
-              class="field__control"
-              type="password"
-              autocomplete="current-password"
-              required
-              minlength="6"
-            />
-          </label>
-          <label class="toggle-field account-remember-field">
-            <input v-model="shouldRememberEmail" type="checkbox" />
-            <span>記住 Email</span>
-          </label>
-          <button
-            class="ui-button ui-button--primary account-button"
-            type="submit"
-            :disabled="isLoading"
-          >
-            {{ isLoading ? '登入中' : '登入' }}
-          </button>
-          <button
-            class="ui-button ui-button--secondary account-button"
-            type="button"
-            :disabled="isLoading"
-            @click="submitSignUp"
-          >
-            註冊
-          </button>
-        </form>
-
-        <p v-if="authMessage" class="account-message">{{ authMessage }}</p>
-        <p v-if="errorMessage" class="account-message account-message--error">
-          {{ errorMessage }}
-        </p>
-      </section>
-
-      <div v-else-if="settingsSection === 'categories'" class="category-groups">
+      <div v-if="settingsSection === 'categories'" class="category-groups">
         <section
-          v-if="availableCategoryTemplates.length > 0"
+          v-if="canManageNotebookData && availableCategoryTemplates.length > 0"
           class="template-picker"
           aria-labelledby="category-template-title"
         >
@@ -1085,7 +793,7 @@ async function submitImportLocalData(): Promise<void> {
               @drop="dropCategory(category)"
             >
               <span
-                v-if="!category.isArchived"
+                v-if="!category.isArchived && canManageNotebookData"
                 class="drag-handle"
                 draggable="true"
                 aria-label="拖曳排序"
@@ -1114,7 +822,10 @@ async function submitImportLocalData(): Promise<void> {
                   {{ catTrackerStore.getCategoryUsageCount(category.id) }} 筆紀錄
                 </span>
               </div>
-              <div v-if="category.isArchived" class="category-item__actions">
+              <div
+                v-if="canManageNotebookData && category.isArchived"
+                class="category-item__actions"
+              >
                 <button
                   class="ui-button ui-button--primary compact-button"
                   type="button"
@@ -1123,7 +834,7 @@ async function submitImportLocalData(): Promise<void> {
                   重新使用
                 </button>
               </div>
-              <div v-else class="category-item__actions">
+              <div v-else-if="canManageNotebookData" class="category-item__actions">
                 <button
                   class="ui-button ui-button--secondary compact-button"
                   type="button"
@@ -1176,7 +887,7 @@ async function submitImportLocalData(): Promise<void> {
             >
             <p v-if="cat.note">{{ cat.note }}</p>
           </div>
-          <div v-if="cat.isArchived" class="pet-item__actions">
+          <div v-if="canManageNotebookData && cat.isArchived" class="pet-item__actions">
             <button
               class="ui-button ui-button--primary compact-button"
               type="button"
@@ -1195,6 +906,7 @@ async function submitImportLocalData(): Promise<void> {
               {{ selectedCatId === cat.id ? '使用中' : '切換' }}
             </button>
             <button
+              v-if="canManageNotebookData"
               class="ui-button ui-button--secondary compact-button"
               type="button"
               @click="startEditCat(cat)"
@@ -1202,6 +914,7 @@ async function submitImportLocalData(): Promise<void> {
               編輯
             </button>
             <button
+              v-if="canManageNotebookData"
               class="ui-button ui-button--danger compact-button"
               type="button"
               @click="deleteCat(cat)"
@@ -1501,7 +1214,7 @@ async function submitImportLocalData(): Promise<void> {
 
 .settings-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -1576,6 +1289,11 @@ async function submitImportLocalData(): Promise<void> {
 .notebook-name-form {
   display: grid;
   gap: 12px;
+}
+
+.notebook-share-form {
+  display: grid;
+  gap: 10px;
 }
 
 .notebook-name-form__actions {

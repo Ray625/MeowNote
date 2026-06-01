@@ -25,7 +25,9 @@ const visibleQuickActionCategories = computed(() => {
 
   return (
     groupedQuickActionCategories.value.find((item) => item.group === activeGroup.value)
-      ?.categories ?? groupedQuickActionCategories.value[0]?.categories ?? []
+      ?.categories ??
+    groupedQuickActionCategories.value[0]?.categories ??
+    []
   )
 })
 
@@ -112,19 +114,19 @@ function selectGroup(group: EventCategoryGroup): void {
       <div class="bottom-navigation__group bottom-navigation__group--left">
         <button
           class="bottom-navigation__item"
+          :class="{ 'bottom-navigation__item--active': activeTab === 'notebook' }"
+          type="button"
+          @click="catTrackerStore.setActiveTab('notebook')"
+        >
+          帳戶
+        </button>
+        <button
+          class="bottom-navigation__item"
           :class="{ 'bottom-navigation__item--active': activeTab === 'calendar' }"
           type="button"
           @click="catTrackerStore.setActiveTab('calendar')"
         >
           月曆
-        </button>
-        <button
-          class="bottom-navigation__item"
-          :class="{ 'bottom-navigation__item--active': activeTab === 'stats' }"
-          type="button"
-          @click="catTrackerStore.setActiveTab('stats')"
-        >
-          統計
         </button>
       </div>
       <button
@@ -137,6 +139,14 @@ function selectGroup(group: EventCategoryGroup): void {
         +
       </button>
       <div class="bottom-navigation__group bottom-navigation__group--right">
+        <button
+          class="bottom-navigation__item"
+          :class="{ 'bottom-navigation__item--active': activeTab === 'stats' }"
+          type="button"
+          @click="catTrackerStore.setActiveTab('stats')"
+        >
+          統計
+        </button>
         <button
           class="bottom-navigation__item"
           :class="{ 'bottom-navigation__item--active': activeTab === 'settings' }"
@@ -274,7 +284,7 @@ function selectGroup(group: EventCategoryGroup): void {
 }
 
 .bottom-navigation__group--right {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .bottom-navigation__item {

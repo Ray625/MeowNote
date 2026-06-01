@@ -276,8 +276,13 @@ Notebook ownership:
 - a notebook is created by a user
 - membership rows control access
 - roles are `owner`, `editor`, and `viewer`
+- `owner` can manage notebook metadata, pets, categories, and all records
+- `editor` can read notebook data and create records in the notebook
+- `editor` can update/delete only records where `cat_events.created_by` is their own user ID
+- `viewer` is reserved for read-only access
 
 Remote records are scoped by `notebook_id`.
+Remote record authorship is tracked by `cat_events.created_by`.
 
 The remote schema uses UUID primary keys. App-generated local UUIDs should be compatible with remote IDs to avoid local-to-remote ID remapping.
 

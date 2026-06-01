@@ -138,7 +138,13 @@ Remote sync currently covers:
 - event categories
 - cat events
 
-Notebook sharing is not fully exposed in UI yet, but the schema already has notebook members and roles.
+Notebook sharing:
+
+- owners can share the active notebook with another registered user by email
+- shared users are added as `editor`
+- editors can read notebook data and create their own cat events
+- editors cannot edit/delete events created by the owner or another member
+- pets, categories, notebook metadata, and member management remain owner-only
 
 ## ID Strategy
 

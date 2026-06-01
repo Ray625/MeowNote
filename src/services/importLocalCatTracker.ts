@@ -6,8 +6,12 @@ import {
   toInsertCatEventRow,
   toInsertCatRow,
   toInsertEventCategoryRow,
+  type InsertCatEventRow,
+  type InsertCatRow,
+  type InsertEventCategoryRow,
 } from '@/repositories/supabaseCatTrackerMapper'
 import type { Cat, CatEvent, EventCategory } from '@/types'
+import { createId } from '@/utils/id'
 
 interface ImportLocalCatTrackerInput {
   notebookId: string
@@ -47,29 +51,13 @@ export async function importLocalCatTracker({
   }
 
   for (const cat of cats) {
-    const { data, error } = await supabase
-      .from('cats')
-      .insert(toInsertCatRow(cat, notebookId))
-      .select('*')
-      .single<SupabaseCatRow>()
-
-    if (error) {
-      throw error
-    }
+    const data = await insertCatWithUniqueId(toInsertCatRow(cat, notebookId))
 
     idMap.catIds.set(cat.id, data.id)
   }
 
   for (const category of categories) {
-    const { data, error } = await supabase
-      .from('event_categories')
-      .insert(toInsertEventCategoryRow(category, notebookId))
-      .select('*')
-      .single<SupabaseEventCategoryRow>()
-
-    if (error) {
-      throw error
-    }
+    const data = await insertCategoryWithUniqueId(toInsertEventCategoryRow(category, notebookId))
 
     idMap.categoryIds.set(category.id, data.id)
   }
@@ -79,20 +67,114 @@ export async function importLocalCatTracker({
     .filter((eventRow) => eventRow !== undefined)
   const eventsSkipped = events.length - eventRows.length
 
-  if (eventRows.length > 0) {
-    const { error } = await supabase.from('cat_events').insert(eventRows)
+  let eventsImported = 0
 
-    if (error) {
-      throw error
-    }
+  for (const eventRow of eventRows) {
+    await insertEventWithUniqueId(eventRow)
+    eventsImported += 1
   }
 
   return {
     catsImported: idMap.catIds.size,
     categoriesImported: idMap.categoryIds.size,
-    eventsImported: eventRows.length,
+    eventsImported,
     eventsSkipped,
   }
+}
+
+async function insertCatWithUniqueId(row: InsertCatRow): Promise<SupabaseCatRow> {
+  const { data, error } = await supabase!
+    .from('cats')
+    .insert(row)
+    .select('*')
+    .single<SupabaseCatRow>()
+
+  if (!error) {
+    return data
+  }
+
+  if (!isUniqueConstraintError(error)) {
+    throw error
+  }
+
+  const retryRow = {
+    ...row,
+    id: createId('cat'),
+  }
+  const retry = await supabase!
+    .from('cats')
+    .insert(retryRow)
+    .select('*')
+    .single<SupabaseCatRow>()
+
+  if (retry.error) {
+    throw retry.error
+  }
+
+  return retry.data
+}
+
+async function insertCategoryWithUniqueId(row: InsertEventCategoryRow): Promise<SupabaseEventCategoryRow> {
+  const { data, error } = await supabase!
+    .from('event_categories')
+    .insert(row)
+    .select('*')
+    .single<SupabaseEventCategoryRow>()
+
+  if (!error) {
+    return data
+  }
+
+  if (!isUniqueConstraintError(error)) {
+    throw error
+  }
+
+  const retryRow = {
+    ...row,
+    id: createId('category'),
+  }
+  const retry = await supabase!
+    .from('event_categories')
+    .insert(retryRow)
+    .select('*')
+    .single<SupabaseEventCategoryRow>()
+
+  if (retry.error) {
+    throw retry.error
+  }
+
+  return retry.data
+}
+
+async function insertEventWithUniqueId(row: InsertCatEventRow): Promise<void> {
+  const { error } = await supabase!.from('cat_events').insert(row)
+
+  if (!error) {
+    return
+  }
+
+  if (!isUniqueConstraintError(error)) {
+    throw error
+  }
+
+  const retryRow = {
+    ...row,
+    id: createId('event'),
+  }
+  const retry = await supabase!.from('cat_events').insert(retryRow)
+
+  if (retry.error) {
+    throw retry.error
+  }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === '23505',
+  )
 }
 
 export async function isRemoteNotebookEmpty(notebookId: string): Promise<boolean> {

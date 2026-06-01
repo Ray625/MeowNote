@@ -137,6 +137,7 @@ drop trigger if exists set_notebooks_updated_at on public.notebooks;
 drop trigger if exists set_cats_updated_at on public.cats;
 drop trigger if exists set_event_categories_updated_at on public.event_categories;
 drop trigger if exists set_cat_events_updated_at on public.cat_events;
+drop trigger if exists set_cat_event_created_by on public.cat_events;
 
 create trigger set_profiles_updated_at
 before update on public.profiles
@@ -158,6 +159,25 @@ create trigger set_cat_events_updated_at
 before update on public.cat_events
 for each row execute function public.set_updated_at();
 
+create or replace function public.set_cat_event_created_by()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.created_by is null then
+    new.created_by = auth.uid();
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger set_cat_event_created_by
+before insert on public.cat_events
+for each row execute function public.set_cat_event_created_by();
+
 create or replace function public.is_notebook_member(target_notebook_id uuid)
 returns boolean
 language sql
@@ -174,6 +194,22 @@ as $$
 $$;
 
 create or replace function public.can_edit_notebook(target_notebook_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.notebook_members
+    where notebook_id = target_notebook_id
+      and user_id = auth.uid()
+      and role in ('owner', 'editor')
+  );
+$$;
+
+create or replace function public.can_create_notebook_event(target_notebook_id uuid)
 returns boolean
 language sql
 stable
@@ -248,6 +284,64 @@ $$;
 
 grant execute on function public.create_notebook(text) to authenticated;
 
+create or replace function public.share_notebook_with_user(
+  target_notebook_id uuid,
+  target_email text,
+  member_role text default 'editor'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  target_user_id uuid;
+  member_id uuid;
+  normalized_email text := lower(trim(target_email));
+  normalized_role text := coalesce(nullif(trim(member_role), ''), 'editor');
+begin
+  if auth.uid() is null then
+    raise exception 'share_notebook_with_user requires an authenticated user';
+  end if;
+
+  if not public.is_notebook_owner(target_notebook_id) then
+    raise exception 'Only notebook owners can share notebooks';
+  end if;
+
+  if normalized_email = '' then
+    raise exception 'Target email is required';
+  end if;
+
+  if normalized_role not in ('editor', 'viewer') then
+    raise exception 'Shared member role must be editor or viewer';
+  end if;
+
+  select id
+  into target_user_id
+  from auth.users
+  where lower(email) = normalized_email
+  limit 1;
+
+  if target_user_id is null then
+    raise exception 'User not found';
+  end if;
+
+  if target_user_id = auth.uid() then
+    raise exception 'Cannot share notebook with yourself';
+  end if;
+
+  insert into public.notebook_members (notebook_id, user_id, role)
+  values (target_notebook_id, target_user_id, normalized_role)
+  on conflict (notebook_id, user_id)
+  do update set role = excluded.role
+  returning id into member_id;
+
+  return member_id;
+end;
+$$;
+
+grant execute on function public.share_notebook_with_user(uuid, text, text) to authenticated;
+
 alter table public.profiles enable row level security;
 alter table public.notebooks enable row level security;
 alter table public.notebook_members enable row level security;
@@ -269,6 +363,7 @@ drop policy if exists "Users can update their profile" on public.profiles;
 drop policy if exists "Members can read notebooks" on public.notebooks;
 drop policy if exists "Users can create notebooks" on public.notebooks;
 drop policy if exists "Owners and editors can update notebooks" on public.notebooks;
+drop policy if exists "Owners can update notebooks" on public.notebooks;
 drop policy if exists "Members can read notebook members" on public.notebook_members;
 drop policy if exists "Users can add themselves as notebook owner" on public.notebook_members;
 drop policy if exists "Owners can add notebook members" on public.notebook_members;
@@ -278,14 +373,23 @@ drop policy if exists "Members can read cats" on public.cats;
 drop policy if exists "Owners and editors can insert cats" on public.cats;
 drop policy if exists "Owners and editors can update cats" on public.cats;
 drop policy if exists "Owners and editors can delete cats" on public.cats;
+drop policy if exists "Owners can insert cats" on public.cats;
+drop policy if exists "Owners can update cats" on public.cats;
+drop policy if exists "Owners can delete cats" on public.cats;
 drop policy if exists "Members can read event categories" on public.event_categories;
 drop policy if exists "Owners and editors can insert event categories" on public.event_categories;
 drop policy if exists "Owners and editors can update event categories" on public.event_categories;
 drop policy if exists "Owners and editors can delete event categories" on public.event_categories;
+drop policy if exists "Owners can insert event categories" on public.event_categories;
+drop policy if exists "Owners can update event categories" on public.event_categories;
+drop policy if exists "Owners can delete event categories" on public.event_categories;
 drop policy if exists "Members can read cat events" on public.cat_events;
 drop policy if exists "Owners and editors can insert cat events" on public.cat_events;
 drop policy if exists "Owners and editors can update cat events" on public.cat_events;
 drop policy if exists "Owners and editors can delete cat events" on public.cat_events;
+drop policy if exists "Owners and editors can create cat events" on public.cat_events;
+drop policy if exists "Owners can update all events and editors can update own events" on public.cat_events;
+drop policy if exists "Owners can delete all events and editors can delete own events" on public.cat_events;
 
 create policy "Users can read their profile"
 on public.profiles for select
@@ -313,11 +417,11 @@ on public.notebooks for insert
 to authenticated
 with check (created_by = auth.uid());
 
-create policy "Owners and editors can update notebooks"
+create policy "Owners can update notebooks"
 on public.notebooks for update
 to authenticated
-using (public.can_edit_notebook(id))
-with check (public.can_edit_notebook(id));
+using (public.is_notebook_owner(id))
+with check (public.is_notebook_owner(id));
 
 create policy "Members can read notebook members"
 on public.notebook_members for select
@@ -354,63 +458,81 @@ on public.cats for select
 to authenticated
 using (public.is_notebook_member(notebook_id));
 
-create policy "Owners and editors can insert cats"
+create policy "Owners can insert cats"
 on public.cats for insert
 to authenticated
-with check (public.can_edit_notebook(notebook_id));
+with check (public.is_notebook_owner(notebook_id));
 
-create policy "Owners and editors can update cats"
+create policy "Owners can update cats"
 on public.cats for update
 to authenticated
-using (public.can_edit_notebook(notebook_id))
-with check (public.can_edit_notebook(notebook_id));
+using (public.is_notebook_owner(notebook_id))
+with check (public.is_notebook_owner(notebook_id));
 
-create policy "Owners and editors can delete cats"
+create policy "Owners can delete cats"
 on public.cats for delete
 to authenticated
-using (public.can_edit_notebook(notebook_id));
+using (public.is_notebook_owner(notebook_id));
 
 create policy "Members can read event categories"
 on public.event_categories for select
 to authenticated
 using (public.is_notebook_member(notebook_id));
 
-create policy "Owners and editors can insert event categories"
+create policy "Owners can insert event categories"
 on public.event_categories for insert
 to authenticated
-with check (public.can_edit_notebook(notebook_id));
+with check (public.is_notebook_owner(notebook_id));
 
-create policy "Owners and editors can update event categories"
+create policy "Owners can update event categories"
 on public.event_categories for update
 to authenticated
-using (public.can_edit_notebook(notebook_id))
-with check (public.can_edit_notebook(notebook_id));
+using (public.is_notebook_owner(notebook_id))
+with check (public.is_notebook_owner(notebook_id));
 
-create policy "Owners and editors can delete event categories"
+create policy "Owners can delete event categories"
 on public.event_categories for delete
 to authenticated
-using (public.can_edit_notebook(notebook_id));
+using (public.is_notebook_owner(notebook_id));
 
 create policy "Members can read cat events"
 on public.cat_events for select
 to authenticated
 using (public.is_notebook_member(notebook_id));
 
-create policy "Owners and editors can insert cat events"
+create policy "Owners and editors can create cat events"
 on public.cat_events for insert
 to authenticated
 with check (
-  public.can_edit_notebook(notebook_id)
-  and (created_by is null or created_by = auth.uid())
+  public.can_create_notebook_event(notebook_id)
+  and created_by = auth.uid()
 );
 
-create policy "Owners and editors can update cat events"
+create policy "Owners can update all events and editors can update own events"
 on public.cat_events for update
 to authenticated
-using (public.can_edit_notebook(notebook_id))
-with check (public.can_edit_notebook(notebook_id));
+using (
+  public.is_notebook_owner(notebook_id)
+  or (
+    public.can_create_notebook_event(notebook_id)
+    and created_by = auth.uid()
+  )
+)
+with check (
+  public.is_notebook_owner(notebook_id)
+  or (
+    public.can_create_notebook_event(notebook_id)
+    and created_by = auth.uid()
+  )
+);
 
-create policy "Owners and editors can delete cat events"
+create policy "Owners can delete all events and editors can delete own events"
 on public.cat_events for delete
 to authenticated
-using (public.can_edit_notebook(notebook_id));
+using (
+  public.is_notebook_owner(notebook_id)
+  or (
+    public.can_create_notebook_event(notebook_id)
+    and created_by = auth.uid()
+  )
+);

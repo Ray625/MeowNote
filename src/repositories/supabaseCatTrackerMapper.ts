@@ -181,6 +181,7 @@ export function fromCatEventRow(row: SupabaseCatEventRow): CatEvent {
     severity: isEventSeverity(row.severity) ? row.severity : undefined,
     note: row.note ?? undefined,
     values: row.values,
+    createdBy: row.created_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
