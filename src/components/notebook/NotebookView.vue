@@ -3,18 +3,20 @@ import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
-import {
-  importLocalCatTracker,
-  type ImportLocalCatTrackerResult,
-} from '@/services/importLocalCatTracker'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import { readJson, removeJson, writeJson } from '@/utils/storage'
 
 const REMEMBERED_EMAIL_STORAGE_KEY = 'meownote:remembered-email'
 
 const catTrackerStore = useCatTrackerStore()
-const { categories, cats, events, remoteCategorySyncError, remoteCatSyncError, remoteEventSyncError } =
-  storeToRefs(catTrackerStore)
+const {
+  categories,
+  cats,
+  events,
+  remoteCategorySyncError,
+  remoteCatSyncError,
+  remoteEventSyncError,
+} = storeToRefs(catTrackerStore)
 const {
   activeNotebookId,
   activeNotebookName,
@@ -34,8 +36,7 @@ const {
   updateActiveNotebookName,
   user,
 } = useRemoteAuth()
-const { isBootstrappingRemoteData, refreshRemoteCatTracker, remoteRefreshError } =
-  useRemoteCatTrackerRefresh()
+const { isBootstrappingRemoteData, remoteRefreshError } = useRemoteCatTrackerRefresh()
 
 const rememberedEmail = readJson<string>(REMEMBERED_EMAIL_STORAGE_KEY, '')
 const signInEmail = ref(rememberedEmail)
@@ -44,12 +45,6 @@ const shouldRememberEmail = ref(Boolean(rememberedEmail))
 const isEditingNotebookName = ref(false)
 const notebookNameDraft = ref('')
 const shareNotebookEmail = ref('')
-const isImportingLocalData = ref(false)
-const isLoadingRemoteData = ref(false)
-const importResult = ref<ImportLocalCatTrackerResult>()
-const importErrorMessage = ref('')
-const remoteLoadMessage = ref('')
-const remoteLoadErrorMessage = ref('')
 
 const localImportSummary = computed(
   () =>
@@ -120,53 +115,6 @@ function rememberSignInEmail(): void {
   }
 }
 
-async function submitLoadRemoteData(): Promise<void> {
-  if (!activeNotebookId.value) {
-    remoteLoadErrorMessage.value = 'Notebook 尚未建立完成'
-    return
-  }
-
-  isLoadingRemoteData.value = true
-  remoteLoadMessage.value = ''
-  remoteLoadErrorMessage.value = ''
-
-  try {
-    await refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { force: true })
-    remoteLoadMessage.value = `已載入 ${cats.value.length} 隻寵物、${categories.value.length} 個分類、${events.value.length} 筆紀錄。`
-  } catch (error) {
-    remoteLoadErrorMessage.value = error instanceof Error ? error.message : '載入雲端資料失敗'
-  } finally {
-    isLoadingRemoteData.value = false
-  }
-}
-
-async function submitImportLocalData(): Promise<void> {
-  if (!activeNotebookId.value || !user.value) {
-    importErrorMessage.value = 'Notebook 尚未建立完成'
-    return
-  }
-
-  isImportingLocalData.value = true
-  importResult.value = undefined
-  importErrorMessage.value = ''
-  remoteLoadMessage.value = ''
-  remoteLoadErrorMessage.value = ''
-
-  try {
-    importResult.value = await importLocalCatTracker({
-      notebookId: activeNotebookId.value,
-      cats: cats.value,
-      categories: categories.value,
-      events: events.value,
-      createdBy: user.value.id,
-    })
-  } catch (error) {
-    importErrorMessage.value = error instanceof Error ? error.message : '匯入本機資料失敗'
-  } finally {
-    isImportingLocalData.value = false
-  }
-}
-
 async function submitShareNotebook(): Promise<void> {
   if (await shareActiveNotebook(shareNotebookEmail.value)) {
     shareNotebookEmail.value = ''
@@ -191,8 +139,8 @@ function getNotebookRoleLabel(role: string): string {
   <section class="notebook-view" aria-labelledby="notebook-title">
     <header class="notebook-header">
       <div>
-        <h1 id="notebook-title">筆記本</h1>
-        <p>管理帳戶、同步與共享</p>
+        <h1 id="notebook-title">帳戶</h1>
+        <p>管理帳戶與共享</p>
       </div>
     </header>
 
@@ -323,44 +271,6 @@ function getNotebookRoleLabel(role: string): string {
           </p>
         </form>
 
-        <button
-          class="ui-button ui-button--primary account-button"
-          type="button"
-          :disabled="
-            isLoading || isImportingLocalData || isBootstrappingRemoteData || !activeNotebookId
-          "
-          @click="submitImportLocalData"
-        >
-          {{ isImportingLocalData ? '上傳中' : '上傳本機資料' }}
-        </button>
-
-        <button
-          class="ui-button ui-button--secondary account-button"
-          type="button"
-          :disabled="
-            isLoading || isLoadingRemoteData || isBootstrappingRemoteData || !activeNotebookId
-          "
-          @click="submitLoadRemoteData"
-        >
-          {{ isLoadingRemoteData ? '載入中' : '載入雲端資料' }}
-        </button>
-
-        <p v-if="importResult" class="account-message">
-          已匯入 {{ importResult.catsImported }} 隻寵物、{{ importResult.categoriesImported }}
-          個分類、{{ importResult.eventsImported }} 筆紀錄。
-          <template v-if="importResult.eventsSkipped > 0">
-            有 {{ importResult.eventsSkipped }} 筆紀錄因找不到寵物或分類而略過。
-          </template>
-        </p>
-        <p v-if="importErrorMessage" class="account-message account-message--error">
-          {{ importErrorMessage }}
-        </p>
-        <p v-if="remoteLoadMessage" class="account-message">
-          {{ remoteLoadMessage }}
-        </p>
-        <p v-if="remoteLoadErrorMessage" class="account-message account-message--error">
-          {{ remoteLoadErrorMessage }}
-        </p>
         <p v-if="remoteRefreshError" class="account-message account-message--error">
           自動同步失敗：{{ remoteRefreshError }}
         </p>
@@ -411,7 +321,11 @@ function getNotebookRoleLabel(role: string): string {
           <input v-model="shouldRememberEmail" type="checkbox" />
           <span>記住 Email</span>
         </label>
-        <button class="ui-button ui-button--primary account-button" type="submit" :disabled="isLoading">
+        <button
+          class="ui-button ui-button--primary account-button"
+          type="submit"
+          :disabled="isLoading"
+        >
           {{ isLoading ? '登入中' : '登入' }}
         </button>
         <button
