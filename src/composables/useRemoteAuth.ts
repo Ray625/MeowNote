@@ -2,6 +2,7 @@ import { computed, readonly, ref } from 'vue'
 import type { Session, User } from '@supabase/supabase-js'
 import { skipNextLocalImportForNotebook } from '@/composables/useRemoteCatTrackerRefresh'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
+import { rememberSignedOutNotebookCache } from '@/services/localUnsyncedChanges'
 import { readJson, writeJson } from '@/utils/storage'
 
 const ACTIVE_NOTEBOOK_STORAGE_KEY = 'meownote:active-notebook-id'
@@ -390,6 +391,10 @@ export function useRemoteAuth() {
       return false
     }
 
+    const signedOutUserId = user.value?.id ?? ''
+    const signedOutNotebookId = activeNotebookId.value
+    const signedOutNotebookRole = activeNotebookRole.value
+
     isLoading.value = true
     errorMessage.value = ''
 
@@ -400,6 +405,11 @@ export function useRemoteAuth() {
         throw error
       }
 
+      rememberSignedOutNotebookCache({
+        userId: signedOutUserId,
+        notebookId: signedOutNotebookId,
+        notebookRole: signedOutNotebookRole,
+      })
       setSession(null)
       authMessage.value = ''
       return true

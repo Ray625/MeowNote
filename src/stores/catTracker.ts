@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { CATEGORY_GROUP_ORDER, DEFAULT_CATEGORY_STATISTICS_MODE } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { catTrackerRepository, type CatTrackerState } from '@/repositories/catTrackerRepository'
+import { markSignedOutNotebookCacheDirty } from '@/services/localUnsyncedChanges'
 import {
   canSyncRemoteEvent,
   createRemoteCatEvent,
@@ -620,6 +621,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     cats.value.push(cat)
     selectedCatId.value = cat.id
+    markLocalChangeIfSignedOut()
     syncCreatedCat(cat.id)
 
     return cat
@@ -640,6 +642,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       ...input,
       updatedAt: getIsoNow(),
     })
+    markLocalChangeIfSignedOut()
     syncUpdatedCat(cat.id)
 
     return cat
@@ -662,6 +665,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         updatedAt: getIsoNow(),
       })
 
+      markLocalChangeIfSignedOut()
       syncUpdatedCat(cat.id)
       return
     }
@@ -672,6 +676,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       selectedCatId.value = getFallbackSelectedCatId(catId)
     }
 
+    markLocalChangeIfSignedOut()
     syncDeletedCat(catId)
   }
 
@@ -695,6 +700,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       selectedCatId.value = cat.id
     }
 
+    markLocalChangeIfSignedOut()
     syncUpdatedCat(cat.id)
 
     return cat
@@ -742,6 +748,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     categories.value.push(category)
+    markLocalChangeIfSignedOut()
     syncCreatedCategory(category.id)
 
     return category
@@ -785,6 +792,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       updatedAt: getIsoNow(),
     })
 
+    markLocalChangeIfSignedOut()
     syncUpdatedCategory(category.id)
 
     return category
@@ -815,6 +823,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     events.value.push(event)
+    markLocalChangeIfSignedOut()
     syncCreatedEvent(event.id)
 
     return event
@@ -845,6 +854,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       ...input,
       updatedAt: getIsoNow(),
     })
+    markLocalChangeIfSignedOut()
     syncUpdatedEvent(event.id)
 
     return event
@@ -860,6 +870,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const shouldDeleteRemote = shouldSyncRemoteEventId(eventId)
 
     events.value = events.value.filter((event) => event.id !== eventId)
+    markLocalChangeIfSignedOut({
+      deletedEvent: {
+        id: eventId,
+        createdBy: event?.createdBy,
+      },
+    })
 
     if (shouldDeleteRemote) {
       syncDeletedEvent(eventId)
@@ -884,12 +900,14 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         updatedAt: getIsoNow(),
       })
 
+      markLocalChangeIfSignedOut()
       syncUpdatedCategory(category.id)
 
       return
     }
 
     categories.value = categories.value.filter((item) => item.id !== categoryId)
+    markLocalChangeIfSignedOut()
     syncDeletedCategory(categoryId)
   }
 
@@ -911,6 +929,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     })
 
     syncUpdatedCategory(category.id)
+    markLocalChangeIfSignedOut()
 
     return category
   }
@@ -988,6 +1007,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function getRemoteNotebookId(): string {
     return remoteAuth.activeNotebookId.value
+  }
+
+  function markLocalChangeIfSignedOut(input?: Parameters<typeof markSignedOutNotebookCacheDirty>[0]): void {
+    if (!remoteAuth.user.value) {
+      markSignedOutNotebookCacheDirty(input)
+    }
   }
 
   function canModifyEvent(event: CatEvent): boolean {

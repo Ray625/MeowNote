@@ -42,7 +42,10 @@ const {
   updatePassword,
   user,
 } = useRemoteAuth()
-const { isBootstrappingRemoteData, remoteRefreshError } = useRemoteCatTrackerRefresh()
+const {
+  isBootstrappingRemoteData,
+  remoteRefreshError,
+} = useRemoteCatTrackerRefresh()
 
 const rememberedEmail = readJson<string>(REMEMBERED_EMAIL_STORAGE_KEY, '')
 const signInEmail = ref(rememberedEmail)

@@ -1,6 +1,12 @@
 import { readonly, ref } from 'vue'
 import { importLocalCatTracker, isRemoteNotebookEmpty } from '@/services/importLocalCatTracker'
 import { loadRemoteCatTracker } from '@/services/loadRemoteCatTracker'
+import {
+  clearSignedOutNotebookCache,
+  getPendingSignedOutNotebookChanges,
+  type SignedOutNotebookCacheMeta,
+} from '@/services/localUnsyncedChanges'
+import { mergeUnsyncedLocalCatTracker } from '@/services/mergeUnsyncedLocalCatTracker'
 import type { useCatTrackerStore } from '@/stores/catTracker'
 import { readJson, writeJson } from '@/utils/storage'
 
@@ -10,6 +16,7 @@ const LOCAL_IMPORT_CONSIDERED_USERS_STORAGE_KEY = 'meownote:local-import-conside
 const isRefreshingRemoteData = ref(false)
 const isBootstrappingRemoteData = ref(false)
 const remoteRefreshError = ref('')
+const pendingUnsyncedLocalChanges = ref<SignedOutNotebookCacheMeta | null>(null)
 const notebookIdsSkippingLocalImport = new Set<string>()
 let lastRefreshAt = 0
 
@@ -78,6 +85,21 @@ export function useRemoteCatTrackerRefresh() {
       const localCats = [...catTrackerStore.cats]
       const localCategories = [...catTrackerStore.categories]
       const localEvents = [...catTrackerStore.events]
+      const pendingSignedOutChanges = getPendingSignedOutNotebookChanges({
+        userId: options.userId,
+        notebookId,
+      })
+
+      if (pendingSignedOutChanges) {
+        pendingUnsyncedLocalChanges.value = pendingSignedOutChanges
+        remoteRefreshError.value = ''
+        return
+      }
+
+      if (pendingUnsyncedLocalChanges.value?.notebookId !== notebookId) {
+        pendingUnsyncedLocalChanges.value = null
+      }
+
       const hasLocalUserData = localCats.length > 0 || localEvents.length > 0
       const shouldSkipLocalImport = notebookIdsSkippingLocalImport.has(notebookId)
       const canImportLocalData =
@@ -114,6 +136,10 @@ export function useRemoteCatTrackerRefresh() {
       return
     }
 
+    if (pendingUnsyncedLocalChanges.value?.notebookId === notebookId) {
+      return
+    }
+
     const now = Date.now()
 
     if (!options.force && now - lastRefreshAt < MIN_REFRESH_INTERVAL_MS) {
@@ -134,11 +160,60 @@ export function useRemoteCatTrackerRefresh() {
     }
   }
 
+  async function mergePendingLocalChangesToRemote(
+    catTrackerStore: ReturnType<typeof useCatTrackerStore>,
+  ): Promise<void> {
+    const pendingChanges = pendingUnsyncedLocalChanges.value
+
+    if (!pendingChanges || isBootstrappingRemoteData.value) {
+      return
+    }
+
+    isBootstrappingRemoteData.value = true
+
+    try {
+      await mergeUnsyncedLocalCatTracker({
+        notebookId: pendingChanges.notebookId,
+        cats: [...catTrackerStore.cats],
+        categories: [...catTrackerStore.categories],
+        events: [...catTrackerStore.events],
+        deletedEvents: pendingChanges.deletedEvents ?? [],
+        createdBy: pendingChanges.userId,
+        notebookRole: pendingChanges.notebookRole,
+      })
+      pendingUnsyncedLocalChanges.value = null
+      clearSignedOutNotebookCache()
+      await refreshRemoteCatTracker(catTrackerStore, pendingChanges.notebookId, { force: true })
+      remoteRefreshError.value = ''
+    } catch (error) {
+      remoteRefreshError.value = getErrorMessage(error)
+    } finally {
+      isBootstrappingRemoteData.value = false
+    }
+  }
+
+  async function replacePendingLocalChangesWithRemote(
+    catTrackerStore: ReturnType<typeof useCatTrackerStore>,
+  ): Promise<void> {
+    const pendingChanges = pendingUnsyncedLocalChanges.value
+
+    if (!pendingChanges) {
+      return
+    }
+
+    pendingUnsyncedLocalChanges.value = null
+    clearSignedOutNotebookCache()
+    await refreshRemoteCatTracker(catTrackerStore, pendingChanges.notebookId, { force: true })
+  }
+
   return {
     bootstrapRemoteCatTracker,
     isBootstrappingRemoteData: readonly(isBootstrappingRemoteData),
     isRefreshingRemoteData: readonly(isRefreshingRemoteData),
+    mergePendingLocalChangesToRemote,
+    pendingUnsyncedLocalChanges: readonly(pendingUnsyncedLocalChanges),
     remoteRefreshError: readonly(remoteRefreshError),
+    replacePendingLocalChangesWithRemote,
     refreshRemoteCatTracker,
   }
 }

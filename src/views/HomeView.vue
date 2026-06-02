@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import BottomQuickActions from '@/components/home/BottomQuickActions.vue'
@@ -11,6 +11,7 @@ import MonthlyEventList from '@/components/home/MonthlyEventList.vue'
 import NotebookView from '@/components/notebook/NotebookView.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
 import StatsView from '@/components/stats/StatsView.vue'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
 import { useTheme } from '@/composables/useTheme'
@@ -18,7 +19,14 @@ import { useCatTrackerStore } from '@/stores/catTracker'
 
 useTheme()
 const { activeNotebookId, activeNotebookRole, initializeAuth, user } = useRemoteAuth()
-const { bootstrapRemoteCatTracker, refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
+const {
+  bootstrapRemoteCatTracker,
+  isBootstrappingRemoteData,
+  mergePendingLocalChangesToRemote,
+  pendingUnsyncedLocalChanges,
+  refreshRemoteCatTracker,
+  replacePendingLocalChangesWithRemote,
+} = useRemoteCatTrackerRefresh()
 
 const catTrackerStore = useCatTrackerStore()
 const {
@@ -29,6 +37,11 @@ const {
   isEventSearchOpen,
   needsFirstTimeSetup,
 } = storeToRefs(catTrackerStore)
+const isUnsyncedLocalDialogOpen = computed(() => Boolean(pendingUnsyncedLocalChanges.value))
+const unsyncedLocalAction = ref<'merge' | 'remote' | ''>('')
+const isResolvingUnsyncedLocalChanges = computed(() => Boolean(unsyncedLocalAction.value))
+
+useBodyScrollLock(isUnsyncedLocalDialogOpen)
 
 onMounted(() => {
   void initializeAuth().then(() => {
@@ -65,6 +78,34 @@ function refreshRemoteDataWhenVisible(): void {
     refreshRemoteData()
   }
 }
+
+async function submitMergePendingLocalChanges(): Promise<void> {
+  if (isResolvingUnsyncedLocalChanges.value) {
+    return
+  }
+
+  unsyncedLocalAction.value = 'merge'
+
+  try {
+    await mergePendingLocalChangesToRemote(catTrackerStore)
+  } finally {
+    unsyncedLocalAction.value = ''
+  }
+}
+
+async function submitUseRemoteData(): Promise<void> {
+  if (isResolvingUnsyncedLocalChanges.value) {
+    return
+  }
+
+  unsyncedLocalAction.value = 'remote'
+
+  try {
+    await replacePendingLocalChangesWithRemote(catTrackerStore)
+  } finally {
+    unsyncedLocalAction.value = ''
+  }
+}
 </script>
 
 <template>
@@ -83,6 +124,51 @@ function refreshRemoteDataWhenVisible(): void {
     <SettingsView v-else />
     <BottomQuickActions v-if="!needsFirstTimeSetup" />
     <EventEditModal v-if="!needsFirstTimeSetup" />
+
+    <div
+      v-if="pendingUnsyncedLocalChanges"
+      class="unsynced-local-backdrop"
+      role="presentation"
+    >
+      <section
+        class="unsynced-local-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="unsynced-local-title"
+        aria-describedby="unsynced-local-description"
+      >
+        <h2 id="unsynced-local-title">發現本機未同步資料</h2>
+        <p id="unsynced-local-description">
+          你登出後曾在本機新增或修改資料。請選擇要合併本機變更，或改用雲端資料後再繼續。
+        </p>
+        <p
+          v-if="isResolvingUnsyncedLocalChanges"
+          class="unsynced-local-dialog__status"
+          role="status"
+          aria-live="polite"
+        >
+          {{ unsyncedLocalAction === 'merge' ? '正在同步本機變更...' : '正在載入雲端資料...' }}
+        </p>
+        <div class="unsynced-local-dialog__actions">
+          <button
+            class="ui-button ui-button--primary"
+            type="button"
+            :disabled="isBootstrappingRemoteData || isResolvingUnsyncedLocalChanges"
+            @click="submitMergePendingLocalChanges"
+          >
+            {{ unsyncedLocalAction === 'merge' ? '同步中' : '同步本機變更' }}
+          </button>
+          <button
+            class="ui-button ui-button--secondary"
+            type="button"
+            :disabled="isBootstrappingRemoteData || isResolvingUnsyncedLocalChanges"
+            @click="submitUseRemoteData"
+          >
+            {{ unsyncedLocalAction === 'remote' ? '載入中' : '改用雲端資料' }}
+          </button>
+        </div>
+      </section>
+    </div>
 
     <ConfirmDialog
       v-if="deleteConfirmEvent"
@@ -143,5 +229,63 @@ function refreshRemoteDataWhenVisible(): void {
     overflow: visible;
     padding: 10px 10px 78px;
   }
+}
+
+.unsynced-local-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  background: var(--overlay-color);
+}
+
+.unsynced-local-dialog {
+  display: grid;
+  width: min(100%, 390px);
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 22px 60px var(--shadow-color);
+}
+
+.unsynced-local-dialog h2,
+.unsynced-local-dialog p {
+  margin: 0;
+}
+
+.unsynced-local-dialog h2 {
+  font-size: 1.125rem;
+}
+
+.unsynced-local-dialog p {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.unsynced-local-dialog__status {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--color-primary-light);
+  color: var(--color-text) !important;
+  font-weight: 800;
+}
+
+.unsynced-local-dialog__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.unsynced-local-dialog__actions .ui-button {
+  min-height: 42px;
 }
 </style>
