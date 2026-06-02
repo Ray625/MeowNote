@@ -71,6 +71,7 @@ const catIsNeutered = ref<'yes' | 'no' | ''>('')
 const catNote = ref('')
 const isCatModalOpen = ref(false)
 const pendingDeleteCatId = ref<string>()
+const viewingCatId = ref<string>()
 
 const isEditing = computed(() => Boolean(editingCategoryId.value))
 const formTitle = computed(() => (isEditing.value ? '編輯分類' : '新增分類'))
@@ -89,6 +90,9 @@ const pendingDeleteUsageCount = computed(() =>
 const deleteActionLabel = computed(() => (pendingDeleteUsageCount.value > 0 ? '停用' : '刪除'))
 const pendingDeleteCat = computed(() =>
   pendingDeleteCatId.value ? catTrackerStore.catsById.get(pendingDeleteCatId.value) : undefined,
+)
+const viewingCat = computed(() =>
+  viewingCatId.value ? catTrackerStore.catsById.get(viewingCatId.value) : undefined,
 )
 const pendingDeleteCatUsageCount = computed(() =>
   pendingDeleteCat.value ? catTrackerStore.getCatUsageCount(pendingDeleteCat.value.id) : 0,
@@ -121,7 +125,9 @@ const readOnlySettingsMessage = computed(() =>
     ? '共享成員可以使用既有分類新增紀錄，分類設定由筆記簿擁有者管理。'
     : '共享成員可以查看寵物資料，寵物設定由筆記簿擁有者管理。',
 )
-const isSettingsModalOpen = computed(() => isCategoryModalOpen.value || isCatModalOpen.value)
+const isSettingsModalOpen = computed(
+  () => isCategoryModalOpen.value || isCatModalOpen.value || Boolean(viewingCat.value),
+)
 const categoryGroupOptions = computed<SelectOption[]>(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
     value: group,
@@ -369,6 +375,25 @@ function restoreCat(cat: Cat): void {
   catTrackerStore.restoreCat(cat.id)
 }
 
+function openCatDetails(cat: Cat): void {
+  viewingCatId.value = cat.id
+}
+
+function closeCatDetails(): void {
+  viewingCatId.value = undefined
+}
+
+function startEditViewingCat(): void {
+  const cat = viewingCat.value
+
+  if (!cat || !canManageNotebookData.value) {
+    return
+  }
+
+  closeCatDetails()
+  startEditCat(cat)
+}
+
 function switchSettingsSection(section: SettingsSection): void {
   settingsSection.value = section
 }
@@ -475,6 +500,36 @@ function getCatMeta(cat: Cat): string {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+function getCatBirthdayText(cat: Cat): string {
+  if (!cat.birthday) {
+    return ''
+  }
+
+  const ageText = getCatAgeText(cat.birthday)
+
+  return ageText ? `${cat.birthday}（${ageText}）` : cat.birthday
+}
+
+function getCatNeuteredText(cat: Cat): string {
+  if (typeof cat.isNeutered !== 'boolean') {
+    return ''
+  }
+
+  return cat.isNeutered ? '已絕育' : '未絕育'
+}
+
+function getCatDetailRows(cat: Cat): Array<{ label: string; value: string }> {
+  return [
+    { label: '生日', value: getCatBirthdayText(cat) },
+    { label: '性別', value: getCatSexText(cat.sex) },
+    {
+      label: '體重',
+      value: typeof cat.weightKg === 'number' ? `${cat.weightKg} kg` : '',
+    },
+    { label: '絕育狀態', value: getCatNeuteredText(cat) },
+  ].filter((row) => row.value)
 }
 
 function getCatAgeText(birthday?: string): string {
@@ -876,6 +931,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             'pet-item--archived': cat.isArchived,
             'pet-item--selected': selectedCatId === cat.id,
           }"
+          role="button"
+          tabindex="0"
+          @click="openCatDetails(cat)"
+          @keydown.enter.prevent="openCatDetails(cat)"
+          @keydown.space.prevent="openCatDetails(cat)"
         >
           <div class="pet-avatar" aria-hidden="true">
             <img
@@ -901,7 +961,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             <button
               class="ui-button ui-button--primary compact-button"
               type="button"
-              @click="restoreCat(cat)"
+              @click.stop="restoreCat(cat)"
             >
               重新使用
             </button>
@@ -911,7 +971,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
               class="ui-button ui-button--secondary compact-button"
               type="button"
               :disabled="selectedCatId === cat.id"
-              @click="catTrackerStore.selectCat(cat.id)"
+              @click.stop="catTrackerStore.selectCat(cat.id)"
             >
               {{ selectedCatId === cat.id ? '使用中' : '切換' }}
             </button>
@@ -919,7 +979,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
               v-if="canManageNotebookData"
               class="ui-button ui-button--secondary compact-button"
               type="button"
-              @click="startEditCat(cat)"
+              @click.stop="startEditCat(cat)"
             >
               編輯
             </button>
@@ -927,7 +987,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
               v-if="canManageNotebookData"
               class="ui-button ui-button--danger compact-button"
               type="button"
-              @click="deleteCat(cat)"
+              @click.stop="deleteCat(cat)"
             >
               {{ catTrackerStore.getCatUsageCount(cat.id) > 0 ? '停用' : '刪除' }}
             </button>
@@ -1158,6 +1218,74 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             </button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div
+      v-if="viewingCat"
+      class="category-modal-backdrop"
+      role="presentation"
+      @click.self="closeCatDetails"
+    >
+      <section
+        class="category-modal cat-detail-modal"
+        aria-labelledby="cat-detail-title"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="category-form__header">
+          <div class="cat-detail-heading">
+            <span class="pet-avatar cat-detail-heading__avatar" aria-hidden="true">
+              <img
+                :src="getCatAvatarOption(viewingCat.avatarId).image"
+                :alt="getCatAvatarOption(viewingCat.avatarId).label"
+              />
+            </span>
+            <div>
+              <h2 id="cat-detail-title">{{ viewingCat.name }}</h2>
+              <span>{{ viewingCat.isArchived ? '已停用' : '使用中' }}</span>
+            </div>
+          </div>
+          <button
+            class="ui-button ui-button--icon modal-close"
+            type="button"
+            aria-label="關閉寵物資料"
+            @click="closeCatDetails"
+          >
+            ×
+          </button>
+        </div>
+
+        <dl v-if="getCatDetailRows(viewingCat).length > 0" class="cat-detail-list">
+          <template v-for="row in getCatDetailRows(viewingCat)" :key="row.label">
+            <dt>{{ row.label }}</dt>
+            <dd>{{ row.value }}</dd>
+          </template>
+        </dl>
+        <p v-else class="cat-detail-empty">尚未填寫詳細資料</p>
+
+        <section v-if="viewingCat.note" class="cat-detail-note" aria-label="寵物備註">
+          <h3>備註</h3>
+          <p>{{ viewingCat.note }}</p>
+        </section>
+
+        <div class="category-form__actions cat-detail-actions">
+          <button
+            class="ui-button ui-button--secondary save-button"
+            type="button"
+            @click="closeCatDetails"
+          >
+            關閉
+          </button>
+          <button
+            v-if="canManageNotebookData"
+            class="ui-button ui-button--primary save-button"
+            type="button"
+            @click="startEditViewingCat"
+          >
+            編輯
+          </button>
+        </div>
       </section>
     </div>
 
@@ -1525,11 +1653,19 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
+  cursor: pointer;
 }
 
 .pet-item--selected {
   border-color: var(--color-primary);
   background: var(--color-primary-light);
+}
+
+.pet-item:hover,
+.pet-item:focus-visible {
+  border-color: var(--color-border-strong);
+  background: var(--color-primary-light);
+  outline: none;
 }
 
 .pet-item--archived {
@@ -1813,6 +1949,100 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   padding-top: 12px;
   border-top: 1px solid var(--color-divider);
   background: var(--color-surface);
+}
+
+.cat-detail-modal {
+  display: grid;
+  gap: 14px;
+}
+
+.cat-detail-heading {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cat-detail-heading h2,
+.cat-detail-heading span {
+  min-width: 0;
+  margin: 0;
+}
+
+.cat-detail-heading h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-detail-heading span {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.cat-detail-heading__avatar {
+  width: 52px;
+  height: 52px;
+}
+
+.cat-detail-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 14px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+}
+
+.cat-detail-list dt {
+  color: var(--color-muted);
+  font-weight: 800;
+}
+
+.cat-detail-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.cat-detail-empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  color: var(--color-muted);
+  font-weight: 800;
+}
+
+.cat-detail-note {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cat-detail-note h3,
+.cat-detail-note p {
+  margin: 0;
+}
+
+.cat-detail-note h3 {
+  font-size: 0.875rem;
+}
+
+.cat-detail-note p {
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+}
+
+.cat-detail-actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
 }
 
 .modal-close {
