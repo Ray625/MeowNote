@@ -2225,6 +2225,20 @@ function formatDateInputValue(date: Date): string {
 @media (max-width: 520px) {
   .stats-controls {
     grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 10px;
+  }
+
+  .stats-field {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .interval-tabs {
+    width: min(100%, 300px);
+    min-width: 0;
+    margin-left: 0;
+    justify-self: center;
   }
 
   .stats-metrics {
