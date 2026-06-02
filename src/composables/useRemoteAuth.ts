@@ -411,6 +411,61 @@ export function useRemoteAuth() {
     }
   }
 
+  async function updatePassword(currentPassword: string, nextPassword: string): Promise<boolean> {
+    if (!supabase) {
+      errorMessage.value = 'Supabase 尚未設定'
+      return false
+    }
+
+    const email = user.value?.email
+
+    if (!email) {
+      errorMessage.value = '請先登入後再修改密碼'
+      return false
+    }
+
+    if (!currentPassword) {
+      errorMessage.value = '請輸入目前密碼'
+      return false
+    }
+
+    if (nextPassword.length < 6) {
+      errorMessage.value = '新密碼至少需要 6 個字元'
+      return false
+    }
+
+    isLoading.value = true
+    errorMessage.value = ''
+    authMessage.value = ''
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      })
+
+      if (signInError) {
+        throw signInError
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: nextPassword,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      authMessage.value = '密碼已更新。'
+      return true
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, '更新密碼失敗')
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function updateActiveNotebookName(name: string): Promise<boolean> {
     if (!supabase) {
       errorMessage.value = 'Supabase 尚未設定'
@@ -676,5 +731,6 @@ export function useRemoteAuth() {
     shareActiveNotebook,
     switchActiveNotebook,
     updateActiveNotebookName,
+    updatePassword,
   }
 }

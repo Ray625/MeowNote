@@ -39,6 +39,7 @@ const {
   shareActiveNotebook,
   switchActiveNotebook,
   updateActiveNotebookName,
+  updatePassword,
   user,
 } = useRemoteAuth()
 const { isBootstrappingRemoteData, remoteRefreshError } = useRemoteCatTrackerRefresh()
@@ -51,9 +52,14 @@ const isEditingNotebookName = ref(false)
 const isCreatingNotebook = ref(false)
 const isNotebookMenuOpen = ref(false)
 const isSharingNotebook = ref(false)
+const isChangingPassword = ref(false)
 const notebookNameDraft = ref('')
 const newNotebookName = ref('')
 const shareNotebookEmail = ref('')
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const passwordErrorMessage = ref('')
 const pendingNotebookAction = ref<'delete' | 'leave' | ''>('')
 const notebookMenuRef = ref<HTMLElement | null>(null)
 const toastMessage = ref('')
@@ -74,7 +80,11 @@ const shouldShowNotebookManagement = computed(
   () => visibleNotebooks.value.length > 1 || activeNotebookRole.value !== 'owner',
 )
 const isNotebookFormOpen = computed(
-  () => isCreatingNotebook.value || isEditingNotebookName.value || isSharingNotebook.value,
+  () =>
+    isCreatingNotebook.value ||
+    isEditingNotebookName.value ||
+    isSharingNotebook.value ||
+    isChangingPassword.value,
 )
 const notebookConfirmDialog = computed(() => {
   if (pendingNotebookAction.value === 'delete') {
@@ -147,6 +157,7 @@ async function submitSignUp(): Promise<void> {
 async function submitSignOut(): Promise<void> {
   if (await signOut()) {
     signInPassword.value = ''
+    closePasswordForm()
     closeNotebookMenu()
     closeNotebookForm()
   }
@@ -194,6 +205,12 @@ async function submitCreateNotebook(): Promise<void> {
   if (await createPersonalNotebook(newNotebookName.value)) {
     closeNotebookForm()
   }
+}
+
+function startChangePassword(): void {
+  closeNotebookMenu()
+  closeNotebookForm()
+  isChangingPassword.value = true
 }
 
 function toggleNotebookMenu(): void {
@@ -246,10 +263,32 @@ function closeShareNotebook(): void {
   shareNotebookEmail.value = ''
 }
 
+function closePasswordForm(): void {
+  isChangingPassword.value = false
+  currentPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  passwordErrorMessage.value = ''
+}
+
 function closeNotebookForm(): void {
   closeCreateNotebook()
   closeNotebookNameEditor()
   closeShareNotebook()
+  closePasswordForm()
+}
+
+async function submitPasswordChange(): Promise<void> {
+  passwordErrorMessage.value = ''
+
+  if (newPassword.value !== confirmPassword.value) {
+    passwordErrorMessage.value = '兩次輸入的新密碼不一致'
+    return
+  }
+
+  if (await updatePassword(currentPassword.value, newPassword.value)) {
+    closeNotebookForm()
+  }
 }
 
 function clearToastTimer(): void {
@@ -453,6 +492,14 @@ function getNotebookRoleLabel(role: string): string {
           class="ui-button ui-button--secondary account-button"
           type="button"
           :disabled="isLoading"
+          @click="startChangePassword"
+        >
+          修改密碼
+        </button>
+        <button
+          class="ui-button ui-button--secondary account-button"
+          type="button"
+          :disabled="isLoading"
           @click="submitSignOut"
         >
           登出
@@ -633,6 +680,68 @@ function getNotebookRoleLabel(role: string): string {
             </button>
           </div>
         </form>
+
+        <form
+          v-else-if="isChangingPassword"
+          class="password-form"
+          @submit.prevent="submitPasswordChange"
+        >
+          <h2>修改密碼</h2>
+          <label class="field">
+            <span class="field__label">目前密碼</span>
+            <input
+              v-model="currentPassword"
+              class="field__control"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <label class="field">
+            <span class="field__label">新密碼</span>
+            <input
+              v-model="newPassword"
+              class="field__control"
+              type="password"
+              autocomplete="new-password"
+              placeholder="至少 6 個字元"
+              required
+              minlength="6"
+            />
+          </label>
+          <label class="field">
+            <span class="field__label">確認新密碼</span>
+            <input
+              v-model="confirmPassword"
+              class="field__control"
+              type="password"
+              autocomplete="new-password"
+              placeholder="再次輸入新密碼"
+              required
+              minlength="6"
+            />
+          </label>
+          <p v-if="passwordErrorMessage" class="account-message account-message--error">
+            {{ passwordErrorMessage }}
+          </p>
+          <div class="notebook-form-dialog__actions">
+            <button
+              class="ui-button ui-button--secondary account-button"
+              type="button"
+              :disabled="isLoading"
+              @click="closeNotebookForm"
+            >
+              取消
+            </button>
+            <button
+              class="ui-button ui-button--primary account-button"
+              type="submit"
+              :disabled="isLoading"
+            >
+              儲存
+            </button>
+          </div>
+        </form>
       </section>
     </div>
 
@@ -769,7 +878,8 @@ function getNotebookRoleLabel(role: string): string {
 .account-form,
 .notebook-name-form,
 .new-notebook-form,
-.notebook-share-form {
+.notebook-share-form,
+.password-form {
   display: grid;
   gap: 12px;
 }
@@ -870,7 +980,8 @@ function getNotebookRoleLabel(role: string): string {
 .account-form .field,
 .notebook-name-form .field,
 .new-notebook-form .field,
-.notebook-share-form .field {
+.notebook-share-form .field,
+.password-form .field {
   display: grid;
   gap: 8px;
 }
@@ -878,7 +989,8 @@ function getNotebookRoleLabel(role: string): string {
 .account-form .field__control,
 .notebook-name-form .field__control,
 .new-notebook-form .field__control,
-.notebook-share-form .field__control {
+.notebook-share-form .field__control,
+.password-form .field__control {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
