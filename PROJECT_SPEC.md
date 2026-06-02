@@ -26,7 +26,11 @@ The current app supports:
 - local storage persistence before login
 - optional Supabase account sync after login
 - email/password authentication through Supabase
-- one active notebook per account
+- account password change after login
+- multiple notebooks per account
+- one active notebook per device
+- notebook sharing by registered user email
+- shared notebook permissions for owners and editors
 - local data import into an empty remote notebook
 - automatic remote sync for cats, categories, and events after remote IDs are established
 - calendar view and monthly list view
@@ -37,6 +41,18 @@ The current app supports:
 - category/template management
 - dark/light theme toggle
 - stats page for count, sum, measurement, and rating categories
+
+## Main Navigation
+
+The bottom navigation currently has five primary entries:
+
+- 筆記簿
+- 月曆
+- `+` quick record
+- 統計
+- 設定
+
+The 筆記簿 page owns account, sync, password, notebook switching, notebook creation, notebook sharing, leaving shared notebooks, and deleting empty personal notebooks.
 
 ## Primary Workflows
 
@@ -159,9 +175,12 @@ Before login:
 After login:
 
 - Supabase session should be retained by the Supabase client
-- if remote notebook is empty, import local data once
-- if remote notebook has data, load remote data
+- each device has one active notebook stored locally
+- if the user's first eligible owner notebook is empty, import local data once
+- if the active remote notebook has data, load remote data
 - after remote data is loaded/imported, creates/updates/deletes should sync automatically
+- switching notebooks should load that notebook's remote data and must not import the previous notebook's in-memory data into the new notebook
+- newly created notebooks should start empty and should not copy the current notebook's data
 
 Current sync scope:
 
@@ -169,7 +188,30 @@ Current sync scope:
 - event categories
 - cat events
 
-The remote model is notebook-based so a future sharing feature can let multiple users manage the same notebook.
+### Notebook Management And Sharing
+
+Users can create more than one personal notebook.
+
+Owner behavior:
+
+- can rename the notebook
+- can share the notebook with another registered user by Email
+- can manage pets and categories
+- can edit/delete all events in the notebook
+- can delete a personal notebook only when it has no records and no shared members
+
+Shared editor behavior:
+
+- can switch to the shared notebook
+- can read pets, categories, and events in that notebook
+- can create their own events
+- can edit/delete only events they created
+- cannot manage pets, categories, notebook name, or sharing
+- can leave the shared notebook
+
+When a user opens an event they cannot edit, the UI should provide a read-only detail view instead of an editable form.
+
+Password changes are available after login and require the current password before setting the new password.
 
 ## Statistics
 
@@ -237,8 +279,10 @@ Stats should be shown like measurement trends, using point/line charts.
 
 These are intentional later items:
 
-- full notebook sharing UI
 - role management UI
+- invitation workflow for users who have not registered yet
+- read-only viewer UI polish
+- recovery/reset password screen
 - push notifications
 - veterinary document storage
 - medical diagnosis workflows

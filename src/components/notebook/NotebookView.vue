@@ -405,7 +405,11 @@ function getNotebookRoleLabel(role: string): string {
         Supabase 尚未設定，請確認 `.env.local` 已填入專案 URL 和 anon key。
       </p>
 
-      <template v-else-if="isSignedIn">
+      <p v-if="!isSignedIn" class="account-message account-message--sync-hint">
+        登入後可在不同裝置同步資料
+      </p>
+
+      <template v-if="isSignedIn">
         <section
           v-if="shouldShowNotebookManagement"
           class="notebook-switcher"

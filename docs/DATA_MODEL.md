@@ -235,6 +235,7 @@ interface CatEvent {
   id: string
   catId: string
   categoryId: string
+  createdBy?: string
   occurredAt: string
   title?: string
   severity?: 1 | 2 | 3 | 4 | 5
@@ -250,9 +251,12 @@ Notes:
 - `id` should be a UUID, even before login.
 - `catId` points to a `Cat`.
 - `categoryId` points to an `EventCategory`.
+- `createdBy` is populated from `cat_events.created_by` for remote events.
 - `occurredAt` is the event time and is used for calendar grouping and stats.
 - `title`, `severity`, `note`, and `values` are optional detail fields.
 - `values` is intentionally JSON-shaped so future value types can be added without changing the event table.
+- shared notebook editors can edit/delete only events whose `createdBy` matches their current user ID.
+- owners can edit/delete all events in their owned notebook.
 
 Category change behavior:
 
@@ -280,11 +284,27 @@ Notebook ownership:
 - `editor` can read notebook data and create records in the notebook
 - `editor` can update/delete only records where `cat_events.created_by` is their own user ID
 - `viewer` is reserved for read-only access
+- only owners can share notebooks
+- shared editors can leave a notebook by deleting their own membership through the guarded database function
+- owned notebooks can be deleted only when the guarded database function allows it, currently intended for notebooks without records and without shared members
 
 Remote records are scoped by `notebook_id`.
 Remote record authorship is tracked by `cat_events.created_by`.
 
 The remote schema uses UUID primary keys. App-generated local UUIDs should be compatible with remote IDs to avoid local-to-remote ID remapping.
+
+## Local Store Versus Remote Notebook
+
+The Pinia store holds the currently loaded notebook data in memory and persists it to localStorage.
+
+This local persistence serves two purposes:
+
+- offline/local-first usage before login
+- a local cache of the currently active notebook after login
+
+When the active notebook changes after login, the app should replace the local store with the selected notebook's remote data. It should not treat the currently loaded local store as data to upload into the newly selected notebook.
+
+Creating a new remote notebook should skip local import so the new notebook starts empty unless the user explicitly creates data in it.
 
 ## Input Types
 

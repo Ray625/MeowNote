@@ -145,7 +145,7 @@ function startTracking(): void {
 
       <template v-else>
         <div class="field">
-          <label id="first-time-setup-title" class="setup-title">想追蹤哪些項目？</label>
+          <label id="first-time-setup-title" class="setup-title">想紀錄哪些項目？</label>
           <div class="template-groups">
             <section v-for="group in groupedTemplates" :key="group.group" class="template-group">
               <h2>{{ group.group }}</h2>
@@ -154,7 +154,9 @@ function startTracking(): void {
                   v-for="template in group.templates"
                   :key="template.id"
                   class="template-option"
-                  :class="{ 'template-option--selected': selectedTemplateIds.includes(template.id) }"
+                  :class="{
+                    'template-option--selected': selectedTemplateIds.includes(template.id),
+                  }"
                   type="button"
                   :aria-pressed="selectedTemplateIds.includes(template.id)"
                   @click="toggleTemplate(template.id)"
@@ -174,9 +176,7 @@ function startTracking(): void {
           >
             上一步
           </button>
-          <button class="ui-button ui-button--primary setup-submit" type="submit">
-            開始記錄
-          </button>
+          <button class="ui-button ui-button--primary setup-submit" type="submit">開始記錄</button>
         </div>
       </template>
     </form>

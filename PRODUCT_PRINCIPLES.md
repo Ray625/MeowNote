@@ -64,14 +64,28 @@ The app must remain useful before login.
 
 When the user signs in, local data can be imported into a notebook if the remote notebook is empty. After data is linked to remote UUIDs, creates/updates/deletes should sync through Supabase.
 
+Notebook switching must not behave like data copying. Switching to another notebook should load that notebook's remote data into the current store. Creating a new notebook should start from an empty notebook, not duplicate the currently loaded notebook.
+
 Remote sync should not leak database calls into UI components. Keep persistence and sync behavior behind store/services/repository boundaries.
 
-## 8. Shared notebook direction
+## 8. Shared notebooks need clear ownership
 
-The long-term model is account-based notebooks:
+Notebook collaboration is account-based and permissioned:
 
-- one user can own a notebook
-- a notebook can later be shared with other users
-- multiple devices should manage the same notebook data through the account
+- one user owns a notebook
+- the owner can share a notebook with registered users
+- shared editors can add their own records
+- shared editors can edit/delete only records they created
+- owners retain control over pets, categories, notebook metadata, and sharing
+- shared users should get read-only detail views for records they cannot edit
 
-The UI does not need full notebook sharing yet, but data model and sync decisions should preserve this path.
+The UI should not imply that shared editors are owners. Role labels and available actions must match the actual notebook membership role.
+
+## 9. Account controls should stay boring
+
+Account features should be predictable and low-risk:
+
+- password changes require the current password
+- sign-out should clear transient password fields
+- sync/admin actions should be hidden when they are no longer part of the normal flow
+- destructive notebook actions should use the shared confirm dialog

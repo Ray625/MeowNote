@@ -25,6 +25,7 @@ Components should not call Supabase directly. UI code should call the Pinia stor
 `HomeView` decides which primary screen to show:
 
 - first-time setup
+- notebook/account management
 - calendar/list/search
 - statistics
 - settings
@@ -96,6 +97,14 @@ Auth/session logic lives in:
 src/composables/useRemoteAuth.ts
 ```
 
+Responsibilities:
+
+- restore Supabase sessions
+- create/load/switch active notebooks
+- expose the active notebook role
+- sign in, sign up, sign out, and change password
+- create, rename, share, leave, and delete eligible notebooks
+
 Remote sync services:
 
 - `src/services/syncRemoteCats.ts`
@@ -128,7 +137,9 @@ After login:
 
 - Supabase session is restored by the Supabase client
 - the app loads/creates an active notebook
-- if the remote notebook is empty, local data can be imported once
+- if the user's eligible owner notebook is empty and local import has not already been considered for that user, local data can be imported once
+- newly created notebooks skip local import so they do not copy the current notebook
+- notebook switching loads that notebook's remote data and must not upload the previously loaded notebook into it
 - if remote data exists, the app should load remote data
 - after data is remote-linked, create/update/delete operations should sync automatically
 
@@ -145,6 +156,18 @@ Notebook sharing:
 - editors can read notebook data and create their own cat events
 - editors cannot edit/delete events created by the owner or another member
 - pets, categories, notebook metadata, and member management remain owner-only
+- owners can delete all events in their notebook
+- shared editors should see a read-only detail view for records they cannot edit
+- shared editors can leave a shared notebook
+- owners can delete an owned notebook only through the guarded database function when it has no events and no shared members
+
+Local import guards live in:
+
+```txt
+src/composables/useRemoteCatTrackerRefresh.ts
+```
+
+They prevent accidental notebook duplication by tracking users/notebooks for which local import should be skipped or has already been considered.
 
 ## ID Strategy
 
@@ -196,6 +219,10 @@ Statistics:
 Settings:
 
 - `src/components/settings/SettingsView.vue`
+
+Notebook/account:
+
+- `src/components/notebook/NotebookView.vue`
 
 Shared:
 
