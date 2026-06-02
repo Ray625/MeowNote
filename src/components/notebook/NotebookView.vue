@@ -666,8 +666,10 @@ function getNotebookRoleLabel(role: string): string {
 
 .notebook-header__button {
   flex: 0 0 auto;
-  min-height: 42px;
-  padding-inline: 16px;
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .notebook-header__menu {

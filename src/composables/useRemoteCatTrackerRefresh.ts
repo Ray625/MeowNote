@@ -2,14 +2,21 @@ import { readonly, ref } from 'vue'
 import { importLocalCatTracker, isRemoteNotebookEmpty } from '@/services/importLocalCatTracker'
 import { loadRemoteCatTracker } from '@/services/loadRemoteCatTracker'
 import type { useCatTrackerStore } from '@/stores/catTracker'
+import { readJson, writeJson } from '@/utils/storage'
 
 const MIN_REFRESH_INTERVAL_MS = 30_000
+const LOCAL_IMPORT_CONSIDERED_USERS_STORAGE_KEY = 'meownote:local-import-considered-users'
 
 const isRefreshingRemoteData = ref(false)
 const isBootstrappingRemoteData = ref(false)
 const remoteRefreshError = ref('')
 const notebookIdsSkippingLocalImport = new Set<string>()
 let lastRefreshAt = 0
+
+interface BootstrapRemoteCatTrackerOptions {
+  notebookRole?: string
+  userId: string | null
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -33,11 +40,33 @@ export function skipNextLocalImportForNotebook(notebookId: string): void {
   }
 }
 
+function hasConsideredLocalImport(userId: string | null): boolean {
+  if (!userId) {
+    return true
+  }
+
+  return readJson<string[]>(LOCAL_IMPORT_CONSIDERED_USERS_STORAGE_KEY, []).includes(userId)
+}
+
+function markLocalImportConsidered(userId: string | null): void {
+  if (!userId) {
+    return
+  }
+
+  const consideredUserIds = readJson<string[]>(LOCAL_IMPORT_CONSIDERED_USERS_STORAGE_KEY, [])
+
+  if (consideredUserIds.includes(userId)) {
+    return
+  }
+
+  writeJson(LOCAL_IMPORT_CONSIDERED_USERS_STORAGE_KEY, [...consideredUserIds, userId])
+}
+
 export function useRemoteCatTrackerRefresh() {
   async function bootstrapRemoteCatTracker(
     catTrackerStore: ReturnType<typeof useCatTrackerStore>,
     notebookId: string,
-    userId: string | null,
+    options: BootstrapRemoteCatTrackerOptions,
   ): Promise<void> {
     if (!notebookId || isBootstrappingRemoteData.value) {
       return
@@ -51,19 +80,24 @@ export function useRemoteCatTrackerRefresh() {
       const localEvents = [...catTrackerStore.events]
       const hasLocalUserData = localCats.length > 0 || localEvents.length > 0
       const shouldSkipLocalImport = notebookIdsSkippingLocalImport.has(notebookId)
+      const canImportLocalData =
+        !shouldSkipLocalImport &&
+        options.notebookRole === 'owner' &&
+        !hasConsideredLocalImport(options.userId)
 
-      if (!shouldSkipLocalImport && hasLocalUserData && (await isRemoteNotebookEmpty(notebookId))) {
+      if (canImportLocalData && hasLocalUserData && (await isRemoteNotebookEmpty(notebookId))) {
         await importLocalCatTracker({
           notebookId,
           cats: localCats,
           categories: localCategories,
           events: localEvents,
-          createdBy: userId,
+          createdBy: options.userId,
         })
       }
 
       notebookIdsSkippingLocalImport.delete(notebookId)
       await refreshRemoteCatTracker(catTrackerStore, notebookId, { force: true })
+      markLocalImportConsidered(options.userId)
     } catch (error) {
       remoteRefreshError.value = getErrorMessage(error)
     } finally {

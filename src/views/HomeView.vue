@@ -17,7 +17,7 @@ import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
 useTheme()
-const { activeNotebookId, initializeAuth, user } = useRemoteAuth()
+const { activeNotebookId, activeNotebookRole, initializeAuth, user } = useRemoteAuth()
 const { bootstrapRemoteCatTracker, refreshRemoteCatTracker } = useRemoteCatTrackerRefresh()
 
 const catTrackerStore = useCatTrackerStore()
@@ -32,7 +32,10 @@ const {
 
 onMounted(() => {
   void initializeAuth().then(() => {
-    void bootstrapRemoteCatTracker(catTrackerStore, activeNotebookId.value, user.value?.id ?? null)
+    void bootstrapRemoteCatTracker(catTrackerStore, activeNotebookId.value, {
+      notebookRole: activeNotebookRole.value,
+      userId: user.value?.id ?? null,
+    })
   })
 
   window.addEventListener('focus', refreshRemoteData)
@@ -41,7 +44,10 @@ onMounted(() => {
 
 watch(activeNotebookId, (notebookId) => {
   if (notebookId) {
-    void bootstrapRemoteCatTracker(catTrackerStore, notebookId, user.value?.id ?? null)
+    void bootstrapRemoteCatTracker(catTrackerStore, notebookId, {
+      notebookRole: activeNotebookRole.value,
+      userId: user.value?.id ?? null,
+    })
   }
 })
 

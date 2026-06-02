@@ -116,6 +116,11 @@ const deleteCatMessage = computed(() =>
     ? '停用後，這隻寵物不會再出現在切換選單中，但過去的紀錄仍會保留。'
     : `確定刪除「${pendingDeleteCat.value?.name}」？`,
 )
+const readOnlySettingsMessage = computed(() =>
+  settingsSection.value === 'categories'
+    ? '共享成員可以使用既有分類新增紀錄，分類設定由筆記簿擁有者管理。'
+    : '共享成員可以查看寵物資料，寵物設定由筆記簿擁有者管理。',
+)
 const isSettingsModalOpen = computed(() => isCategoryModalOpen.value || isCatModalOpen.value)
 const categoryGroupOptions = computed<SelectOption[]>(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
@@ -729,6 +734,10 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
     </div>
 
     <div class="settings-content">
+      <p v-if="!canManageNotebookData" class="settings-readonly-message">
+        {{ readOnlySettingsMessage }}
+      </p>
+
       <div v-if="settingsSection === 'categories'" class="category-groups">
         <section
           v-if="canManageNotebookData && availableCategoryTemplates.length > 0"
@@ -782,6 +791,7 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
               class="category-item"
               :class="{
                 'category-item--archived': category.isArchived,
+                'category-item--readonly': !canManageNotebookData,
                 'category-item--dragging': draggingCategoryId === category.id,
                 'category-item--drop-before':
                   dragTargetCategoryId === category.id && dragTargetPosition === 'before',
@@ -1227,6 +1237,13 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   min-height: 0;
 }
 
+.settings-readonly-message {
+  margin: 0 0 12px;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
 .settings-header p,
 .account-details span,
 .account-message,
@@ -1623,6 +1640,10 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   background: var(--color-background);
 }
 
+.category-item--readonly {
+  grid-template-columns: 14px minmax(0, 1fr);
+}
+
 .category-item--dragging {
   opacity: 0.55;
 }
@@ -1862,6 +1883,10 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
   .category-item {
     grid-template-columns: 18px 14px 1fr;
+  }
+
+  .category-item--readonly {
+    grid-template-columns: 14px minmax(0, 1fr);
   }
 
   .category-item--archived {
