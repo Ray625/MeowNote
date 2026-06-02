@@ -1,5 +1,6 @@
 import { computed, readonly, ref } from 'vue'
 import type { Session, User } from '@supabase/supabase-js'
+import { skipNextLocalImportForNotebook } from '@/composables/useRemoteCatTrackerRefresh'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import { readJson, writeJson } from '@/utils/storage'
 
@@ -156,6 +157,44 @@ async function createNotebook(name = '我的貓咪紀錄'): Promise<string> {
   return String(data)
 }
 
+function setActiveNotebook(notebook: RemoteNotebook): void {
+  activeNotebookId.value = notebook.id
+  activeNotebookName.value = notebook.name
+  activeNotebookRole.value = notebook.role
+  writeJson(ACTIVE_NOTEBOOK_STORAGE_KEY, notebook.id)
+  writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, notebook.name)
+}
+
+async function activateFallbackNotebook(): Promise<void> {
+  notebooks.value = await loadNotebooks()
+
+  if (notebooks.value.length === 0) {
+    const notebookId = await createNotebook()
+
+    skipNextLocalImportForNotebook(notebookId)
+    notebooks.value = await loadNotebooks()
+    const createdNotebook = notebooks.value.find((notebook) => notebook.id === notebookId)
+
+    if (createdNotebook) {
+      setActiveNotebook(createdNotebook)
+      return
+    }
+  }
+
+  const nextNotebook = notebooks.value[0]
+
+  if (nextNotebook) {
+    setActiveNotebook(nextNotebook)
+    return
+  }
+
+  activeNotebookId.value = ''
+  activeNotebookName.value = ''
+  activeNotebookRole.value = ''
+  writeJson(ACTIVE_NOTEBOOK_STORAGE_KEY, '')
+  writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, '')
+}
+
 async function ensureActiveNotebook(): Promise<string> {
   if (ensureActiveNotebookPromise) {
     return ensureActiveNotebookPromise
@@ -192,11 +231,11 @@ async function ensureActiveNotebookInternal(): Promise<string> {
   const notebookName = firstNotebook?.name ?? (await loadNotebookName(notebookId))
   const notebookRole = firstNotebook?.role ?? (await loadNotebookRole(notebookId))
 
-  activeNotebookId.value = notebookId
-  activeNotebookName.value = notebookName
-  activeNotebookRole.value = notebookRole
-  writeJson(ACTIVE_NOTEBOOK_STORAGE_KEY, notebookId)
-  writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, notebookName)
+  setActiveNotebook({
+    id: notebookId,
+    name: notebookName,
+    role: notebookRole,
+  })
 
   return notebookId
 }
@@ -468,6 +507,124 @@ export function useRemoteAuth() {
     }
   }
 
+  async function createPersonalNotebook(name = '我的貓咪紀錄'): Promise<boolean> {
+    if (!supabase) {
+      errorMessage.value = 'Supabase 尚未設定'
+      return false
+    }
+
+    const normalizedName = name.trim() || '我的貓咪紀錄'
+
+    isLoading.value = true
+    errorMessage.value = ''
+    authMessage.value = ''
+
+    try {
+      const notebookId = await createNotebook(normalizedName)
+
+      notebooks.value = await loadNotebooks()
+      const notebook = notebooks.value.find((item) => item.id === notebookId)
+
+      if (!notebook) {
+        throw new Error('Notebook 已建立，但無法讀取')
+      }
+
+      skipNextLocalImportForNotebook(notebook.id)
+      setActiveNotebook(notebook)
+      authMessage.value = `已建立 ${notebook.name}，並設為預設 Notebook。`
+      return true
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, '新增 Notebook 失敗')
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function leaveActiveNotebook(): Promise<boolean> {
+    if (!supabase) {
+      errorMessage.value = 'Supabase 尚未設定'
+      return false
+    }
+
+    if (!activeNotebookId.value) {
+      errorMessage.value = 'Notebook 尚未建立完成'
+      return false
+    }
+
+    if (activeNotebookRole.value === 'owner') {
+      errorMessage.value = '擁有者不能離開自己的 Notebook'
+      return false
+    }
+
+    const leavingNotebookName = activeNotebookName.value
+
+    isLoading.value = true
+    errorMessage.value = ''
+    authMessage.value = ''
+
+    try {
+      const { error } = await supabase.rpc('leave_shared_notebook', {
+        target_notebook_id: activeNotebookId.value,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      await activateFallbackNotebook()
+      authMessage.value = `已離開 ${leavingNotebookName || '共享 Notebook'}。`
+      return true
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, '離開共享 Notebook 失敗')
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function deleteActiveNotebookWithoutEvents(): Promise<boolean> {
+    if (!supabase) {
+      errorMessage.value = 'Supabase 尚未設定'
+      return false
+    }
+
+    if (!activeNotebookId.value) {
+      errorMessage.value = 'Notebook 尚未建立完成'
+      return false
+    }
+
+    if (activeNotebookRole.value !== 'owner') {
+      errorMessage.value = '只有 Notebook 擁有者可以刪除'
+      return false
+    }
+
+    const deletedNotebookName = activeNotebookName.value
+
+    isLoading.value = true
+    errorMessage.value = ''
+    authMessage.value = ''
+
+    try {
+      const { error } = await supabase.rpc('delete_owned_notebook_without_events', {
+        target_notebook_id: activeNotebookId.value,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      await activateFallbackNotebook()
+      authMessage.value = `已刪除 ${deletedNotebookName || 'Notebook'}。`
+      return true
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, '刪除 Notebook 失敗')
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function refreshNotebooks(): Promise<void> {
     if (!supabase || !user.value) {
       notebooks.value = []
@@ -490,12 +647,8 @@ export function useRemoteAuth() {
       return false
     }
 
-    activeNotebookId.value = notebook.id
-    activeNotebookName.value = notebook.name
-    activeNotebookRole.value = notebook.role
-    writeJson(ACTIVE_NOTEBOOK_STORAGE_KEY, notebook.id)
-    writeJson(ACTIVE_NOTEBOOK_NAME_STORAGE_KEY, notebook.name)
-    authMessage.value = `已切換到 ${notebook.name}。`
+    setActiveNotebook(notebook)
+    authMessage.value = `已將 ${notebook.name} 設為這台裝置的預設 Notebook。`
 
     return true
   }
@@ -511,8 +664,11 @@ export function useRemoteAuth() {
     isSignedIn,
     notebooks: readonly(notebooks),
     user: readonly(user),
+    createPersonalNotebook,
+    deleteActiveNotebookWithoutEvents,
     ensureActiveNotebook,
     initializeAuth,
+    leaveActiveNotebook,
     refreshNotebooks,
     signInWithPassword,
     signUpWithPassword,

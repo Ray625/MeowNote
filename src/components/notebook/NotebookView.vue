@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
 import { useCatTrackerStore } from '@/stores/catTracker'
@@ -22,10 +24,13 @@ const {
   activeNotebookName,
   activeNotebookRole,
   authMessage,
+  createPersonalNotebook,
+  deleteActiveNotebookWithoutEvents,
   errorMessage,
   isConfigured,
   isLoading,
   isSignedIn,
+  leaveActiveNotebook,
   notebooks,
   refreshNotebooks,
   signInWithPassword,
@@ -43,14 +48,57 @@ const signInEmail = ref(rememberedEmail)
 const signInPassword = ref('')
 const shouldRememberEmail = ref(Boolean(rememberedEmail))
 const isEditingNotebookName = ref(false)
+const isCreatingNotebook = ref(false)
+const isNotebookMenuOpen = ref(false)
+const isSharingNotebook = ref(false)
 const notebookNameDraft = ref('')
+const newNotebookName = ref('')
 const shareNotebookEmail = ref('')
+const pendingNotebookAction = ref<'delete' | 'leave' | ''>('')
+const notebookMenuRef = ref<HTMLElement | null>(null)
+const toastMessage = ref('')
+let toastTimer: ReturnType<typeof window.setTimeout> | undefined
 
 const localImportSummary = computed(
-  () =>
-    `${cats.value.length} 隻寵物、${categories.value.length} 個分類、${events.value.length} 筆紀錄`,
+  () => `${cats.value.length} 隻寵物、${events.value.length} 筆紀錄`,
 )
 const activeNotebookIdValue = computed(() => activeNotebookId.value)
+const activeRoleLabel = computed(() => getNotebookRoleLabel(activeNotebookRole.value))
+const canDeleteActiveNotebook = computed(
+  () => activeNotebookRole.value === 'owner' && events.value.length === 0,
+)
+const canEditActiveNotebookName = computed(
+  () => activeNotebookRole.value === 'owner' && Boolean(activeNotebookId.value),
+)
+const shouldShowNotebookManagement = computed(
+  () => visibleNotebooks.value.length > 1 || activeNotebookRole.value !== 'owner',
+)
+const isNotebookFormOpen = computed(
+  () => isCreatingNotebook.value || isEditingNotebookName.value || isSharingNotebook.value,
+)
+const notebookConfirmDialog = computed(() => {
+  if (pendingNotebookAction.value === 'delete') {
+    return {
+      title: '刪除這本筆記簿？',
+      message: '沒有紀錄的筆記簿會連同寵物與分類設定一起刪除，刪除後無法復原。',
+      confirmLabel: '刪除',
+      cancelLabel: '保留',
+      tone: 'danger' as const,
+    }
+  }
+
+  if (pendingNotebookAction.value === 'leave') {
+    return {
+      title: '離開共享筆記簿？',
+      message: '離開後會從你的列表移除；需要擁有者重新分享才能再次使用。',
+      confirmLabel: '離開',
+      cancelLabel: '取消',
+      tone: 'default' as const,
+    }
+  }
+
+  return null
+})
 const visibleNotebooks = computed(() => {
   const notebookById = new Map<string, (typeof notebooks.value)[number]>()
 
@@ -59,6 +107,25 @@ const visibleNotebooks = computed(() => {
   }
 
   return Array.from(notebookById.values())
+})
+
+useBodyScrollLock(isNotebookFormOpen)
+
+onMounted(() => {
+  document.addEventListener('pointerdown', closeNotebookMenuWhenClickingOutside)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeNotebookMenuWhenClickingOutside)
+  clearToastTimer()
+})
+
+watch(authMessage, (message) => {
+  if (!message) {
+    return
+  }
+
+  showToast(message)
 })
 
 async function submitSignIn(): Promise<void> {
@@ -80,7 +147,8 @@ async function submitSignUp(): Promise<void> {
 async function submitSignOut(): Promise<void> {
   if (await signOut()) {
     signInPassword.value = ''
-    closeNotebookNameEditor()
+    closeNotebookMenu()
+    closeNotebookForm()
   }
 }
 
@@ -96,7 +164,7 @@ function closeNotebookNameEditor(): void {
 
 async function submitNotebookName(): Promise<void> {
   if (await updateActiveNotebookName(notebookNameDraft.value)) {
-    closeNotebookNameEditor()
+    closeNotebookForm()
   }
 }
 
@@ -117,8 +185,117 @@ function rememberSignInEmail(): void {
 
 async function submitShareNotebook(): Promise<void> {
   if (await shareActiveNotebook(shareNotebookEmail.value)) {
-    shareNotebookEmail.value = ''
+    closeNotebookForm()
     await refreshNotebooks()
+  }
+}
+
+async function submitCreateNotebook(): Promise<void> {
+  if (await createPersonalNotebook(newNotebookName.value)) {
+    closeNotebookForm()
+  }
+}
+
+function toggleNotebookMenu(): void {
+  isNotebookMenuOpen.value = !isNotebookMenuOpen.value
+}
+
+function closeNotebookMenu(): void {
+  isNotebookMenuOpen.value = false
+}
+
+function closeNotebookMenuWhenClickingOutside(event: PointerEvent): void {
+  if (!isNotebookMenuOpen.value) {
+    return
+  }
+
+  const target = event.target
+
+  if (target instanceof Node && notebookMenuRef.value?.contains(target)) {
+    return
+  }
+
+  closeNotebookMenu()
+}
+
+function startCreateNotebookFromMenu(): void {
+  closeNotebookMenu()
+  closeNotebookForm()
+  isCreatingNotebook.value = true
+}
+
+function startEditNotebookNameFromMenu(): void {
+  closeNotebookMenu()
+  closeNotebookForm()
+  startEditNotebookName()
+}
+
+function startShareNotebookFromMenu(): void {
+  closeNotebookMenu()
+  closeNotebookForm()
+  isSharingNotebook.value = true
+}
+
+function closeCreateNotebook(): void {
+  isCreatingNotebook.value = false
+  newNotebookName.value = ''
+}
+
+function closeShareNotebook(): void {
+  isSharingNotebook.value = false
+  shareNotebookEmail.value = ''
+}
+
+function closeNotebookForm(): void {
+  closeCreateNotebook()
+  closeNotebookNameEditor()
+  closeShareNotebook()
+}
+
+function clearToastTimer(): void {
+  if (toastTimer) {
+    window.clearTimeout(toastTimer)
+    toastTimer = undefined
+  }
+}
+
+function showToast(message: string): void {
+  toastMessage.value = message
+  clearToastTimer()
+  toastTimer = window.setTimeout(() => {
+    dismissToast()
+  }, 2800)
+}
+
+function dismissToast(): void {
+  toastMessage.value = ''
+  clearToastTimer()
+}
+
+function openLeaveNotebookConfirm(): void {
+  pendingNotebookAction.value = 'leave'
+}
+
+function openDeleteNotebookConfirm(): void {
+  pendingNotebookAction.value = 'delete'
+}
+
+function cancelNotebookConfirm(): void {
+  pendingNotebookAction.value = ''
+}
+
+async function confirmNotebookAction(): Promise<void> {
+  const action = pendingNotebookAction.value
+
+  pendingNotebookAction.value = ''
+
+  if (action === 'delete') {
+    await deleteActiveNotebookWithoutEvents()
+    return
+  }
+
+  if (action === 'leave') {
+    await leaveActiveNotebook()
   }
 }
 
@@ -142,6 +319,40 @@ function getNotebookRoleLabel(role: string): string {
         <h1 id="notebook-title">帳戶</h1>
         <p>管理帳戶與共享</p>
       </div>
+      <div v-if="isConfigured && isSignedIn" ref="notebookMenuRef" class="notebook-header__menu">
+        <button
+          class="ui-button ui-button--primary notebook-header__button"
+          type="button"
+          aria-haspopup="menu"
+          :aria-expanded="isNotebookMenuOpen"
+          @click="toggleNotebookMenu"
+        >
+          管理筆記簿
+        </button>
+        <div v-if="isNotebookMenuOpen" class="notebook-action-menu" role="menu">
+          <button type="button" role="menuitem" @click="startCreateNotebookFromMenu">
+            新增筆記簿
+          </button>
+          <button
+            v-if="activeNotebookRole === 'owner'"
+            type="button"
+            role="menuitem"
+            :disabled="!canEditActiveNotebookName"
+            @click="startEditNotebookNameFromMenu"
+          >
+            編輯名稱
+          </button>
+          <button
+            v-if="activeNotebookRole === 'owner'"
+            type="button"
+            role="menuitem"
+            :disabled="!activeNotebookId"
+            @click="startShareNotebookFromMenu"
+          >
+            分享筆記簿
+          </button>
+        </div>
+      </div>
     </header>
 
     <section class="account-panel" aria-labelledby="account-title">
@@ -157,14 +368,15 @@ function getNotebookRoleLabel(role: string): string {
 
       <template v-else-if="isSignedIn">
         <section
-          v-if="visibleNotebooks.length > 1"
+          v-if="shouldShowNotebookManagement"
           class="notebook-switcher"
           aria-labelledby="notebook-switcher-title"
         >
           <div class="notebook-switcher__header">
-            <h3 id="notebook-switcher-title">切換 Notebook</h3>
+            <h3 id="notebook-switcher-title">筆記簿管理</h3>
             <span>{{ visibleNotebooks.length }} 本</span>
           </div>
+
           <div class="notebook-switcher__list">
             <button
               v-for="notebook in visibleNotebooks"
@@ -179,97 +391,50 @@ function getNotebookRoleLabel(role: string): string {
                 <strong>{{ notebook.name }}</strong>
                 <small>{{ getNotebookRoleLabel(notebook.role) }}</small>
               </span>
-              <em>{{ notebook.id === activeNotebookIdValue ? '使用中' : '切換' }}</em>
+              <em>{{ notebook.id === activeNotebookIdValue ? '使用中' : '設為預設' }}</em>
             </button>
+          </div>
+
+          <div class="notebook-danger-zone">
+            <template v-if="activeNotebookRole === 'owner'">
+              <button
+                class="ui-button ui-button--danger account-button"
+                type="button"
+                :disabled="isLoading || !canDeleteActiveNotebook"
+                @click="openDeleteNotebookConfirm"
+              >
+                刪除這本筆記簿
+              </button>
+              <p class="account-message">只有沒有紀錄、沒有共享成員的個人筆記簿可以刪除。</p>
+            </template>
+            <template v-else>
+              <button
+                class="ui-button ui-button--secondary account-button"
+                type="button"
+                :disabled="isLoading || !activeNotebookId"
+                @click="openLeaveNotebookConfirm"
+              >
+                離開共享筆記簿
+              </button>
+              <p class="account-message">
+                離開後會從你的列表移除；需要擁有者重新分享才能再次使用。
+              </p>
+            </template>
           </div>
         </section>
 
         <div class="account-details">
           <span>Email</span>
           <strong>{{ user?.email }}</strong>
-          <span>Notebook</span>
+          <span>筆記簿</span>
           <strong>{{ activeNotebookName || '建立中' }}</strong>
           <span>權限</span>
-          <strong>{{ activeNotebookRole === 'owner' ? '擁有者' : '共享成員' }}</strong>
+          <strong>{{ activeRoleLabel }}</strong>
           <span>本機資料</span>
           <strong>{{ localImportSummary }}</strong>
           <span>同步狀態</span>
           <strong>{{ isBootstrappingRemoteData ? '同步中' : '已連線' }}</strong>
         </div>
-
-        <form
-          v-if="isEditingNotebookName && activeNotebookRole === 'owner'"
-          class="notebook-name-form"
-          @submit.prevent="submitNotebookName"
-        >
-          <label class="field">
-            <span class="field__label">Notebook 名稱</span>
-            <input
-              v-model="notebookNameDraft"
-              class="field__control"
-              type="text"
-              autocomplete="off"
-              required
-              maxlength="80"
-            />
-          </label>
-          <div class="notebook-name-form__actions">
-            <button
-              class="ui-button ui-button--primary account-button"
-              type="submit"
-              :disabled="isLoading || !activeNotebookId"
-            >
-              儲存名稱
-            </button>
-            <button
-              class="ui-button ui-button--secondary account-button"
-              type="button"
-              :disabled="isLoading"
-              @click="closeNotebookNameEditor"
-            >
-              取消
-            </button>
-          </div>
-        </form>
-
-        <button
-          v-else-if="activeNotebookRole === 'owner'"
-          class="ui-button ui-button--secondary account-button"
-          type="button"
-          :disabled="isLoading || !activeNotebookId"
-          @click="startEditNotebookName"
-        >
-          編輯 Notebook 名稱
-        </button>
-
-        <form
-          v-if="activeNotebookRole === 'owner'"
-          class="notebook-share-form"
-          @submit.prevent="submitShareNotebook"
-        >
-          <label class="field">
-            <span class="field__label">分享 Notebook</span>
-            <input
-              v-model="shareNotebookEmail"
-              class="field__control"
-              type="email"
-              autocomplete="off"
-              inputmode="email"
-              placeholder="輸入對方註冊 Email"
-              required
-            />
-          </label>
-          <button
-            class="ui-button ui-button--secondary account-button"
-            type="submit"
-            :disabled="isLoading || !activeNotebookId"
-          >
-            分享給使用者
-          </button>
-          <p class="account-message">
-            共享成員可以查看這本 Notebook，並新增自己的紀錄；只能編輯或刪除自己建立的紀錄。
-          </p>
-        </form>
 
         <p v-if="remoteRefreshError" class="account-message account-message--error">
           自動同步失敗：{{ remoteRefreshError }}
@@ -338,11 +503,149 @@ function getNotebookRoleLabel(role: string): string {
         </button>
       </form>
 
-      <p v-if="authMessage" class="account-message">{{ authMessage }}</p>
       <p v-if="errorMessage" class="account-message account-message--error">
         {{ errorMessage }}
       </p>
     </section>
+
+    <Transition name="account-toast">
+      <div v-if="toastMessage" class="account-toast" role="status" aria-live="polite">
+        <span>{{ toastMessage }}</span>
+        <button type="button" aria-label="關閉提示" @click="dismissToast">×</button>
+      </div>
+    </Transition>
+
+    <div
+      v-if="isNotebookFormOpen"
+      class="notebook-form-backdrop"
+      role="presentation"
+      @click.self="closeNotebookForm"
+    >
+      <section class="notebook-form-dialog" role="dialog" aria-modal="true">
+        <form
+          v-if="isCreatingNotebook"
+          class="new-notebook-form"
+          @submit.prevent="submitCreateNotebook"
+        >
+          <h2>新增筆記簿</h2>
+          <label class="field">
+            <span class="field__label">名稱</span>
+            <input
+              v-model="newNotebookName"
+              class="field__control"
+              type="text"
+              autocomplete="off"
+              maxlength="80"
+              placeholder="我的貓咪紀錄"
+            />
+          </label>
+          <div class="notebook-form-dialog__actions">
+            <button
+              class="ui-button ui-button--secondary account-button"
+              type="button"
+              :disabled="isLoading"
+              @click="closeNotebookForm"
+            >
+              取消
+            </button>
+            <button
+              class="ui-button ui-button--primary account-button"
+              type="submit"
+              :disabled="isLoading"
+            >
+              新增
+            </button>
+          </div>
+        </form>
+
+        <form
+          v-else-if="isEditingNotebookName && activeNotebookRole === 'owner'"
+          class="notebook-name-form"
+          @submit.prevent="submitNotebookName"
+        >
+          <h2>編輯名稱</h2>
+          <label class="field">
+            <span class="field__label">筆記簿名稱</span>
+            <input
+              v-model="notebookNameDraft"
+              class="field__control"
+              type="text"
+              autocomplete="off"
+              required
+              maxlength="80"
+            />
+          </label>
+          <div class="notebook-form-dialog__actions">
+            <button
+              class="ui-button ui-button--secondary account-button"
+              type="button"
+              :disabled="isLoading"
+              @click="closeNotebookForm"
+            >
+              取消
+            </button>
+            <button
+              class="ui-button ui-button--primary account-button"
+              type="submit"
+              :disabled="isLoading || !activeNotebookId"
+            >
+              儲存
+            </button>
+          </div>
+        </form>
+
+        <form
+          v-else-if="isSharingNotebook && activeNotebookRole === 'owner'"
+          class="notebook-share-form"
+          @submit.prevent="submitShareNotebook"
+        >
+          <h2>分享筆記簿</h2>
+          <label class="field">
+            <span class="field__label">對方註冊 Email</span>
+            <input
+              v-model="shareNotebookEmail"
+              class="field__control"
+              type="email"
+              autocomplete="off"
+              inputmode="email"
+              placeholder="輸入對方註冊 Email"
+              required
+            />
+          </label>
+          <p class="account-message">
+            共享成員可以查看這本筆記簿，並新增自己的紀錄；只能編輯或刪除自己建立的紀錄。
+          </p>
+          <div class="notebook-form-dialog__actions">
+            <button
+              class="ui-button ui-button--secondary account-button"
+              type="button"
+              :disabled="isLoading"
+              @click="closeNotebookForm"
+            >
+              取消
+            </button>
+            <button
+              class="ui-button ui-button--primary account-button"
+              type="submit"
+              :disabled="isLoading || !activeNotebookId"
+            >
+              分享
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <ConfirmDialog
+      v-if="notebookConfirmDialog"
+      :title="notebookConfirmDialog.title"
+      :message="notebookConfirmDialog.message"
+      :confirm-label="notebookConfirmDialog.confirmLabel"
+      :cancel-label="notebookConfirmDialog.cancelLabel"
+      :tone="notebookConfirmDialog.tone"
+      @cancel="cancelNotebookConfirm"
+      @confirm="confirmNotebookAction"
+    />
   </section>
 </template>
 
@@ -359,6 +662,53 @@ function getNotebookRoleLabel(role: string): string {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.notebook-header__button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding-inline: 16px;
+}
+
+.notebook-header__menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.notebook-action-menu {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: max-content;
+  min-width: 150px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: 0 14px 36px var(--shadow-color);
+}
+
+.notebook-action-menu button {
+  min-height: 42px;
+  border: 0;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.notebook-action-menu button:hover:not(:disabled) {
+  background: var(--color-primary-light);
+}
+
+.notebook-action-menu button:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
 }
 
 .notebook-header h1,
@@ -416,6 +766,7 @@ function getNotebookRoleLabel(role: string): string {
 
 .account-form,
 .notebook-name-form,
+.new-notebook-form,
 .notebook-share-form {
   display: grid;
   gap: 12px;
@@ -516,6 +867,7 @@ function getNotebookRoleLabel(role: string): string {
 
 .account-form .field,
 .notebook-name-form .field,
+.new-notebook-form .field,
 .notebook-share-form .field {
   display: grid;
   gap: 8px;
@@ -523,6 +875,7 @@ function getNotebookRoleLabel(role: string): string {
 
 .account-form .field__control,
 .notebook-name-form .field__control,
+.new-notebook-form .field__control,
 .notebook-share-form .field__control {
   width: 100%;
   min-width: 0;
@@ -542,6 +895,110 @@ function getNotebookRoleLabel(role: string): string {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.new-notebook-form__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.notebook-danger-zone {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.notebook-form-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  background: var(--overlay-color);
+}
+
+.notebook-form-dialog {
+  width: min(100%, 390px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 22px 60px var(--shadow-color);
+}
+
+.notebook-form-dialog h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.notebook-form-dialog__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.account-toast {
+  position: fixed;
+  z-index: 40;
+  right: max(14px, calc((100vw - var(--content-width)) / 2 + 14px));
+  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  max-width: min(320px, calc(100vw - 28px));
+  padding: 10px 10px 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 48%, var(--color-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-primary) 86%, transparent);
+  color: var(--color-on-primary);
+  box-shadow: 0 14px 38px var(--shadow-color);
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.account-toast span {
+  min-width: 0;
+}
+
+.account-toast button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-on-primary) 16%, transparent);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.account-toast button:hover {
+  background: color-mix(in srgb, var(--color-on-primary) 24%, transparent);
+}
+
+.account-toast-enter-active,
+.account-toast-leave-active {
+  transition:
+    opacity 500ms ease,
+    transform 500ms ease;
+}
+
+.account-toast-enter-from,
+.account-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .account-details {

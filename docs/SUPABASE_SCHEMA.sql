@@ -342,6 +342,80 @@ $$;
 
 grant execute on function public.share_notebook_with_user(uuid, text, text) to authenticated;
 
+create or replace function public.leave_shared_notebook(target_notebook_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_role text;
+begin
+  if auth.uid() is null then
+    raise exception 'leave_shared_notebook requires an authenticated user';
+  end if;
+
+  select role
+  into current_role
+  from public.notebook_members
+  where notebook_id = target_notebook_id
+    and user_id = auth.uid();
+
+  if current_role is null then
+    raise exception 'Notebook membership not found';
+  end if;
+
+  if current_role = 'owner' then
+    raise exception 'Notebook owners cannot leave their own notebook';
+  end if;
+
+  delete from public.notebook_members
+  where notebook_id = target_notebook_id
+    and user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.leave_shared_notebook(uuid) to authenticated;
+
+create or replace function public.delete_owned_notebook_without_events(target_notebook_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'delete_owned_notebook_without_events requires an authenticated user';
+  end if;
+
+  if not public.is_notebook_owner(target_notebook_id) then
+    raise exception 'Only notebook owners can delete notebooks';
+  end if;
+
+  if exists (
+    select 1
+    from public.notebook_members
+    where notebook_id = target_notebook_id
+      and user_id <> auth.uid()
+  ) then
+    raise exception 'Cannot delete notebooks with shared members';
+  end if;
+
+  if exists (
+    select 1
+    from public.cat_events
+    where notebook_id = target_notebook_id
+  ) then
+    raise exception 'Cannot delete notebooks with records';
+  end if;
+
+  delete from public.notebooks
+  where id = target_notebook_id;
+end;
+$$;
+
+grant execute on function public.delete_owned_notebook_without_events(uuid) to authenticated;
+
 alter table public.profiles enable row level security;
 alter table public.notebooks enable row level security;
 alter table public.notebook_members enable row level security;

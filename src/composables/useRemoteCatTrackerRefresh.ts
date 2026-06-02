@@ -8,6 +8,7 @@ const MIN_REFRESH_INTERVAL_MS = 30_000
 const isRefreshingRemoteData = ref(false)
 const isBootstrappingRemoteData = ref(false)
 const remoteRefreshError = ref('')
+const notebookIdsSkippingLocalImport = new Set<string>()
 let lastRefreshAt = 0
 
 function getErrorMessage(error: unknown): string {
@@ -24,6 +25,12 @@ function getErrorMessage(error: unknown): string {
   }
 
   return '刷新雲端資料失敗'
+}
+
+export function skipNextLocalImportForNotebook(notebookId: string): void {
+  if (notebookId) {
+    notebookIdsSkippingLocalImport.add(notebookId)
+  }
 }
 
 export function useRemoteCatTrackerRefresh() {
@@ -43,8 +50,9 @@ export function useRemoteCatTrackerRefresh() {
       const localCategories = [...catTrackerStore.categories]
       const localEvents = [...catTrackerStore.events]
       const hasLocalUserData = localCats.length > 0 || localEvents.length > 0
+      const shouldSkipLocalImport = notebookIdsSkippingLocalImport.has(notebookId)
 
-      if (hasLocalUserData && (await isRemoteNotebookEmpty(notebookId))) {
+      if (!shouldSkipLocalImport && hasLocalUserData && (await isRemoteNotebookEmpty(notebookId))) {
         await importLocalCatTracker({
           notebookId,
           cats: localCats,
@@ -54,6 +62,7 @@ export function useRemoteCatTrackerRefresh() {
         })
       }
 
+      notebookIdsSkippingLocalImport.delete(notebookId)
       await refreshRemoteCatTracker(catTrackerStore, notebookId, { force: true })
     } catch (error) {
       remoteRefreshError.value = getErrorMessage(error)
