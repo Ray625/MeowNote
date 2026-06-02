@@ -57,6 +57,7 @@ const categoryValueMax = ref<string | number>(10)
 const categoryValueUnit = ref('')
 const isQuickAction = ref(true)
 const isCategoryModalOpen = ref(false)
+const isStatisticsHelpOpen = ref(false)
 const draggingCategoryId = ref<string>()
 const dragTargetCategoryId = ref<string>()
 const dragTargetPosition = ref<'before' | 'after'>('before')
@@ -126,7 +127,11 @@ const readOnlySettingsMessage = computed(() =>
     : '共享成員可以查看寵物資料，寵物設定由筆記簿擁有者管理。',
 )
 const isSettingsModalOpen = computed(
-  () => isCategoryModalOpen.value || isCatModalOpen.value || Boolean(viewingCat.value),
+  () =>
+    isCategoryModalOpen.value ||
+    isCatModalOpen.value ||
+    Boolean(viewingCat.value) ||
+    isStatisticsHelpOpen.value,
 )
 const categoryGroupOptions = computed<SelectOption[]>(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
@@ -220,6 +225,7 @@ function closeCategoryModal(): void {
   categoryValueMax.value = 10
   categoryValueUnit.value = ''
   isQuickAction.value = true
+  isStatisticsHelpOpen.value = false
 }
 
 function saveCategory(): void {
@@ -1062,7 +1068,19 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
           </label>
 
           <div class="field">
-            <span class="field__label">統計方式</span>
+            <div class="field__label-row">
+              <span class="field__label">統計方式</span>
+              <button
+                class="field-help-button"
+                type="button"
+                :aria-expanded="isStatisticsHelpOpen"
+                aria-controls="statistics-mode-help"
+                aria-label="查看統計方式說明"
+                @click="isStatisticsHelpOpen = !isStatisticsHelpOpen"
+              >
+                ?
+              </button>
+            </div>
             <FixedSelect v-model="categoryStatisticsMode" :options="categoryStatisticsModeOptions" />
           </div>
 
@@ -1218,6 +1236,52 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             </button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div
+      v-if="isStatisticsHelpOpen"
+      class="category-modal-backdrop"
+      role="presentation"
+      @click.self="isStatisticsHelpOpen = false"
+    >
+      <section
+        id="statistics-mode-help"
+        class="category-modal statistics-help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="statistics-help-title"
+      >
+        <div class="category-form__header">
+          <h2 id="statistics-help-title">統計方式說明</h2>
+          <button
+            class="ui-button ui-button--icon modal-close"
+            type="button"
+            aria-label="關閉統計方式說明"
+            @click="isStatisticsHelpOpen = false"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="statistics-help">
+          <p>
+            <strong>發生次數</strong>
+            <span>記錄事件發生幾次，適合觀察頻率是否增加或減少。例：嘔吐、腹瀉、夜間不睡。</span>
+          </p>
+          <p>
+            <strong>累積數量</strong>
+            <span>把同一天記錄的數值加總，適合看每日總量。例：飲水量、食物量、用藥劑量。</span>
+          </p>
+          <p>
+            <strong>量測紀錄</strong>
+            <span>每次都是一次獨立測量，適合看數值變化與趨勢，不會加總。例：體重、體溫。</span>
+          </p>
+          <p>
+            <strong>狀態評分</strong>
+            <span>用分數記錄主觀狀態，適合追蹤精神、食慾、疼痛感等變化。例：精神狀態、食慾。</span>
+          </p>
+        </div>
       </section>
     </div>
 
@@ -1561,6 +1625,65 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   color: var(--color-text);
   font-size: 0.875rem;
   font-weight: 700;
+}
+
+.field__label-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.field-help-button {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-background);
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.field-help-button:hover,
+.field-help-button[aria-expanded='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-text);
+}
+
+.statistics-help {
+  display: grid;
+  gap: 10px;
+  color: var(--color-text);
+  font-size: 0.8125rem;
+}
+
+.statistics-help p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.statistics-help strong {
+  font-weight: 900;
+}
+
+.statistics-help span {
+  color: var(--color-muted);
+  line-height: 1.45;
+}
+
+.statistics-help-modal {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 14px;
 }
 
 .field__control {
