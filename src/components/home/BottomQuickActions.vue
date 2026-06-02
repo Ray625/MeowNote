@@ -3,10 +3,12 @@ import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory, EventCategoryGroup } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
+const { isSignedIn } = useRemoteAuth()
 const { activeTab, canCreateEventForSelectedCat, isQuickRecordOpen, quickActionCategories } =
   storeToRefs(catTrackerStore)
 const activeGroup = ref<EventCategoryGroup>('飲食')
@@ -118,7 +120,10 @@ function selectGroup(group: EventCategoryGroup): void {
           type="button"
           @click="catTrackerStore.setActiveTab('notebook')"
         >
-          帳戶
+          <span class="bottom-navigation__label">
+            帳戶
+            <span v-if="!isSignedIn" class="bottom-navigation__dot" aria-label="尚未登入"></span>
+          </span>
         </button>
         <button
           class="bottom-navigation__item"
@@ -300,6 +305,22 @@ function selectGroup(group: EventCategoryGroup): void {
 
 .bottom-navigation__item--active {
   color: var(--color-text);
+}
+
+.bottom-navigation__label {
+  position: relative;
+  display: inline-block;
+}
+
+.bottom-navigation__dot {
+  position: absolute;
+  top: -4px;
+  right: -9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-background);
 }
 
 @media (hover: hover) and (pointer: fine) {
