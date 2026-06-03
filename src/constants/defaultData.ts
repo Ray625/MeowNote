@@ -70,7 +70,6 @@ export const CAT_AVATAR_OPTIONS = [
 export const DOG_AVATAR_OPTIONS = [
   { id: 'dog-mixed', label: '米克斯', image: dogMixedImage },
   { id: 'dog-beagle', label: '米格魯', image: dogBeagleImage },
-  { id: 'dog-bichon', label: '比熊', image: dogBichonImage },
   { id: 'dog-border-collie', label: '邊境牧羊犬', image: dogBorderCollieImage },
   { id: 'dog-chihuahua', label: '吉娃娃', image: dogChihuahuaImage },
   { id: 'dog-dachshund', label: '臘腸', image: dogDachshundImage },
@@ -78,8 +77,9 @@ export const DOG_AVATAR_OPTIONS = [
   { id: 'dog-husky', label: '哈士奇', image: dogHuskyImage },
   { id: 'dog-labrador', label: '拉布拉多', image: dogLabradorImage },
   { id: 'dog-maltese', label: '瑪爾濟斯', image: dogMalteseImage },
-  { id: 'dog-poodle', label: '貴賓', image: dogPoodleImage },
   { id: 'dog-westie', label: '西高地白㹴', image: dogWestieImage },
+  { id: 'dog-bichon', label: '比熊', image: dogBichonImage },
+  { id: 'dog-poodle', label: '貴賓', image: dogPoodleImage },
   { id: 'dog-pug', label: '巴哥', image: dogPugImage },
   { id: 'dog-black-pug', label: '黑巴哥', image: dogBlackPugImage },
   { id: 'dog-yellow-shiba', label: '柴犬', image: dogYellowShibaImage },
