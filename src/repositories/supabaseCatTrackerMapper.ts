@@ -204,7 +204,23 @@ function isCatAvatarId(value: string | null): value is CatAvatarId {
     value === 'cream' ||
     value === 'blue' ||
     value === 'mackerel' ||
-    value === 'abyssinian'
+    value === 'abyssinian' ||
+    value === 'dog-beagle' ||
+    value === 'dog-bichon' ||
+    value === 'dog-black-pug' ||
+    value === 'dog-black-shiba' ||
+    value === 'dog-border-collie' ||
+    value === 'dog-chihuahua' ||
+    value === 'dog-dachshund' ||
+    value === 'dog-golden-retriever' ||
+    value === 'dog-husky' ||
+    value === 'dog-labrador' ||
+    value === 'dog-maltese' ||
+    value === 'dog-mixed' ||
+    value === 'dog-poodle' ||
+    value === 'dog-pug' ||
+    value === 'dog-westie' ||
+    value === 'dog-yellow-shiba'
   )
 }
 

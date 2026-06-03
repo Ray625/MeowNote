@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import DogAvatarToggle from '@/components/common/DogAvatarToggle.vue'
 import FixedSelect from '@/components/common/FixedSelect.vue'
 import {
   CAT_AVATAR_OPTIONS,
@@ -10,13 +11,16 @@ import {
   CATEGORY_TEMPLATES,
   DEFAULT_CAT_AVATAR_ID,
   DEFAULT_CATEGORY_COLOR_ID,
+  DOG_AVATAR_OPTIONS,
   getCatAvatarOption,
   getCategoryColorId,
   getCategoryColorValue,
+  isDogAvatarId,
   type CategoryTemplate,
 } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { useDogAvatarPreference } from '@/composables/useDogAvatarPreference'
 import { useTheme } from '@/composables/useTheme'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type {
@@ -42,6 +46,10 @@ const {
   initializeAuth,
   isSignedIn,
 } = useRemoteAuth()
+const {
+  isDogAvatarMode,
+  setDogAvatarMode: setStoredDogAvatarMode,
+} = useDogAvatarPreference()
 
 type SettingsSection = 'categories' | 'pets'
 type SelectOption = { value: string; label: string }
@@ -100,6 +108,9 @@ const pendingDeleteCatUsageCount = computed(() =>
 )
 const deleteCatActionLabel = computed(() =>
   pendingDeleteCatUsageCount.value > 0 ? '停用' : '刪除',
+)
+const visibleCatAvatarOptions = computed(() =>
+  isDogAvatarMode.value ? DOG_AVATAR_OPTIONS : CAT_AVATAR_OPTIONS,
 )
 const settingsSubtitle = computed(() => {
   return settingsSection.value === 'categories' ? '管理事件分類' : '管理寵物資料'
@@ -431,7 +442,7 @@ function startCreateCat(): void {
   catBirthday.value = ''
   catSex.value = ''
   catWeightKg.value = ''
-  catAvatarId.value = DEFAULT_CAT_AVATAR_ID
+  ensureAvatarMatchesDogMode(isDogAvatarMode.value)
   catIsNeutered.value = ''
   catNote.value = ''
   isCatModalOpen.value = true
@@ -448,6 +459,7 @@ function startEditCat(cat: Cat): void {
   catSex.value = cat.sex ?? ''
   catWeightKg.value = typeof cat.weightKg === 'number' ? String(cat.weightKg) : ''
   catAvatarId.value = getCatAvatarOption(cat.avatarId).id
+  setStoredDogAvatarMode(isDogAvatarId(catAvatarId.value))
   catIsNeutered.value = typeof cat.isNeutered === 'boolean' ? (cat.isNeutered ? 'yes' : 'no') : ''
   catNote.value = cat.note ?? ''
   isCatModalOpen.value = true
@@ -495,6 +507,18 @@ function saveCat(): void {
 
 function selectCatAvatar(avatarId: CatAvatarId): void {
   catAvatarId.value = avatarId
+}
+
+function setDogAvatarMode(nextValue: boolean): void {
+  setStoredDogAvatarMode(nextValue)
+  ensureAvatarMatchesDogMode(nextValue)
+}
+
+function ensureAvatarMatchesDogMode(nextValue: boolean): void {
+  const avatarOptions = nextValue ? DOG_AVATAR_OPTIONS : CAT_AVATAR_OPTIONS
+  if (!avatarOptions.some((avatar) => avatar.id === catAvatarId.value)) {
+    catAvatarId.value = avatarOptions[0]?.id ?? DEFAULT_CAT_AVATAR_ID
+  }
 }
 
 function getCatMeta(cat: Cat): string {
@@ -943,7 +967,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
           @keydown.enter.prevent="openCatDetails(cat)"
           @keydown.space.prevent="openCatDetails(cat)"
         >
-          <div class="pet-avatar" aria-hidden="true">
+          <div
+            class="pet-avatar"
+            :class="{ 'pet-avatar--dog': isDogAvatarId(cat.avatarId) }"
+            aria-hidden="true"
+          >
             <img
               :src="getCatAvatarOption(cat.avatarId).image"
               :alt="getCatAvatarOption(cat.avatarId).label"
@@ -1185,10 +1213,20 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
             </label>
 
             <div class="field">
-              <span class="field__label">頭貼</span>
-              <div class="cat-avatar-options" role="radiogroup" aria-label="寵物頭貼">
+              <div class="cat-avatar-header">
+                <span class="field__label">頭貼</span>
+                <DogAvatarToggle
+                  :model-value="isDogAvatarMode"
+                  @update:model-value="setDogAvatarMode"
+                />
+              </div>
+              <div
+                class="cat-avatar-options"
+                role="radiogroup"
+                :aria-label="isDogAvatarMode ? '選擇狗狗頭貼' : '選擇貓咪頭貼'"
+              >
                 <button
-                  v-for="avatar in CAT_AVATAR_OPTIONS"
+                  v-for="avatar in visibleCatAvatarOptions"
                   :key="avatar.id"
                   class="cat-avatar-option"
                   :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
@@ -1199,10 +1237,13 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
                   :title="avatar.label"
                   @click="selectCatAvatar(avatar.id)"
                 >
-                  <span class="pet-avatar pet-avatar--option" aria-hidden="true">
+                  <span
+                    class="pet-avatar pet-avatar--option"
+                    :class="{ 'pet-avatar--dog': isDogAvatarId(avatar.id) }"
+                    aria-hidden="true"
+                  >
                     <img :src="avatar.image" :alt="avatar.label" />
                   </span>
-                  <span>{{ avatar.label }}</span>
                 </button>
               </div>
             </div>
@@ -1294,7 +1335,11 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       >
         <div class="category-form__header">
           <div class="cat-detail-heading">
-            <span class="pet-avatar cat-detail-heading__avatar" aria-hidden="true">
+            <span
+              class="pet-avatar cat-detail-heading__avatar"
+              :class="{ 'pet-avatar--dog': isDogAvatarId(viewingCat.avatarId) }"
+              aria-hidden="true"
+            >
               <img
                 :src="getCatAvatarOption(viewingCat.avatarId).image"
                 :alt="getCatAvatarOption(viewingCat.avatarId).label"
@@ -1817,25 +1862,35 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   object-fit: contain;
 }
 
+.pet-avatar--dog img {
+  transform: scale(1.1);
+}
+
 .cat-avatar-options {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
+}
+
+.cat-avatar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .cat-avatar-option {
   display: grid;
-  gap: 6px;
+  min-height: 82px;
   min-width: 0;
   place-items: center;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  padding: 8px 4px;
+  padding: 10px;
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
   font: inherit;
-  font-size: 0.8125rem;
 }
 
 .cat-avatar-option:hover,
@@ -1845,9 +1900,8 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 }
 
 .pet-avatar--option {
-  width: 36px;
-  height: 36px;
-  font-size: 0.875rem;
+  width: 56px;
+  height: 56px;
 }
 
 .pet-item__content {

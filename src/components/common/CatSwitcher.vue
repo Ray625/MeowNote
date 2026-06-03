@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { getCatAvatarOption } from '@/constants/defaultData'
+import { getCatAvatarOption, isDogAvatarId } from '@/constants/defaultData'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useCatTrackerStore } from '@/stores/catTracker'
 
@@ -33,7 +33,11 @@ function selectCat(catId: string): void {
       aria-haspopup="listbox"
       @click="toggleCatMenu"
     >
-      <span class="selected-cat__avatar selected-cat__avatar--plain" aria-hidden="true">
+      <span
+        class="selected-cat__avatar selected-cat__avatar--plain"
+        :class="{ 'selected-cat__avatar--dog': isDogAvatarId(selectedCat?.avatarId) }"
+        aria-hidden="true"
+      >
         <img
           :src="getCatAvatarOption(selectedCat?.avatarId).image"
           :alt="getCatAvatarOption(selectedCat?.avatarId).label"
@@ -58,7 +62,11 @@ function selectCat(catId: string): void {
         :aria-selected="selectedCatId === cat.id"
         @click="selectCat(cat.id)"
       >
-        <span class="selected-cat__avatar" aria-hidden="true">
+        <span
+          class="selected-cat__avatar"
+          :class="{ 'selected-cat__avatar--dog': isDogAvatarId(cat.avatarId) }"
+          aria-hidden="true"
+        >
           <img :src="getCatAvatarOption(cat.avatarId).image" :alt="getCatAvatarOption(cat.avatarId).label" />
         </span>
         <span>
@@ -122,6 +130,10 @@ function selectCat(catId: string): void {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.selected-cat__avatar--dog img {
+  transform: scale(1.1);
 }
 
 .cat-name {

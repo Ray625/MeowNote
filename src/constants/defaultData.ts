@@ -14,6 +14,22 @@ import catTabbyImage from '@/assets/cat-avatars/cat-tabby.png'
 import catTortoiseshellImage from '@/assets/cat-avatars/cat-tortoiseshell.png'
 import catTuxedoImage from '@/assets/cat-avatars/cat-tuxedo.png'
 import catWhiteImage from '@/assets/cat-avatars/cat-white.png'
+import dogBeagleImage from '@/assets/dog-avatars/dog-beagle.png'
+import dogBichonImage from '@/assets/dog-avatars/dog-bichon.png'
+import dogBlackPugImage from '@/assets/dog-avatars/dog-black_pug.png'
+import dogBlackShibaImage from '@/assets/dog-avatars/dog-black_shiba.png'
+import dogBorderCollieImage from '@/assets/dog-avatars/dog-border collie.png'
+import dogChihuahuaImage from '@/assets/dog-avatars/dog-chihuahua.png'
+import dogDachshundImage from '@/assets/dog-avatars/dog-dachshund.png'
+import dogGoldenRetrieverImage from '@/assets/dog-avatars/dog-golden retriever.png'
+import dogHuskyImage from '@/assets/dog-avatars/dog-husky.png'
+import dogLabradorImage from '@/assets/dog-avatars/dog-labrador.png'
+import dogMalteseImage from '@/assets/dog-avatars/dog-maltese.png'
+import dogMixedImage from '@/assets/dog-avatars/dog-mixed.png'
+import dogPoodleImage from '@/assets/dog-avatars/dog-poodle.png'
+import dogPugImage from '@/assets/dog-avatars/dog-pug.png'
+import dogWestieImage from '@/assets/dog-avatars/dog-westie.png'
+import dogYellowShibaImage from '@/assets/dog-avatars/dog-yellot_shiba.png'
 import type {
   Cat,
   CatAvatarId,
@@ -50,6 +66,31 @@ export const CAT_AVATAR_OPTIONS = [
   label: string
   image: string
 }>
+
+export const DOG_AVATAR_OPTIONS = [
+  { id: 'dog-mixed', label: '米克斯', image: dogMixedImage },
+  { id: 'dog-beagle', label: '米格魯', image: dogBeagleImage },
+  { id: 'dog-bichon', label: '比熊', image: dogBichonImage },
+  { id: 'dog-border-collie', label: '邊境牧羊犬', image: dogBorderCollieImage },
+  { id: 'dog-chihuahua', label: '吉娃娃', image: dogChihuahuaImage },
+  { id: 'dog-dachshund', label: '臘腸', image: dogDachshundImage },
+  { id: 'dog-golden-retriever', label: '黃金獵犬', image: dogGoldenRetrieverImage },
+  { id: 'dog-husky', label: '哈士奇', image: dogHuskyImage },
+  { id: 'dog-labrador', label: '拉布拉多', image: dogLabradorImage },
+  { id: 'dog-maltese', label: '瑪爾濟斯', image: dogMalteseImage },
+  { id: 'dog-poodle', label: '貴賓', image: dogPoodleImage },
+  { id: 'dog-westie', label: '西高地白㹴', image: dogWestieImage },
+  { id: 'dog-pug', label: '巴哥', image: dogPugImage },
+  { id: 'dog-black-pug', label: '黑巴哥', image: dogBlackPugImage },
+  { id: 'dog-yellow-shiba', label: '柴犬', image: dogYellowShibaImage },
+  { id: 'dog-black-shiba', label: '黑柴', image: dogBlackShibaImage },
+] as const satisfies ReadonlyArray<{
+  id: CatAvatarId
+  label: string
+  image: string
+}>
+
+export const PET_AVATAR_OPTIONS = [...CAT_AVATAR_OPTIONS, ...DOG_AVATAR_OPTIONS] as const
 
 export const DEFAULT_CAT_AVATAR_ID = 'black' satisfies CatAvatarId
 
@@ -409,7 +450,11 @@ export function getCategoryStatisticsMode(
 }
 
 export function getCatAvatarOption(avatarId?: CatAvatarId | string) {
-  return CAT_AVATAR_OPTIONS.find((option) => option.id === avatarId) ?? getDefaultCatAvatarOption()
+  return PET_AVATAR_OPTIONS.find((option) => option.id === avatarId) ?? getDefaultCatAvatarOption()
+}
+
+export function isDogAvatarId(avatarId?: CatAvatarId | string): boolean {
+  return typeof avatarId === 'string' && avatarId.startsWith('dog-')
 }
 
 export function getDefaultCatAvatarOption() {

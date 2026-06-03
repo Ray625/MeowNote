@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import DogAvatarToggle from '@/components/common/DogAvatarToggle.vue'
 import {
   CAT_AVATAR_OPTIONS,
   CATEGORY_GROUP_ORDER,
   CATEGORY_TEMPLATES,
   DEFAULT_CAT_AVATAR_ID,
+  DOG_AVATAR_OPTIONS,
   getCatAvatarOption,
+  isDogAvatarId,
 } from '@/constants/defaultData'
+import { useDogAvatarPreference } from '@/composables/useDogAvatarPreference'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { CatAvatarId } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
+const {
+  isDogAvatarMode,
+  setDogAvatarMode: setStoredDogAvatarMode,
+} = useDogAvatarPreference()
 
 type SetupStep = 'profile' | 'templates'
 
@@ -19,13 +27,40 @@ const catAvatarId = ref<CatAvatarId>(DEFAULT_CAT_AVATAR_ID)
 const selectedTemplateIds = ref<string[]>(['water', 'medication'])
 const setupStep = ref<SetupStep>('profile')
 
+const visibleCatAvatarOptions = computed(() =>
+  isDogAvatarMode.value ? DOG_AVATAR_OPTIONS : CAT_AVATAR_OPTIONS,
+)
+const petNameTitle = computed(() =>
+  isDogAvatarMode.value ? '你的狗叫什麼名字？' : '你的貓叫什麼名字？',
+)
+
 const groupedTemplates = CATEGORY_GROUP_ORDER.map((group) => ({
   group,
   templates: CATEGORY_TEMPLATES.filter((template) => template.group === group),
 })).filter((item) => item.templates.length > 0)
 
+watch(
+  isDogAvatarMode,
+  (value) => {
+    ensureAvatarMatchesDogMode(value)
+  },
+  { immediate: true },
+)
+
 function selectCatAvatar(avatarId: CatAvatarId): void {
   catAvatarId.value = avatarId
+}
+
+function setDogAvatarMode(nextValue: boolean): void {
+  setStoredDogAvatarMode(nextValue)
+  ensureAvatarMatchesDogMode(nextValue)
+}
+
+function ensureAvatarMatchesDogMode(nextValue: boolean): void {
+  const avatarOptions = nextValue ? DOG_AVATAR_OPTIONS : CAT_AVATAR_OPTIONS
+  if (!avatarOptions.some((avatar) => avatar.id === catAvatarId.value)) {
+    catAvatarId.value = avatarOptions[0]?.id ?? DEFAULT_CAT_AVATAR_ID
+  }
 }
 
 function toggleTemplate(templateId: string): void {
@@ -86,7 +121,11 @@ function startTracking(): void {
       class="setup-form"
       @submit.prevent="setupStep === 'profile' ? goToTemplateStep() : startTracking()"
     >
-      <div class="setup-preview" aria-hidden="true">
+      <div
+        class="setup-preview"
+        :class="{ 'setup-preview--dog': isDogAvatarId(catAvatarId) }"
+        aria-hidden="true"
+      >
         <img
           :src="getCatAvatarOption(catAvatarId).image"
           :alt="getCatAvatarOption(catAvatarId).label"
@@ -96,7 +135,7 @@ function startTracking(): void {
       <template v-if="setupStep === 'profile'">
         <div class="field">
           <label id="first-time-setup-title" class="setup-title" for="first-cat-name">
-            你的貓叫什麼名字？
+            {{ petNameTitle }}
           </label>
           <input
             id="first-cat-name"
@@ -112,10 +151,20 @@ function startTracking(): void {
         </div>
 
         <div class="field">
-          <span class="field__label">選擇花色</span>
-          <div class="cat-avatar-options" role="radiogroup" aria-label="選擇花色">
+          <div class="cat-avatar-header">
+            <span class="field__label">選擇花色</span>
+            <DogAvatarToggle
+              :model-value="isDogAvatarMode"
+              @update:model-value="setDogAvatarMode"
+            />
+          </div>
+          <div
+            class="cat-avatar-options"
+            role="radiogroup"
+            :aria-label="isDogAvatarMode ? '選擇狗狗頭貼' : '選擇貓咪花色'"
+          >
             <button
-              v-for="avatar in CAT_AVATAR_OPTIONS"
+              v-for="avatar in visibleCatAvatarOptions"
               :key="avatar.id"
               class="cat-avatar-option"
               :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
@@ -126,10 +175,13 @@ function startTracking(): void {
               :title="avatar.label"
               @click="selectCatAvatar(avatar.id)"
             >
-              <span class="pet-avatar pet-avatar--option" aria-hidden="true">
+              <span
+                class="pet-avatar pet-avatar--option"
+                :class="{ 'pet-avatar--dog': isDogAvatarId(avatar.id) }"
+                aria-hidden="true"
+              >
                 <img :src="avatar.image" :alt="avatar.label" />
               </span>
-              <span>{{ avatar.label }}</span>
             </button>
           </div>
         </div>
@@ -222,6 +274,10 @@ function startTracking(): void {
   object-fit: contain;
 }
 
+.setup-preview--dog img {
+  transform: scale(1.1);
+}
+
 .setup-title {
   color: var(--color-text);
   font-size: 1.35rem;
@@ -261,6 +317,13 @@ function startTracking(): void {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.cat-avatar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .template-groups {
@@ -316,17 +379,16 @@ function startTracking(): void {
 
 .cat-avatar-option {
   display: grid;
-  gap: 6px;
+  min-height: 82px;
   min-width: 0;
   place-items: center;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  padding: 8px 4px;
+  padding: 10px;
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
   font: inherit;
-  font-size: 0.8125rem;
 }
 
 .cat-avatar-option:hover,
@@ -353,9 +415,13 @@ function startTracking(): void {
   object-fit: contain;
 }
 
+.pet-avatar--dog img {
+  transform: scale(1.1);
+}
+
 .pet-avatar--option {
-  width: 36px;
-  height: 36px;
+  width: 56px;
+  height: 56px;
 }
 
 .setup-submit {
