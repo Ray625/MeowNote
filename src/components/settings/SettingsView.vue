@@ -272,7 +272,7 @@ function saveCategory(): void {
       name: trimmedName,
       group: categoryGroup.value,
       colorId: categoryColorId.value,
-      isQuickAction: isQuickAction.value,
+      isQuickAction: true,
       isArchived: false,
       statisticsMode: categoryStatisticsMode.value,
       valueLabel:
@@ -1061,11 +1061,6 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
               </button>
             </div>
           </div>
-
-          <label class="toggle-field">
-            <input v-model="isQuickAction" type="checkbox" />
-            <span>顯示在快速紀錄</span>
-          </label>
 
           <div class="field">
             <div class="field__label-row">
