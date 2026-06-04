@@ -5,6 +5,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useClickOutside } from '@/composables/useClickOutside'
+import { RemoteCatEventConflictError } from '@/services/syncRemoteCatEvents'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -19,6 +20,8 @@ const editingOccurredTime = ref('')
 const editingNote = ref('')
 const editingNumericValue = ref<string | number>('')
 const isCategoryMenuOpen = ref(false)
+const isSavingEvent = ref(false)
+const saveErrorMessage = ref('')
 const categorySelectRef = ref<HTMLElement>()
 const pendingCategoryId = ref<string>()
 
@@ -70,6 +73,8 @@ watch(
     editingNumericValue.value = getNumericValueText(event?.values)
     isCategoryMenuOpen.value = false
     pendingCategoryId.value = undefined
+    saveErrorMessage.value = ''
+    isSavingEvent.value = false
   },
   { immediate: true },
 )
@@ -85,6 +90,10 @@ watch(
 )
 
 function closeEditEvent(): void {
+  if (isSavingEvent.value) {
+    return
+  }
+
   catTrackerStore.closeEditEvent()
 }
 
@@ -110,10 +119,11 @@ function showNativePicker(event: MouseEvent): void {
   input.showPicker()
 }
 
-function saveEditingEvent(): void {
+async function saveEditingEvent(): Promise<void> {
   if (
     !editingEvent.value ||
     !canEditEvent.value ||
+    isSavingEvent.value ||
     !editingOccurredDate.value ||
     !editingOccurredTime.value ||
     !selectedCategoryId.value
@@ -142,22 +152,34 @@ function saveEditingEvent(): void {
   const shouldPersistNumericValue =
     shouldSaveNumericValue && Number.isFinite(numericValue) && isValidRatingValue
 
-  catTrackerStore.updateEvent(editingEvent.value.id, {
-    categoryId: selectedCategoryId.value,
-    occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
-    title: editingTitle.value.trim() || undefined,
-    note: editingNote.value.trim() || undefined,
-    values:
-      shouldPersistNumericValue
-        ? { amount: numericValue }
-        : hasCategoryChanged
-          ? {}
-          : shouldSaveNumericValue
-            ? {}
-            : {},
-  })
+  isSavingEvent.value = true
+  saveErrorMessage.value = ''
 
-  closeEditEvent()
+  try {
+    await catTrackerStore.updateEvent(editingEvent.value.id, {
+      categoryId: selectedCategoryId.value,
+      occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
+      title: editingTitle.value.trim() || undefined,
+      note: editingNote.value.trim() || undefined,
+      values:
+        shouldPersistNumericValue
+          ? { amount: numericValue }
+          : hasCategoryChanged
+            ? {}
+            : shouldSaveNumericValue
+              ? {}
+              : {},
+    })
+
+    closeEditEvent()
+  } catch (error) {
+    saveErrorMessage.value =
+      error instanceof RemoteCatEventConflictError
+        ? '這筆紀錄已被其他裝置或使用者更新或刪除，這次修改沒有儲存。請重新載入最新資料後再編輯。'
+        : getSaveErrorMessage(error)
+  } finally {
+    isSavingEvent.value = false
+  }
 }
 
 function deleteEditingEvent(): void {
@@ -258,6 +280,10 @@ function formatDateLabel(value: string): string {
 function formatTimeLabel(value: string): string {
   return value || '選擇時間'
 }
+
+function getSaveErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '儲存失敗，請稍後再試。'
+}
 </script>
 
 <template>
@@ -281,6 +307,7 @@ function formatTimeLabel(value: string): string {
           class="ui-button ui-button--icon icon-button"
           type="button"
           aria-label="關閉編輯視窗"
+          :disabled="isSavingEvent"
           @click="closeEditEvent"
         >
           ×
@@ -428,17 +455,26 @@ function formatTimeLabel(value: string): string {
         <p v-if="!canEditEvent" class="readonly-message">
           這筆紀錄由其他成員建立，你可以查看內容，但不能編輯或刪除。
         </p>
+        <p v-if="saveErrorMessage" class="save-error-message">
+          {{ saveErrorMessage }}
+        </p>
 
         <div class="event-form__actions" :class="{ 'event-form__actions--single': !canEditEvent }">
           <button
             class="ui-button ui-button--secondary secondary-button"
             type="button"
+            :disabled="isSavingEvent"
             @click="closeEditEvent"
           >
             {{ canEditEvent ? '取消' : '關閉' }}
           </button>
-          <button v-if="canEditEvent" class="ui-button ui-button--primary primary-button" type="submit">
-            儲存
+          <button
+            v-if="canEditEvent"
+            class="ui-button ui-button--primary primary-button"
+            type="submit"
+            :disabled="isSavingEvent"
+          >
+            {{ isSavingEvent ? '儲存中' : '儲存' }}
           </button>
         </div>
 
@@ -446,6 +482,7 @@ function formatTimeLabel(value: string): string {
           v-if="canEditEvent"
           class="ui-button ui-button--danger danger-button"
           type="button"
+          :disabled="isSavingEvent"
           @click="deleteEditingEvent"
         >
           刪除紀錄
@@ -833,6 +870,18 @@ function formatTimeLabel(value: string): string {
   margin: 0;
   color: var(--color-muted);
   font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.save-error-message {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 34%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  font-weight: 700;
   line-height: 1.5;
 }
 

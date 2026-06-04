@@ -2,6 +2,13 @@ import { supabase } from '@/lib/supabase'
 import { fromCatEventRow, type SupabaseCatEventRow } from '@/repositories/supabaseCatTrackerMapper'
 import type { CatEvent } from '@/types'
 
+export class RemoteCatEventConflictError extends Error {
+  constructor() {
+    super('這筆紀錄已被其他裝置或使用者更新或刪除，未覆蓋雲端資料。')
+    this.name = 'RemoteCatEventConflictError'
+  }
+}
+
 export function isRemoteUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
@@ -43,12 +50,16 @@ export async function createRemoteCatEvent(
   return fromCatEventRow(data)
 }
 
-export async function updateRemoteCatEvent(event: CatEvent, notebookId: string): Promise<CatEvent> {
+export async function updateRemoteCatEvent(
+  event: CatEvent,
+  notebookId: string,
+  expectedUpdatedAt?: string,
+): Promise<CatEvent> {
   if (!supabase) {
     throw new Error('Supabase 尚未設定')
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('cat_events')
     .update({
       cat_id: event.catId,
@@ -61,11 +72,21 @@ export async function updateRemoteCatEvent(event: CatEvent, notebookId: string):
     })
     .eq('id', event.id)
     .eq('notebook_id', notebookId)
+
+  if (expectedUpdatedAt) {
+    query = query.eq('updated_at', expectedUpdatedAt)
+  }
+
+  const { data, error } = await query
     .select('*')
-    .single<SupabaseCatEventRow>()
+    .maybeSingle<SupabaseCatEventRow>()
 
   if (error) {
     throw error
+  }
+
+  if (!data) {
+    throw new RemoteCatEventConflictError()
   }
 
   return fromCatEventRow(data)

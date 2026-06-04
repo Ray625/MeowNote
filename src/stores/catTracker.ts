@@ -9,6 +9,7 @@ import {
   createRemoteCatEvent,
   deleteRemoteCatEvent,
   isRemoteUuid,
+  RemoteCatEventConflictError,
   updateRemoteCatEvent,
 } from '@/services/syncRemoteCatEvents'
 import { createRemoteCat, deleteRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
@@ -843,21 +844,39 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     })
   }
 
-  function updateEvent(eventId: string, input: UpdateCatEventInput): CatEvent | undefined {
+  async function updateEvent(
+    eventId: string,
+    input: UpdateCatEventInput,
+  ): Promise<CatEvent | undefined> {
     const event = eventsById.value.get(eventId)
 
     if (!event || !canModifyEvent(event)) {
       return undefined
     }
 
+    const previousEvent: CatEvent = {
+      ...event,
+      values: event.values ? { ...event.values } : undefined,
+    }
+    const expectedUpdatedAt = event.updatedAt
+
     Object.assign(event, {
       ...input,
       updatedAt: getIsoNow(),
     })
     markLocalChangeIfSignedOut()
-    syncUpdatedEvent(event.id)
 
-    return event
+    try {
+      return (await syncUpdatedEvent(event.id, expectedUpdatedAt)) ?? event
+    } catch (error) {
+      const eventIndex = events.value.findIndex((item) => item.id === eventId)
+
+      if (eventIndex >= 0) {
+        events.value[eventIndex] = previousEvent
+      }
+
+      throw error
+    }
   }
 
   function deleteEvent(eventId: string): void {
@@ -1242,27 +1261,34 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       })
   }
 
-  function syncUpdatedEvent(eventId: string): void {
+  async function syncUpdatedEvent(
+    eventId: string,
+    expectedUpdatedAt?: string,
+  ): Promise<CatEvent | undefined> {
     const event = eventsById.value.get(eventId)
     const notebookId = getRemoteNotebookId()
 
     if (!event || !isRemoteUuid(event.id) || !shouldSyncRemoteEvent(event)) {
-      return
+      return undefined
     }
 
-    void updateRemoteCatEvent(event, notebookId)
-      .then((remoteEvent) => {
-        const eventIndex = events.value.findIndex((item) => item.id === eventId)
+    try {
+      const remoteEvent = await updateRemoteCatEvent(event, notebookId, expectedUpdatedAt)
+      const eventIndex = events.value.findIndex((item) => item.id === eventId)
 
-        if (eventIndex >= 0) {
-          events.value[eventIndex] = remoteEvent
-        }
+      if (eventIndex >= 0) {
+        events.value[eventIndex] = remoteEvent
+      }
 
-        remoteEventSyncError.value = ''
-      })
-      .catch((error: unknown) => {
-        remoteEventSyncError.value = getSyncErrorMessage(error, '事件同步失敗')
-      })
+      remoteEventSyncError.value = ''
+      return remoteEvent
+    } catch (error: unknown) {
+      remoteEventSyncError.value =
+        error instanceof RemoteCatEventConflictError
+          ? error.message
+          : getSyncErrorMessage(error, '事件同步失敗')
+      throw error
+    }
   }
 
   function syncDeletedEvent(eventId: string): void {
