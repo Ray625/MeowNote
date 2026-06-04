@@ -4,7 +4,7 @@ import type { CatEvent } from '@/types'
 
 export class RemoteCatEventConflictError extends Error {
   constructor() {
-    super('這筆紀錄已被其他裝置或使用者更新或刪除，未覆蓋雲端資料。')
+    super('這筆紀錄已被其他裝置或使用者更新或刪除，操作未執行，請重新整理。')
     this.name = 'RemoteCatEventConflictError'
   }
 }
@@ -77,9 +77,7 @@ export async function updateRemoteCatEvent(
     query = query.eq('updated_at', expectedUpdatedAt)
   }
 
-  const { data, error } = await query
-    .select('*')
-    .maybeSingle<SupabaseCatEventRow>()
+  const { data, error } = await query.select('*').maybeSingle<SupabaseCatEventRow>()
 
   if (error) {
     throw error
@@ -101,11 +99,7 @@ export async function deleteRemoteCatEvent(
     throw new Error('Supabase 尚未設定')
   }
 
-  let query = supabase
-    .from('cat_events')
-    .delete()
-    .eq('id', eventId)
-    .eq('notebook_id', notebookId)
+  let query = supabase.from('cat_events').delete().eq('id', eventId).eq('notebook_id', notebookId)
 
   if (expectedUpdatedAt) {
     query = query.eq('updated_at', expectedUpdatedAt)

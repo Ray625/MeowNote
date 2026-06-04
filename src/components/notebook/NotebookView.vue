@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import AppToast from '@/components/common/AppToast.vue'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import { useRemoteCatTrackerRefresh } from '@/composables/useRemoteCatTrackerRefresh'
@@ -562,12 +563,7 @@ function getNotebookRoleLabel(role: string): string {
       </p>
     </section>
 
-    <Transition name="account-toast">
-      <div v-if="toastMessage" class="account-toast" role="status" aria-live="polite">
-        <span>{{ toastMessage }}</span>
-        <button type="button" aria-label="關閉提示" @click="dismissToast">×</button>
-      </div>
-    </Transition>
+    <AppToast :message="toastMessage" tone="primary" @close="dismissToast" />
 
     <div
       v-if="isNotebookFormOpen"
@@ -1064,62 +1060,6 @@ function getNotebookRoleLabel(role: string): string {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-
-.account-toast {
-  position: fixed;
-  z-index: 40;
-  right: max(14px, calc((100vw - var(--content-width)) / 2 + 14px));
-  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  max-width: min(320px, calc(100vw - 28px));
-  padding: 10px 10px 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 48%, var(--color-border));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--color-primary) 86%, transparent);
-  color: var(--color-on-primary);
-  box-shadow: 0 14px 38px var(--shadow-color);
-  font-size: 0.875rem;
-  font-weight: 800;
-}
-
-.account-toast span {
-  min-width: 0;
-}
-
-.account-toast button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-on-primary) 16%, transparent);
-  color: var(--color-on-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-.account-toast button:hover {
-  background: color-mix(in srgb, var(--color-on-primary) 24%, transparent);
-}
-
-.account-toast-enter-active,
-.account-toast-leave-active {
-  transition:
-    opacity 500ms ease,
-    transform 500ms ease;
-}
-
-.account-toast-enter-from,
-.account-toast-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 .account-details {

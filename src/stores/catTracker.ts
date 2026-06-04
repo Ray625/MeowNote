@@ -174,6 +174,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const editingEventId = ref<string>()
   const deleteConfirmEventId = ref<string>()
   const remoteEventSyncError = ref('')
+  const remoteEventSyncErrorKey = ref(0)
   const remoteCatSyncError = ref('')
   const remoteCategorySyncError = ref('')
 
@@ -1282,7 +1283,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         remoteEventSyncError.value = ''
       })
       .catch((error: unknown) => {
-        remoteEventSyncError.value = getSyncErrorMessage(error, '事件同步失敗')
+        setRemoteEventSyncError(getSyncErrorMessage(error, '事件同步失敗'))
       })
   }
 
@@ -1308,10 +1309,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       remoteEventSyncError.value = ''
       return remoteEvent
     } catch (error: unknown) {
-      remoteEventSyncError.value =
+      setRemoteEventSyncError(
         error instanceof RemoteCatEventConflictError
           ? error.message
-          : getSyncErrorMessage(error, '事件同步失敗')
+          : getSyncErrorMessage(error, '事件同步失敗'),
+      )
       throw error
     }
   }
@@ -1327,12 +1329,18 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       await deleteRemoteCatEvent(eventId, notebookId, expectedUpdatedAt)
       remoteEventSyncError.value = ''
     } catch (error: unknown) {
-      remoteEventSyncError.value =
+      setRemoteEventSyncError(
         error instanceof RemoteCatEventConflictError
           ? error.message
-          : getSyncErrorMessage(error, '事件同步失敗')
+          : getSyncErrorMessage(error, '事件同步失敗'),
+      )
       throw error
     }
+  }
+
+  function setRemoteEventSyncError(message: string): void {
+    remoteEventSyncError.value = message
+    remoteEventSyncErrorKey.value += 1
   }
 
   function getSyncErrorMessage(error: unknown, fallback: string): string {
@@ -1368,6 +1376,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     editingEventId,
     deleteConfirmEventId,
     remoteEventSyncError,
+    remoteEventSyncErrorKey,
     remoteCatSyncError,
     remoteCategorySyncError,
     needsFirstTimeSetup,
