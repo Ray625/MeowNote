@@ -256,7 +256,7 @@ as $$
   );
 $$;
 
-create or replace function public.create_notebook(notebook_name text default '我的貓咪紀錄')
+create or replace function public.create_notebook(notebook_name text default '我的寵物紀錄')
 returns uuid
 language plpgsql
 security definer
@@ -265,7 +265,7 @@ as $$
 declare
   new_notebook_id uuid;
   current_user_id uuid := auth.uid();
-  normalized_name text := coalesce(nullif(trim(notebook_name), ''), '我的貓咪紀錄');
+  normalized_name text := coalesce(nullif(trim(notebook_name), ''), '我的寵物紀錄');
 begin
   if current_user_id is null then
     raise exception 'create_notebook requires an authenticated user';

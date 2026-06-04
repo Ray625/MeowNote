@@ -43,10 +43,7 @@ const {
   updatePassword,
   user,
 } = useRemoteAuth()
-const {
-  isBootstrappingRemoteData,
-  remoteRefreshError,
-} = useRemoteCatTrackerRefresh()
+const { isBootstrappingRemoteData, remoteRefreshError } = useRemoteCatTrackerRefresh()
 
 const rememberedEmail = readJson<string>(REMEMBERED_EMAIL_STORAGE_KEY, '')
 const signInEmail = ref(rememberedEmail)
@@ -122,6 +119,9 @@ const visibleNotebooks = computed(() => {
 
   return Array.from(notebookById.values())
 })
+const hasOwnedNotebook = computed(() =>
+  visibleNotebooks.value.some((notebook) => notebook.role === 'owner'),
+)
 
 useBodyScrollLock(isNotebookFormOpen)
 
@@ -373,8 +373,13 @@ function getNotebookRoleLabel(role: string): string {
           管理筆記簿
         </button>
         <div v-if="isNotebookMenuOpen" class="notebook-action-menu" role="menu">
-          <button type="button" role="menuitem" @click="startCreateNotebookFromMenu">
-            新增筆記簿
+          <button
+            v-if="!hasOwnedNotebook"
+            type="button"
+            role="menuitem"
+            @click="startCreateNotebookFromMenu"
+          >
+            建立個人筆記簿
           </button>
           <button
             v-if="activeNotebookRole === 'owner'"
@@ -577,7 +582,7 @@ function getNotebookRoleLabel(role: string): string {
           class="new-notebook-form"
           @submit.prevent="submitCreateNotebook"
         >
-          <h2>新增筆記簿</h2>
+          <h2>建立個人筆記簿</h2>
           <label class="field">
             <span class="field__label">名稱</span>
             <input
@@ -586,7 +591,7 @@ function getNotebookRoleLabel(role: string): string {
               type="text"
               autocomplete="off"
               maxlength="80"
-              placeholder="我的貓咪紀錄"
+              placeholder="我的寵物紀錄"
             />
           </label>
           <div class="notebook-form-dialog__actions">
@@ -603,7 +608,7 @@ function getNotebookRoleLabel(role: string): string {
               type="submit"
               :disabled="isLoading"
             >
-              新增
+              建立
             </button>
           </div>
         </form>

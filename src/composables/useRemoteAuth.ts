@@ -142,7 +142,7 @@ async function loadNotebookName(notebookId: string): Promise<string> {
   return data?.name ?? ''
 }
 
-async function createNotebook(name = '我的貓咪紀錄'): Promise<string> {
+async function createNotebook(name = '我的寵物紀錄'): Promise<string> {
   if (!supabase) {
     throw new Error('Supabase 尚未設定')
   }
@@ -572,13 +572,13 @@ export function useRemoteAuth() {
     }
   }
 
-  async function createPersonalNotebook(name = '我的貓咪紀錄'): Promise<boolean> {
+  async function createPersonalNotebook(name = '我的寵物紀錄'): Promise<boolean> {
     if (!supabase) {
       errorMessage.value = 'Supabase 尚未設定'
       return false
     }
 
-    const normalizedName = name.trim() || '我的貓咪紀錄'
+    const normalizedName = name.trim() || '我的寵物紀錄'
 
     isLoading.value = true
     errorMessage.value = ''
