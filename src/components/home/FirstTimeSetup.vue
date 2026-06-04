@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import AppToast from '@/components/common/AppToast.vue'
 import DogAvatarToggle from '@/components/common/DogAvatarToggle.vue'
+import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   CAT_AVATAR_OPTIONS,
   CATEGORY_GROUP_ORDER,
@@ -15,17 +17,19 @@ import { useCatTrackerStore } from '@/stores/catTracker'
 import type { CatAvatarId } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const {
-  isDogAvatarMode,
-  setDogAvatarMode: setStoredDogAvatarMode,
-} = useDogAvatarPreference()
+const { isDogAvatarMode, setDogAvatarMode: setStoredDogAvatarMode } = useDogAvatarPreference()
+const { errorMessage, isConfigured, isLoading, signInWithPassword } = useRemoteAuth()
 
-type SetupStep = 'profile' | 'templates'
+type SetupStep = 'entry' | 'login' | 'profile' | 'templates'
 
+const signInEmail = ref('')
+const signInPassword = ref('')
 const catName = ref('')
 const catAvatarId = ref<CatAvatarId>(DEFAULT_CAT_AVATAR_ID)
 const selectedTemplateIds = ref<string[]>(['water', 'medication'])
-const setupStep = ref<SetupStep>('profile')
+const setupStep = ref<SetupStep>('entry')
+const toastMessage = ref('')
+let toastTimer: ReturnType<typeof window.setTimeout> | undefined
 
 const visibleCatAvatarOptions = computed(() =>
   isDogAvatarMode.value ? DOG_AVATAR_OPTIONS : CAT_AVATAR_OPTIONS,
@@ -46,6 +50,36 @@ watch(
   },
   { immediate: true },
 )
+
+watch(errorMessage, (message) => {
+  if (!message) {
+    return
+  }
+
+  showToast(message)
+})
+
+onBeforeUnmount(() => {
+  dismissToast()
+})
+
+function goToLoginStep(): void {
+  setupStep.value = 'login'
+}
+
+function goToEntryStep(): void {
+  setupStep.value = 'entry'
+}
+
+function goToLocalProfileStep(): void {
+  setupStep.value = 'profile'
+}
+
+async function submitSignIn(): Promise<void> {
+  if (await signInWithPassword(signInEmail.value, signInPassword.value)) {
+    signInPassword.value = ''
+  }
+}
 
 function selectCatAvatar(avatarId: CatAvatarId): void {
   catAvatarId.value = avatarId
@@ -113,125 +147,252 @@ function startTracking(): void {
     },
   )
 }
+
+function showToast(message: string): void {
+  toastMessage.value = message
+
+  if (toastTimer) {
+    window.clearTimeout(toastTimer)
+  }
+
+  toastTimer = window.setTimeout(() => {
+    dismissToast()
+  }, 3200)
+}
+
+function dismissToast(): void {
+  toastMessage.value = ''
+
+  if (toastTimer) {
+    window.clearTimeout(toastTimer)
+    toastTimer = undefined
+  }
+}
 </script>
 
 <template>
   <section class="first-time-setup" aria-labelledby="first-time-setup-title">
     <form
       class="setup-form"
-      @submit.prevent="setupStep === 'profile' ? goToTemplateStep() : startTracking()"
+      @submit.prevent="
+        setupStep === 'login'
+          ? submitSignIn()
+          : setupStep === 'profile'
+            ? goToTemplateStep()
+            : startTracking()
+      "
     >
-      <div
-        class="setup-preview"
-        :class="{ 'setup-preview--dog': isDogAvatarId(catAvatarId) }"
-        aria-hidden="true"
-      >
-        <img
-          :src="getCatAvatarOption(catAvatarId).image"
-          :alt="getCatAvatarOption(catAvatarId).label"
-        />
-      </div>
-
-      <template v-if="setupStep === 'profile'">
-        <div class="field">
-          <label id="first-time-setup-title" class="setup-title" for="first-cat-name">
-            {{ petNameTitle }}
-          </label>
-          <input
-            id="first-cat-name"
-            v-model="catName"
-            class="field__control"
-            type="text"
-            autocomplete="off"
-            autofocus
-            maxlength="24"
-            placeholder="名字"
-            required
-          />
-        </div>
-
-        <div class="field">
-          <div class="cat-avatar-header">
-            <span class="field__label">選擇花色</span>
-            <DogAvatarToggle
-              :model-value="isDogAvatarMode"
-              @update:model-value="setDogAvatarMode"
-            />
-          </div>
-          <div
-            class="cat-avatar-options"
-            role="radiogroup"
-            :aria-label="isDogAvatarMode ? '選擇狗狗頭貼' : '選擇貓咪花色'"
-          >
-            <button
-              v-for="avatar in visibleCatAvatarOptions"
-              :key="avatar.id"
-              class="cat-avatar-option"
-              :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
-              type="button"
-              role="radio"
-              :aria-checked="catAvatarId === avatar.id"
-              :aria-label="avatar.label"
-              :title="avatar.label"
-              @click="selectCatAvatar(avatar.id)"
-            >
-              <span
-                class="pet-avatar pet-avatar--option"
-                :class="{ 'pet-avatar--dog': isDogAvatarId(avatar.id) }"
-                aria-hidden="true"
-              >
-                <img :src="avatar.image" :alt="avatar.label" />
-              </span>
-            </button>
+      <template v-if="setupStep === 'entry'">
+        <div class="setup-entry">
+          <h1 id="first-time-setup-title">使用MeowNote快速紀錄</h1>
+          <div class="setup-entry__avatars" aria-hidden="true">
+            <span class="setup-entry__avatar">
+              <img
+                :src="getCatAvatarOption('orange').image"
+                :alt="getCatAvatarOption('orange').label"
+              />
+            </span>
+            <span class="setup-entry__avatar setup-entry__avatar--dog">
+              <img
+                :src="getCatAvatarOption('dog-mixed').image"
+                :alt="getCatAvatarOption('dog-mixed').label"
+              />
+            </span>
           </div>
         </div>
 
         <button
           class="ui-button ui-button--primary setup-submit"
-          type="submit"
-          :disabled="!catName.trim()"
+          type="button"
+          :disabled="!isConfigured"
+          @click="goToLoginStep"
         >
-          下一步
+          登入已有帳號
         </button>
+        <button
+          class="ui-button ui-button--secondary setup-submit"
+          type="button"
+          @click="goToLocalProfileStep"
+        >
+          尚無帳號，直接開始紀錄
+        </button>
+        <p v-if="!isConfigured" class="setup-message setup-message--error">
+          Supabase 尚未設定，暫時只能先在本機開始記錄。
+        </p>
       </template>
 
-      <template v-else>
-        <div class="field">
-          <label id="first-time-setup-title" class="setup-title">想紀錄哪些項目？</label>
-          <div class="template-groups">
-            <section v-for="group in groupedTemplates" :key="group.group" class="template-group">
-              <h2>{{ group.group }}</h2>
-              <div class="template-options">
-                <button
-                  v-for="template in group.templates"
-                  :key="template.id"
-                  class="template-option"
-                  :class="{
-                    'template-option--selected': selectedTemplateIds.includes(template.id),
-                  }"
-                  type="button"
-                  :aria-pressed="selectedTemplateIds.includes(template.id)"
-                  @click="toggleTemplate(template.id)"
-                >
-                  {{ template.name }}
-                </button>
-              </div>
-            </section>
-          </div>
+      <template v-else-if="setupStep === 'login'">
+        <div class="setup-entry">
+          <h1 id="first-time-setup-title">登入已有帳號</h1>
         </div>
+
+        <label class="field">
+          <span class="field__label">Email</span>
+          <input
+            v-model="signInEmail"
+            class="field__control"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            required
+          />
+        </label>
+        <label class="field">
+          <span class="field__label">密碼</span>
+          <input
+            v-model="signInPassword"
+            class="field__control"
+            type="password"
+            autocomplete="current-password"
+            required
+            minlength="6"
+          />
+        </label>
 
         <div class="setup-actions">
           <button
             class="ui-button ui-button--secondary setup-submit"
             type="button"
-            @click="goToProfileStep"
+            :disabled="isLoading"
+            @click="goToEntryStep"
           >
-            上一步
+            返回
           </button>
-          <button class="ui-button ui-button--primary setup-submit" type="submit">開始記錄</button>
+          <button
+            class="ui-button ui-button--primary setup-submit"
+            type="submit"
+            :disabled="isLoading"
+          >
+            {{ isLoading ? '登入中' : '登入' }}
+          </button>
         </div>
       </template>
+
+      <template v-else>
+        <div
+          class="setup-preview"
+          :class="{ 'setup-preview--dog': isDogAvatarId(catAvatarId) }"
+          aria-hidden="true"
+        >
+          <img
+            :src="getCatAvatarOption(catAvatarId).image"
+            :alt="getCatAvatarOption(catAvatarId).label"
+          />
+        </div>
+
+        <template v-if="setupStep === 'profile'">
+          <div class="field">
+            <label id="first-time-setup-title" class="setup-title" for="first-cat-name">
+              {{ petNameTitle }}
+            </label>
+            <input
+              id="first-cat-name"
+              v-model="catName"
+              class="field__control"
+              type="text"
+              autocomplete="off"
+              autofocus
+              maxlength="24"
+              placeholder="名字"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <div class="cat-avatar-header">
+              <span class="field__label">選擇花色</span>
+              <DogAvatarToggle
+                :model-value="isDogAvatarMode"
+                @update:model-value="setDogAvatarMode"
+              />
+            </div>
+            <div
+              class="cat-avatar-options"
+              role="radiogroup"
+              :aria-label="isDogAvatarMode ? '選擇狗狗頭貼' : '選擇貓咪花色'"
+            >
+              <button
+                v-for="avatar in visibleCatAvatarOptions"
+                :key="avatar.id"
+                class="cat-avatar-option"
+                :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
+                type="button"
+                role="radio"
+                :aria-checked="catAvatarId === avatar.id"
+                :aria-label="avatar.label"
+                :title="avatar.label"
+                @click="selectCatAvatar(avatar.id)"
+              >
+                <span
+                  class="pet-avatar pet-avatar--option"
+                  :class="{ 'pet-avatar--dog': isDogAvatarId(avatar.id) }"
+                  aria-hidden="true"
+                >
+                  <img :src="avatar.image" :alt="avatar.label" />
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setup-actions">
+            <button
+              class="ui-button ui-button--secondary setup-submit"
+              type="button"
+              @click="goToEntryStep"
+            >
+              返回
+            </button>
+            <button
+              class="ui-button ui-button--primary setup-submit"
+              type="submit"
+              :disabled="!catName.trim()"
+            >
+              下一步
+            </button>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="field">
+            <label id="first-time-setup-title" class="setup-title">想紀錄哪些項目？</label>
+            <div class="template-groups">
+              <section v-for="group in groupedTemplates" :key="group.group" class="template-group">
+                <h2>{{ group.group }}</h2>
+                <div class="template-options">
+                  <button
+                    v-for="template in group.templates"
+                    :key="template.id"
+                    class="template-option"
+                    :class="{
+                      'template-option--selected': selectedTemplateIds.includes(template.id),
+                    }"
+                    type="button"
+                    :aria-pressed="selectedTemplateIds.includes(template.id)"
+                    @click="toggleTemplate(template.id)"
+                  >
+                    {{ template.name }}
+                  </button>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="setup-actions">
+            <button
+              class="ui-button ui-button--secondary setup-submit"
+              type="button"
+              @click="goToProfileStep"
+            >
+              上一步
+            </button>
+            <button class="ui-button ui-button--primary setup-submit" type="submit">
+              開始記錄
+            </button>
+          </div>
+        </template>
+      </template>
     </form>
+    <AppToast :message="toastMessage" tone="danger" @close="dismissToast" />
   </section>
 </template>
 
@@ -253,6 +414,69 @@ function startTracking(): void {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
+}
+
+.setup-entry {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.setup-entry h1,
+.setup-entry p {
+  margin: 0;
+}
+
+.setup-entry h1 {
+  color: var(--color-text);
+  font-size: 1.55rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.setup-entry__avatars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.setup-entry__avatar {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 6px;
+  background: var(--color-background);
+}
+
+.setup-entry__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.setup-entry__avatar--dog img {
+  transform: scale(1.1);
+}
+
+.setup-entry p,
+.setup-message {
+  color: var(--color-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.setup-message {
+  margin: 0;
+}
+
+.setup-message--error {
+  color: var(--color-danger);
 }
 
 .setup-preview {
