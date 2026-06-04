@@ -36,10 +36,13 @@ const {
   isEventSearchActive,
   isEventSearchOpen,
   needsFirstTimeSetup,
+  remoteEventSyncError,
 } = storeToRefs(catTrackerStore)
 const isUnsyncedLocalDialogOpen = computed(() => Boolean(pendingUnsyncedLocalChanges.value))
 const unsyncedLocalAction = ref<'merge' | 'remote' | ''>('')
 const isResolvingUnsyncedLocalChanges = computed(() => Boolean(unsyncedLocalAction.value))
+const syncToastMessage = ref('')
+let syncToastTimer: ReturnType<typeof window.setTimeout> | undefined
 
 useBodyScrollLock(isUnsyncedLocalDialogOpen)
 
@@ -91,6 +94,33 @@ watch(activeTab, (tab) => {
   }
 })
 
+watch(remoteEventSyncError, (message) => {
+  if (message) {
+    showSyncToast(message)
+  }
+})
+
+function showSyncToast(message: string): void {
+  if (syncToastTimer) {
+    window.clearTimeout(syncToastTimer)
+    syncToastTimer = undefined
+  }
+
+  syncToastMessage.value = message
+  syncToastTimer = window.setTimeout(() => {
+    closeSyncToast()
+  }, 6000)
+}
+
+function closeSyncToast(): void {
+  if (syncToastTimer) {
+    window.clearTimeout(syncToastTimer)
+    syncToastTimer = undefined
+  }
+
+  syncToastMessage.value = ''
+}
+
 async function submitMergePendingLocalChanges(): Promise<void> {
   if (isResolvingUnsyncedLocalChanges.value) {
     return
@@ -136,6 +166,13 @@ async function submitUseRemoteData(): Promise<void> {
     <SettingsView v-else />
     <BottomQuickActions v-if="!needsFirstTimeSetup" />
     <EventEditModal v-if="!needsFirstTimeSetup" />
+
+    <Transition name="sync-toast">
+      <div v-if="syncToastMessage" class="sync-toast" role="alert" aria-live="assertive">
+        <span>{{ syncToastMessage }}</span>
+        <button type="button" aria-label="關閉同步提示" @click="closeSyncToast">×</button>
+      </div>
+    </Transition>
 
     <div
       v-if="pendingUnsyncedLocalChanges"
@@ -227,6 +264,64 @@ async function submitUseRemoteData(): Promise<void> {
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
+}
+
+.sync-toast {
+  position: fixed;
+  z-index: 45;
+  right: max(14px, calc((100vw - var(--content-width)) / 2 + 14px));
+  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  max-width: min(340px, calc(100vw - 28px));
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 42%, var(--color-border));
+  border-radius: 10px;
+  padding: 10px 10px 10px 12px;
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));
+  color: var(--color-danger);
+  box-shadow: 0 14px 38px var(--shadow-color);
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.sync-toast span {
+  min-width: 0;
+}
+
+.sync-toast button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.sync-toast button:hover {
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
+}
+
+.sync-toast-enter-active,
+.sync-toast-leave-active {
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease;
+}
+
+.sync-toast-enter-from,
+.sync-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 @media (max-width: 560px) {

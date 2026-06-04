@@ -92,18 +92,32 @@ export async function updateRemoteCatEvent(
   return fromCatEventRow(data)
 }
 
-export async function deleteRemoteCatEvent(eventId: string, notebookId: string): Promise<void> {
+export async function deleteRemoteCatEvent(
+  eventId: string,
+  notebookId: string,
+  expectedUpdatedAt?: string,
+): Promise<void> {
   if (!supabase) {
     throw new Error('Supabase 尚未設定')
   }
 
-  const { error } = await supabase
+  let query = supabase
     .from('cat_events')
     .delete()
     .eq('id', eventId)
     .eq('notebook_id', notebookId)
 
+  if (expectedUpdatedAt) {
+    query = query.eq('updated_at', expectedUpdatedAt)
+  }
+
+  const { data, error } = await query.select('id').maybeSingle()
+
   if (error) {
     throw error
+  }
+
+  if (!data) {
+    throw new RemoteCatEventConflictError()
   }
 }

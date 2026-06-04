@@ -585,18 +585,22 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     deleteConfirmEventId.value = undefined
   }
 
-  function confirmDeleteEvent(): void {
+  async function confirmDeleteEvent(): Promise<void> {
     if (!deleteConfirmEvent.value) {
       return
     }
 
     const deletedEventId = deleteConfirmEvent.value.id
 
-    deleteEvent(deletedEventId)
-    deleteConfirmEventId.value = undefined
+    try {
+      await deleteEvent(deletedEventId)
+      deleteConfirmEventId.value = undefined
 
-    if (editingEventId.value === deletedEventId) {
-      closeEditEvent()
+      if (editingEventId.value === deletedEventId) {
+        closeEditEvent()
+      }
+    } catch {
+      deleteConfirmEventId.value = undefined
     }
   }
 
@@ -879,7 +883,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
   }
 
-  function deleteEvent(eventId: string): void {
+  async function deleteEvent(eventId: string): Promise<void> {
     const event = eventsById.value.get(eventId)
 
     if (event && !canModifyEvent(event)) {
@@ -887,6 +891,14 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     const shouldDeleteRemote = shouldSyncRemoteEventId(eventId)
+    const expectedUpdatedAt = event?.updatedAt
+    const deletedEventIndex = events.value.findIndex((item) => item.id === eventId)
+    const deletedEvent = event
+      ? {
+          ...event,
+          values: event.values ? { ...event.values } : undefined,
+        }
+      : undefined
 
     events.value = events.value.filter((event) => event.id !== eventId)
     markLocalChangeIfSignedOut({
@@ -897,7 +909,20 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     })
 
     if (shouldDeleteRemote) {
-      syncDeletedEvent(eventId)
+      try {
+        await syncDeletedEvent(eventId, expectedUpdatedAt)
+      } catch (error) {
+        if (deletedEvent) {
+          const nextEvents = [...events.value]
+          const insertIndex =
+            deletedEventIndex >= 0 ? Math.min(deletedEventIndex, nextEvents.length) : nextEvents.length
+
+          nextEvents.splice(insertIndex, 0, deletedEvent)
+          events.value = nextEvents
+        }
+
+        throw error
+      }
     }
   }
 
@@ -1291,20 +1316,23 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
   }
 
-  function syncDeletedEvent(eventId: string): void {
+  async function syncDeletedEvent(eventId: string, expectedUpdatedAt?: string): Promise<void> {
     const notebookId = getRemoteNotebookId()
 
     if (!notebookId) {
       return
     }
 
-    void deleteRemoteCatEvent(eventId, notebookId)
-      .then(() => {
-        remoteEventSyncError.value = ''
-      })
-      .catch((error: unknown) => {
-        remoteEventSyncError.value = getSyncErrorMessage(error, '事件同步失敗')
-      })
+    try {
+      await deleteRemoteCatEvent(eventId, notebookId, expectedUpdatedAt)
+      remoteEventSyncError.value = ''
+    } catch (error: unknown) {
+      remoteEventSyncError.value =
+        error instanceof RemoteCatEventConflictError
+          ? error.message
+          : getSyncErrorMessage(error, '事件同步失敗')
+      throw error
+    }
   }
 
   function getSyncErrorMessage(error: unknown, fallback: string): string {
