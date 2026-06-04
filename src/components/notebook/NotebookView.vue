@@ -142,6 +142,14 @@ watch(authMessage, (message) => {
   showToast(message)
 })
 
+watch(errorMessage, (message) => {
+  if (!message) {
+    return
+  }
+
+  showToast(message)
+})
+
 async function submitSignIn(): Promise<void> {
   rememberSignInEmail()
 
@@ -563,9 +571,6 @@ function getNotebookRoleLabel(role: string): string {
         </button>
       </form>
 
-      <p v-if="errorMessage" class="account-message account-message--error">
-        {{ errorMessage }}
-      </p>
     </section>
 
     <AppToast :message="toastMessage" tone="primary" @close="dismissToast" />

@@ -49,6 +49,32 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function getShareNotebookErrorMessage(error: unknown): string {
+  const message = getErrorMessage(error, '分享筆記簿失敗')
+
+  if (message.includes('User not found')) {
+    return '找不到這個 Email 對應的帳戶，請確認對方已完成註冊。'
+  }
+
+  if (message.includes('Cannot share notebook with yourself')) {
+    return '不能分享給自己的帳戶。'
+  }
+
+  if (message.includes('Only notebook owners can share notebooks')) {
+    return '只有筆記簿擁有者可以分享。'
+  }
+
+  if (message.includes('Target email is required')) {
+    return '請輸入要分享的 Email。'
+  }
+
+  if (message.includes('Shared member role must be editor or viewer')) {
+    return '分享權限設定不正確，請重新再試一次。'
+  }
+
+  return message
+}
+
 function getRolePriority(role: string): number {
   return role === 'owner' ? 3 : role === 'editor' ? 2 : role === 'viewer' ? 1 : 0
 }
@@ -565,7 +591,7 @@ export function useRemoteAuth() {
       await refreshNotebooks()
       return true
     } catch (error) {
-      errorMessage.value = getErrorMessage(error, '分享 Notebook 失敗')
+      errorMessage.value = getShareNotebookErrorMessage(error)
       return false
     } finally {
       isLoading.value = false
