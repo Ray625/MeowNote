@@ -10,7 +10,14 @@ import { mergeUnsyncedLocalCatTracker } from '@/services/mergeUnsyncedLocalCatTr
 import type { useCatTrackerStore } from '@/stores/catTracker'
 import { readJson, writeJson } from '@/utils/storage'
 
-const MIN_REFRESH_INTERVAL_MS = 30_000
+const DEFAULT_MIN_REFRESH_INTERVAL_MS = 60_000
+const REFRESH_REASON_INTERVAL_MS = {
+  bootstrap: 0,
+  foreground: 60_000,
+  online: 30_000,
+  view: 120_000,
+  manual: 0,
+} as const
 const LOCAL_IMPORT_CONSIDERED_USERS_STORAGE_KEY = 'meownote:local-import-considered-users'
 
 const isRefreshingRemoteData = ref(false)
@@ -18,11 +25,19 @@ const isBootstrappingRemoteData = ref(false)
 const remoteRefreshError = ref('')
 const pendingUnsyncedLocalChanges = ref<SignedOutNotebookCacheMeta | null>(null)
 const notebookIdsSkippingLocalImport = new Set<string>()
-let lastRefreshAt = 0
+const lastRefreshAtByNotebookId = new Map<string, number>()
+
+type RemoteRefreshReason = keyof typeof REFRESH_REASON_INTERVAL_MS
 
 interface BootstrapRemoteCatTrackerOptions {
   notebookRole?: string
   userId: string | null
+}
+
+interface RefreshRemoteCatTrackerOptions {
+  force?: boolean
+  minIntervalMs?: number
+  reason?: RemoteRefreshReason
 }
 
 function getErrorMessage(error: unknown): string {
@@ -118,7 +133,7 @@ export function useRemoteCatTrackerRefresh() {
       }
 
       notebookIdsSkippingLocalImport.delete(notebookId)
-      await refreshRemoteCatTracker(catTrackerStore, notebookId, { force: true })
+      await refreshRemoteCatTracker(catTrackerStore, notebookId, { force: true, reason: 'bootstrap' })
       markLocalImportConsidered(options.userId)
     } catch (error) {
       remoteRefreshError.value = getErrorMessage(error)
@@ -130,7 +145,7 @@ export function useRemoteCatTrackerRefresh() {
   async function refreshRemoteCatTracker(
     catTrackerStore: ReturnType<typeof useCatTrackerStore>,
     notebookId: string,
-    options: { force?: boolean } = {},
+    options: RefreshRemoteCatTrackerOptions = {},
   ): Promise<void> {
     if (!notebookId || isRefreshingRemoteData.value) {
       return
@@ -140,9 +155,18 @@ export function useRemoteCatTrackerRefresh() {
       return
     }
 
-    const now = Date.now()
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return
+    }
 
-    if (!options.force && now - lastRefreshAt < MIN_REFRESH_INTERVAL_MS) {
+    const now = Date.now()
+    const minIntervalMs =
+      options.minIntervalMs ??
+      REFRESH_REASON_INTERVAL_MS[options.reason ?? 'manual'] ??
+      DEFAULT_MIN_REFRESH_INTERVAL_MS
+    const lastRefreshAt = lastRefreshAtByNotebookId.get(notebookId) ?? 0
+
+    if (!options.force && now - lastRefreshAt < minIntervalMs) {
       return
     }
 
@@ -151,7 +175,7 @@ export function useRemoteCatTrackerRefresh() {
     try {
       const remoteState = await loadRemoteCatTracker(notebookId)
       catTrackerStore.replacePersistedState(remoteState)
-      lastRefreshAt = Date.now()
+      lastRefreshAtByNotebookId.set(notebookId, Date.now())
       remoteRefreshError.value = ''
     } catch (error) {
       remoteRefreshError.value = getErrorMessage(error)
@@ -183,7 +207,10 @@ export function useRemoteCatTrackerRefresh() {
       })
       pendingUnsyncedLocalChanges.value = null
       clearSignedOutNotebookCache()
-      await refreshRemoteCatTracker(catTrackerStore, pendingChanges.notebookId, { force: true })
+      await refreshRemoteCatTracker(catTrackerStore, pendingChanges.notebookId, {
+        force: true,
+        reason: 'bootstrap',
+      })
       remoteRefreshError.value = ''
     } catch (error) {
       remoteRefreshError.value = getErrorMessage(error)
@@ -203,7 +230,10 @@ export function useRemoteCatTrackerRefresh() {
 
     pendingUnsyncedLocalChanges.value = null
     clearSignedOutNotebookCache()
-    await refreshRemoteCatTracker(catTrackerStore, pendingChanges.notebookId, { force: true })
+    await refreshRemoteCatTracker(catTrackerStore, pendingChanges.notebookId, {
+      force: true,
+      reason: 'bootstrap',
+    })
   }
 
   return {

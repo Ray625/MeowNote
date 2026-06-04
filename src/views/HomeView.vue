@@ -52,6 +52,7 @@ onMounted(() => {
   })
 
   window.addEventListener('focus', refreshRemoteData)
+  window.addEventListener('online', refreshRemoteDataAfterOnline)
   document.addEventListener('visibilitychange', refreshRemoteDataWhenVisible)
 })
 
@@ -66,11 +67,12 @@ watch(activeNotebookId, (notebookId) => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('focus', refreshRemoteData)
+  window.removeEventListener('online', refreshRemoteDataAfterOnline)
   document.removeEventListener('visibilitychange', refreshRemoteDataWhenVisible)
 })
 
 function refreshRemoteData(): void {
-  void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value)
+  void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { reason: 'foreground' })
 }
 
 function refreshRemoteDataWhenVisible(): void {
@@ -78,6 +80,16 @@ function refreshRemoteDataWhenVisible(): void {
     refreshRemoteData()
   }
 }
+
+function refreshRemoteDataAfterOnline(): void {
+  void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { reason: 'online' })
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'calendar' || tab === 'stats') {
+    void refreshRemoteCatTracker(catTrackerStore, activeNotebookId.value, { reason: 'view' })
+  }
+})
 
 async function submitMergePendingLocalChanges(): Promise<void> {
   if (isResolvingUnsyncedLocalChanges.value) {
