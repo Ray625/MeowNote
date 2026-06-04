@@ -54,6 +54,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
           </div>
         </button>
         <button
+          v-if="catTrackerStore.canModifyEvent(item.event)"
           class="event-item__delete"
           type="button"
           :aria-label="`刪除 ${item.category?.name ?? '未分類'} 紀錄`"
@@ -61,6 +62,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
         >
           ×
         </button>
+        <span v-else class="event-item__owner-badge">他人紀錄</span>
       </li>
     </ol>
 
@@ -161,6 +163,18 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   font: inherit;
   font-size: 1.35rem;
   line-height: 1;
+}
+
+.event-item__owner-badge {
+  display: grid;
+  place-items: center;
+  border-left: 1px solid color-mix(in srgb, var(--category-color) 24%, var(--color-border));
+  padding: 6px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .event-item__button:hover {

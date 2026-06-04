@@ -38,7 +38,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
             v-for="item in group.items"
             :key="item.event.id"
             class="month-event-item"
-            :class="{ 'month-event-item--search': isEventSearchActive }"
+            :class="{
+              'month-event-item--search': isEventSearchActive,
+            }"
             :style="getCategoryStyle(item.category)"
           >
             <button
@@ -104,6 +106,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
               </div>
             </button>
             <button
+              v-if="catTrackerStore.canModifyEvent(item.event)"
               class="month-event-item__delete"
               type="button"
               :aria-label="`刪除 ${item.category?.name ?? '未分類'} 紀錄`"
@@ -111,6 +114,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
             >
               ×
             </button>
+            <span v-else class="month-event-item__owner-badge">他人紀錄</span>
           </li>
         </ol>
       </section>
@@ -305,6 +309,18 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   cursor: pointer;
   font: inherit;
   font-size: 1.3rem;
+}
+
+.month-event-item__owner-badge {
+  display: grid;
+  place-items: center;
+  border-left: 1px solid var(--color-divider);
+  padding: 6px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .month-event-item__delete:hover {
