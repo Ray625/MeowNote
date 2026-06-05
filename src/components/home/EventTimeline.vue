@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
+import EventItemActions from '@/components/home/EventItemActions.vue'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
@@ -53,15 +54,10 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
             <p v-if="item.event.note" class="event-item__note">{{ item.event.note }}</p>
           </div>
         </button>
-        <button
+        <EventItemActions
           v-if="catTrackerStore.canModifyEvent(item.event)"
-          class="event-item__delete"
-          type="button"
-          :aria-label="`刪除 ${item.category?.name ?? '未分類'} 紀錄`"
-          @click="catTrackerStore.openDeleteConfirm(item.event.id)"
-        >
-          ×
-        </button>
+          @delete="catTrackerStore.openDeleteConfirm(item.event.id)"
+        />
         <span v-else class="event-item__owner-badge">他人紀錄</span>
       </li>
     </ol>
@@ -152,19 +148,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   text-align: left;
 }
 
-.event-item__delete {
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--category-color) 24%, var(--color-border));
-  background: transparent;
-  color: color-mix(in srgb, var(--category-color) 82%, var(--color-text));
-  cursor: pointer;
-  font: inherit;
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
 .event-item__owner-badge {
   display: grid;
   place-items: center;
@@ -181,13 +164,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   background: color-mix(in srgb, var(--category-color) 10%, var(--color-surface));
 }
 
-.event-item__delete:hover {
-  background: color-mix(in srgb, var(--color-danger-strong) 10%, transparent);
-  color: var(--color-danger);
-}
-
-.event-item__button:focus-visible,
-.event-item__delete:focus-visible {
+.event-item__button:focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }

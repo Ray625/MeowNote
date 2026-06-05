@@ -45,8 +45,8 @@ export const DEFAULT_CAT_ID = 'default-cat'
 export const CATEGORY_GROUP_ORDER: EventCategoryGroup[] = ['飲食', '健康', '行為', '日常', '醫療']
 
 export const CAT_AVATAR_OPTIONS = [
-  { id: 'black', label: '黑', image: catBlackImage },
   { id: 'white', label: '白', image: catWhiteImage },
+  { id: 'black', label: '黑', image: catBlackImage },
   { id: 'brown', label: '棕白', image: catBrownImage },
   { id: 'tuxedo', label: '賓士', image: catTuxedoImage },
   { id: 'gray', label: '銀灰', image: catGrayImage },

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import EventItemActions from '@/components/home/EventItemActions.vue'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
@@ -105,15 +106,10 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                 </small>
               </div>
             </button>
-            <button
+            <EventItemActions
               v-if="catTrackerStore.canModifyEvent(item.event)"
-              class="month-event-item__delete"
-              type="button"
-              :aria-label="`刪除 ${item.category?.name ?? '未分類'} 紀錄`"
-              @click="catTrackerStore.openDeleteConfirm(item.event.id)"
-            >
-              ×
-            </button>
+              @delete="catTrackerStore.openDeleteConfirm(item.event.id)"
+            />
             <span v-else class="month-event-item__owner-badge">他人紀錄</span>
           </li>
         </ol>
@@ -165,7 +161,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 
 .month-event-group {
   display: grid;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
@@ -299,18 +295,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   font-size: 0.8125rem;
 }
 
-.month-event-item__delete {
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-left: 1px solid var(--color-divider);
-  background: transparent;
-  color: var(--color-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 1.3rem;
-}
-
 .month-event-item__owner-badge {
   display: grid;
   place-items: center;
@@ -321,11 +305,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
-}
-
-.month-event-item__delete:hover {
-  background: color-mix(in srgb, var(--color-danger-strong) 10%, transparent);
-  color: var(--color-danger);
 }
 
 .empty-state {
