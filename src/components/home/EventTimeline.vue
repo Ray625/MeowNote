@@ -56,6 +56,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
         </button>
         <EventItemActions
           v-if="catTrackerStore.canModifyEvent(item.event)"
+          @duplicate="catTrackerStore.duplicateEventAsDraft(item.event.id)"
           @delete="catTrackerStore.openDeleteConfirm(item.event.id)"
         />
         <span v-else class="event-item__owner-badge">他人紀錄</span>

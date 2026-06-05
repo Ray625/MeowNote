@@ -264,6 +264,13 @@ Category change behavior:
 - save incompatible category changes with `values = {}`
 - do not preserve old numeric data under a new category if the semantic meaning changed
 
+Event duplication behavior:
+
+- duplicating an event creates an unsaved draft first
+- the duplicated draft should copy category, title, note, severity, and structured values
+- `occurredAt` should be reset to the current time
+- future photo or attachment fields must not be copied automatically, because media should represent the specific moment or condition being recorded
+
 ## Supabase Tables
 
 Current remote tables:

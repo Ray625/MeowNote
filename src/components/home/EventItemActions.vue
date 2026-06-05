@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 
 const emit = defineEmits<{
+  duplicate: []
   delete: []
 }>()
 
@@ -27,6 +28,11 @@ function deleteEvent(): void {
   emit('delete')
 }
 
+function duplicateEvent(): void {
+  isOpen.value = false
+  emit('duplicate')
+}
+
 function updateMenuPlacement(): void {
   const rect = actionRef.value?.getBoundingClientRect()
 
@@ -35,7 +41,7 @@ function updateMenuPlacement(): void {
     return
   }
 
-  const estimatedMenuHeight = 58
+  const estimatedMenuHeight = 102
   const bottomSafeArea = 92
   shouldOpenUpward.value = rect.bottom + estimatedMenuHeight > window.innerHeight - bottomSafeArea
 }
@@ -60,6 +66,14 @@ function updateMenuPlacement(): void {
       :class="{ 'event-item-actions__menu--up': shouldOpenUpward }"
       role="menu"
     >
+      <button
+        class="event-item-actions__item"
+        type="button"
+        role="menuitem"
+        @click="duplicateEvent"
+      >
+        複製
+      </button>
       <button class="event-item-actions__delete" type="button" role="menuitem" @click="deleteEvent">
         刪除
       </button>
@@ -95,6 +109,7 @@ function updateMenuPlacement(): void {
 }
 
 .event-item-actions__trigger:focus-visible,
+.event-item-actions__item:focus-visible,
 .event-item-actions__delete:focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
@@ -119,17 +134,26 @@ function updateMenuPlacement(): void {
   bottom: calc(100% + 6px);
 }
 
+.event-item-actions__item,
 .event-item-actions__delete {
   min-height: 38px;
   border: 0;
   border-radius: 6px;
   padding: 0 12px;
   background: transparent;
-  color: var(--color-danger);
+  color: var(--color-text);
   cursor: pointer;
   font: inherit;
   font-weight: 900;
   text-align: left;
+}
+
+.event-item-actions__item:hover {
+  background: color-mix(in srgb, var(--category-color) 10%, transparent);
+}
+
+.event-item-actions__delete {
+  color: var(--color-danger);
 }
 
 .event-item-actions__delete:hover {

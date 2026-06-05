@@ -576,6 +576,42 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return draftEvent.value
   }
 
+  function duplicateEventAsDraft(eventId: string): CatEvent | undefined {
+    const sourceEvent = eventsById.value.get(eventId)
+    const category = sourceEvent ? categoriesById.value.get(sourceEvent.categoryId) : undefined
+    const sourceCat = sourceEvent ? catsById.value.get(sourceEvent.catId) : undefined
+
+    if (
+      !sourceEvent ||
+      !sourceCat ||
+      sourceCat.isArchived ||
+      !category ||
+      category.isArchived
+    ) {
+      return undefined
+    }
+
+    const now = getIsoNow()
+
+    // Future media/attachments should not be copied; they describe the original moment.
+    draftEvent.value = {
+      id: createId('event-draft'),
+      catId: sourceEvent.catId,
+      categoryId: sourceEvent.categoryId,
+      occurredAt: now,
+      title: sourceEvent.title,
+      severity: sourceEvent.severity,
+      note: sourceEvent.note,
+      values: sourceEvent.values ? { ...sourceEvent.values } : undefined,
+      createdBy: remoteAuth.user.value?.id,
+      createdAt: now,
+      updatedAt: now,
+    }
+    editingEventId.value = undefined
+
+    return draftEvent.value
+  }
+
   function openEditEvent(eventId: string): void {
     const event = eventsById.value.get(eventId)
 
@@ -1457,6 +1493,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     createEvent,
     quickRecord,
     quickRecordForSelectedDate,
+    duplicateEventAsDraft,
     updateEvent,
     deleteEvent,
     deleteCategory,
