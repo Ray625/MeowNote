@@ -18,7 +18,7 @@ import type { CatAvatarId } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
 const { isDogAvatarMode, setDogAvatarMode: setStoredDogAvatarMode } = useDogAvatarPreference()
-const { errorMessage, isConfigured, isLoading, signInWithPassword } = useRemoteAuth()
+const { errorMessage, isConfigured, isLoading, isSignedIn, signInWithPassword } = useRemoteAuth()
 
 type SetupStep = 'entry' | 'login' | 'profile' | 'templates'
 
@@ -27,7 +27,7 @@ const signInPassword = ref('')
 const catName = ref('')
 const catAvatarId = ref<CatAvatarId>(DEFAULT_CAT_AVATAR_ID)
 const selectedTemplateIds = ref<string[]>(['water', 'medication'])
-const setupStep = ref<SetupStep>('entry')
+const setupStep = ref<SetupStep>(isSignedIn.value ? 'profile' : 'entry')
 const toastMessage = ref('')
 let toastTimer: ReturnType<typeof window.setTimeout> | undefined
 
@@ -59,6 +59,16 @@ watch(errorMessage, (message) => {
   showToast(message)
 })
 
+watch(
+  isSignedIn,
+  (signedIn) => {
+    if (signedIn && (setupStep.value === 'entry' || setupStep.value === 'login')) {
+      setupStep.value = 'profile'
+    }
+  },
+  { immediate: true },
+)
+
 onBeforeUnmount(() => {
   dismissToast()
 })
@@ -68,7 +78,7 @@ function goToLoginStep(): void {
 }
 
 function goToEntryStep(): void {
-  setupStep.value = 'entry'
+  setupStep.value = isSignedIn.value ? 'profile' : 'entry'
 }
 
 function goToLocalProfileStep(): void {
@@ -334,8 +344,9 @@ function dismissToast(): void {
             </div>
           </div>
 
-          <div class="setup-actions">
+          <div class="setup-actions" :class="{ 'setup-actions--single': isSignedIn }">
             <button
+              v-if="!isSignedIn"
               class="ui-button ui-button--secondary setup-submit"
               type="button"
               @click="goToEntryStep"
@@ -656,6 +667,10 @@ function dismissToast(): void {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.setup-actions--single {
+  grid-template-columns: 1fr;
 }
 
 .setup-submit:disabled {

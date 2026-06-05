@@ -92,7 +92,7 @@ export const DOG_AVATAR_OPTIONS = [
 
 export const PET_AVATAR_OPTIONS = [...CAT_AVATAR_OPTIONS, ...DOG_AVATAR_OPTIONS] as const
 
-export const DEFAULT_CAT_AVATAR_ID = 'black' satisfies CatAvatarId
+export const DEFAULT_CAT_AVATAR_ID = 'white' satisfies CatAvatarId
 
 export const CATEGORY_COLOR_OPTIONS = [
   {
