@@ -9,7 +9,7 @@ import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
 const catTrackerStore = useCatTrackerStore()
-const { activeCategories, categoriesById, editingCategory, editingEvent } =
+const { activeCategories, categoriesById, editingCategory, editingEvent, isCreatingEventDraft } =
   storeToRefs(catTrackerStore)
 
 const selectedCategoryId = ref('')
@@ -51,7 +51,11 @@ const groupedActiveCategories = computed(() =>
 const occurredDateLabel = computed(() => formatDateLabel(editingOccurredDate.value))
 const occurredTimeLabel = computed(() => formatTimeLabel(editingOccurredTime.value))
 const canEditEvent = computed(() =>
-  editingEvent.value ? catTrackerStore.canModifyEvent(editingEvent.value) : false,
+  isCreatingEventDraft.value
+    ? true
+    : editingEvent.value
+      ? catTrackerStore.canModifyEvent(editingEvent.value)
+      : false,
 )
 
 useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
@@ -152,7 +156,7 @@ async function saveEditingEvent(): Promise<void> {
   isSavingEvent.value = true
 
   try {
-    await catTrackerStore.updateEvent(editingEvent.value.id, {
+    const eventInput = {
       categoryId: selectedCategoryId.value,
       occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
       title: editingTitle.value.trim() || undefined,
@@ -165,7 +169,16 @@ async function saveEditingEvent(): Promise<void> {
             : shouldSaveNumericValue
               ? {}
               : {},
-    })
+    }
+
+    if (isCreatingEventDraft.value) {
+      catTrackerStore.createEvent({
+        catId: editingEvent.value.catId,
+        ...eventInput,
+      })
+    } else {
+      await catTrackerStore.updateEvent(editingEvent.value.id, eventInput)
+    }
 
     closeEditEvent()
   } catch {
@@ -287,7 +300,9 @@ function formatTimeLabel(value: string): string {
     >
       <div class="event-modal__header">
         <div>
-          <span class="event-modal__eyebrow">{{ canEditEvent ? '編輯紀錄' : '檢視紀錄' }}</span>
+          <span class="event-modal__eyebrow">
+            {{ isCreatingEventDraft ? '新增紀錄' : canEditEvent ? '編輯紀錄' : '檢視紀錄' }}
+          </span>
           <h2 id="event-modal-title" class="event-modal__title">
             <span class="category-dot" aria-hidden="true"></span>
             <span>{{ modalCategory?.name ?? '未分類' }}</span>
@@ -350,17 +365,6 @@ function formatTimeLabel(value: string): string {
             </section>
           </div>
         </div>
-
-        <label class="field">
-          <span class="field__label">標題</span>
-          <input
-            v-model="editingTitle"
-            class="field__control"
-            type="text"
-            maxlength="40"
-            :disabled="!canEditEvent"
-          />
-        </label>
 
         <label class="field">
           <span class="field__label">發生時間</span>
@@ -432,6 +436,17 @@ function formatTimeLabel(value: string): string {
         </label>
 
         <label class="field">
+          <span class="field__label">標題</span>
+          <input
+            v-model="editingTitle"
+            class="field__control"
+            type="text"
+            maxlength="40"
+            :disabled="!canEditEvent"
+          />
+        </label>
+
+        <label class="field">
           <span class="field__label">備註</span>
           <textarea
             v-model="editingNote"
@@ -466,7 +481,7 @@ function formatTimeLabel(value: string): string {
         </div>
 
         <button
-          v-if="canEditEvent"
+          v-if="canEditEvent && !isCreatingEventDraft"
           class="ui-button ui-button--danger danger-button"
           type="button"
           :disabled="isSavingEvent"

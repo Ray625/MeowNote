@@ -172,6 +172,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
   const editingEventId = ref<string>()
+  const draftEvent = ref<CatEvent>()
   const deleteConfirmEventId = ref<string>()
   const remoteEventSyncError = ref('')
   const remoteEventSyncErrorKey = ref(0)
@@ -416,8 +417,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return [...groups.values()]
   }
   const editingEvent = computed(() =>
-    editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined,
+    draftEvent.value ??
+    (editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined),
   )
+  const isCreatingEventDraft = computed(() => Boolean(draftEvent.value))
   const editingCategory = computed(() =>
     editingEvent.value ? categoriesById.value.get(editingEvent.value.categoryId) : undefined,
   )
@@ -540,21 +543,37 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function quickRecordForSelectedDate(categoryId: string): CatEvent | undefined {
-    const event = quickRecord(categoryId, getQuickRecordOccurredAt())
+    const event = openCreateEventDraft(categoryId, getQuickRecordOccurredAt())
 
     if (!event) {
       return undefined
     }
 
     isQuickRecordOpen.value = false
+    return event
+  }
 
+  function openCreateEventDraft(categoryId: string, occurredAt?: string): CatEvent | undefined {
     const category = categoriesById.value.get(categoryId)
 
-    if (category && category.statisticsMode !== 'count') {
-      openEditEvent(event.id)
+    if (!selectedCat.value || selectedCat.value.isArchived || !category || category.isArchived) {
+      return undefined
     }
 
-    return event
+    const now = getIsoNow()
+
+    draftEvent.value = {
+      id: createId('event-draft'),
+      catId: selectedCat.value.id,
+      categoryId,
+      occurredAt: occurredAt ?? now,
+      createdBy: remoteAuth.user.value?.id,
+      createdAt: now,
+      updatedAt: now,
+    }
+    editingEventId.value = undefined
+
+    return draftEvent.value
   }
 
   function openEditEvent(eventId: string): void {
@@ -564,10 +583,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
+    draftEvent.value = undefined
     editingEventId.value = eventId
   }
 
   function closeEditEvent(): void {
+    draftEvent.value = undefined
     editingEventId.value = undefined
     deleteConfirmEventId.value = undefined
   }
@@ -722,6 +743,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     if (selectedCatId.value) {
       isQuickRecordOpen.value = false
+      draftEvent.value = undefined
       editingEventId.value = undefined
       deleteConfirmEventId.value = undefined
     }
@@ -1405,6 +1427,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     isEventSearchActive,
     editingEvent,
     editingCategory,
+    isCreatingEventDraft,
     deleteConfirmEvent,
     selectCat,
     selectCalendarDate,
