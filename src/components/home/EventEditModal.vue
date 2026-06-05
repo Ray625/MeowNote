@@ -180,7 +180,7 @@ async function saveEditingEvent(): Promise<void> {
       await catTrackerStore.updateEvent(editingEvent.value.id, eventInput)
     }
 
-    closeEditEvent()
+    catTrackerStore.closeEditEvent()
   } catch {
     // Store-level sync errors are surfaced by the global toast.
   } finally {
