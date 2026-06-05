@@ -52,6 +52,7 @@ const shouldRememberEmail = ref(Boolean(rememberedEmail))
 const isEditingNotebookName = ref(false)
 const isCreatingNotebook = ref(false)
 const isNotebookMenuOpen = ref(false)
+const isSwitchingNotebook = ref(false)
 const isSharingNotebook = ref(false)
 const isChangingPassword = ref(false)
 const notebookNameDraft = ref('')
@@ -84,6 +85,7 @@ const isNotebookFormOpen = computed(
   () =>
     isCreatingNotebook.value ||
     isEditingNotebookName.value ||
+    isSwitchingNotebook.value ||
     isSharingNotebook.value ||
     isChangingPassword.value,
 )
@@ -253,6 +255,12 @@ function startCreateNotebookFromMenu(): void {
   isCreatingNotebook.value = true
 }
 
+function startSwitchNotebookFromMenu(): void {
+  closeNotebookMenu()
+  closeNotebookForm()
+  isSwitchingNotebook.value = true
+}
+
 function startEditNotebookNameFromMenu(): void {
   closeNotebookMenu()
   closeNotebookForm()
@@ -275,6 +283,10 @@ function closeShareNotebook(): void {
   shareNotebookEmail.value = ''
 }
 
+function closeNotebookSwitcher(): void {
+  isSwitchingNotebook.value = false
+}
+
 function closePasswordForm(): void {
   isChangingPassword.value = false
   currentPassword.value = ''
@@ -286,6 +298,7 @@ function closePasswordForm(): void {
 function closeNotebookForm(): void {
   closeCreateNotebook()
   closeNotebookNameEditor()
+  closeNotebookSwitcher()
   closeShareNotebook()
   closePasswordForm()
 }
@@ -324,10 +337,12 @@ function dismissToast(): void {
 }
 
 function openLeaveNotebookConfirm(): void {
+  closeNotebookMenu()
   pendingNotebookAction.value = 'leave'
 }
 
 function openDeleteNotebookConfirm(): void {
+  closeNotebookMenu()
   pendingNotebookAction.value = 'delete'
 }
 
@@ -341,12 +356,16 @@ async function confirmNotebookAction(): Promise<void> {
   pendingNotebookAction.value = ''
 
   if (action === 'delete') {
-    await deleteActiveNotebookWithoutEvents()
+    if (await deleteActiveNotebookWithoutEvents()) {
+      closeNotebookForm()
+    }
     return
   }
 
   if (action === 'leave') {
-    await leaveActiveNotebook()
+    if (await leaveActiveNotebook()) {
+      closeNotebookForm()
+    }
   }
 }
 
@@ -381,6 +400,14 @@ function getNotebookRoleLabel(role: string): string {
           管理筆記簿
         </button>
         <div v-if="isNotebookMenuOpen" class="notebook-action-menu" role="menu">
+          <button
+            v-if="shouldShowNotebookManagement"
+            type="button"
+            role="menuitem"
+            @click="startSwitchNotebookFromMenu"
+          >
+            切換筆記簿
+          </button>
           <button
             v-if="!hasOwnedNotebook"
             type="button"
@@ -427,62 +454,6 @@ function getNotebookRoleLabel(role: string): string {
       </p>
 
       <template v-if="isSignedIn">
-        <section
-          v-if="shouldShowNotebookManagement"
-          class="notebook-switcher"
-          aria-labelledby="notebook-switcher-title"
-        >
-          <div class="notebook-switcher__header">
-            <h3 id="notebook-switcher-title">筆記簿管理</h3>
-            <span>{{ visibleNotebooks.length }} 本</span>
-          </div>
-
-          <div class="notebook-switcher__list">
-            <button
-              v-for="notebook in visibleNotebooks"
-              :key="notebook.id"
-              class="notebook-option"
-              :class="{ 'notebook-option--active': notebook.id === activeNotebookIdValue }"
-              type="button"
-              :disabled="isLoading || notebook.id === activeNotebookIdValue"
-              @click="selectNotebook(notebook.id)"
-            >
-              <span>
-                <strong>{{ notebook.name }}</strong>
-                <small>{{ getNotebookRoleLabel(notebook.role) }}</small>
-              </span>
-              <em>{{ notebook.id === activeNotebookIdValue ? '使用中' : '設為預設' }}</em>
-            </button>
-          </div>
-
-          <div class="notebook-danger-zone">
-            <template v-if="activeNotebookRole === 'owner'">
-              <button
-                class="ui-button ui-button--danger account-button"
-                type="button"
-                :disabled="isLoading || !canDeleteActiveNotebook"
-                @click="openDeleteNotebookConfirm"
-              >
-                刪除這本筆記簿
-              </button>
-              <p class="account-message">只有沒有紀錄、沒有共享成員的個人筆記簿可以刪除。</p>
-            </template>
-            <template v-else>
-              <button
-                class="ui-button ui-button--secondary account-button"
-                type="button"
-                :disabled="isLoading || !activeNotebookId"
-                @click="openLeaveNotebookConfirm"
-              >
-                離開共享筆記簿
-              </button>
-              <p class="account-message">
-                離開後會從你的列表移除；需要擁有者重新分享才能再次使用。
-              </p>
-            </template>
-          </div>
-        </section>
-
         <div class="account-details">
           <span>Email</span>
           <strong>{{ user?.email }}</strong>
@@ -582,6 +553,72 @@ function getNotebookRoleLabel(role: string): string {
       @click.self="closeNotebookForm"
     >
       <section class="notebook-form-dialog" role="dialog" aria-modal="true">
+        <section
+          v-if="isSwitchingNotebook"
+          class="notebook-switcher"
+          aria-labelledby="notebook-switcher-title"
+        >
+          <div class="notebook-switcher__header">
+            <h2 id="notebook-switcher-title">筆記簿管理</h2>
+            <div class="notebook-switcher__header-actions">
+              <button
+                class="ui-button ui-button--icon modal-close"
+                type="button"
+                aria-label="關閉筆記簿管理"
+                :disabled="isLoading"
+                @click="closeNotebookForm"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          <div class="notebook-switcher__list">
+            <button
+              v-for="notebook in visibleNotebooks"
+              :key="notebook.id"
+              class="notebook-option"
+              :class="{ 'notebook-option--active': notebook.id === activeNotebookIdValue }"
+              type="button"
+              :disabled="isLoading || notebook.id === activeNotebookIdValue"
+              @click="selectNotebook(notebook.id)"
+            >
+              <span>
+                <strong>{{ notebook.name }}</strong>
+                <small>{{ getNotebookRoleLabel(notebook.role) }}</small>
+              </span>
+              <em>{{ notebook.id === activeNotebookIdValue ? '使用中' : '設為預設' }}</em>
+            </button>
+          </div>
+
+          <div class="notebook-danger-zone">
+            <template v-if="activeNotebookRole === 'owner'">
+              <button
+                class="ui-button ui-button--danger account-button"
+                type="button"
+                :disabled="isLoading || !canDeleteActiveNotebook"
+                @click="openDeleteNotebookConfirm"
+              >
+                刪除這本筆記簿
+              </button>
+              <p class="account-message">只有沒有紀錄、沒有共享成員的個人筆記簿可以刪除。</p>
+            </template>
+            <template v-else>
+              <button
+                class="ui-button ui-button--secondary account-button"
+                type="button"
+                :disabled="isLoading || !activeNotebookId"
+                @click="openLeaveNotebookConfirm"
+              >
+                離開共享筆記簿
+              </button>
+              <p class="account-message">
+                離開後會從你的列表移除；需要擁有者重新分享才能再次使用。
+              </p>
+            </template>
+          </div>
+        </section>
+
         <form
           v-if="isCreatingNotebook"
           class="new-notebook-form"
@@ -900,10 +937,6 @@ function getNotebookRoleLabel(role: string): string {
 .notebook-switcher {
   display: grid;
   gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background);
 }
 
 .notebook-switcher__header {
@@ -913,15 +946,29 @@ function getNotebookRoleLabel(role: string): string {
   gap: 12px;
 }
 
+.notebook-switcher__header h2,
 .notebook-switcher__header h3 {
   margin: 0;
   font-size: 0.95rem;
+}
+
+.notebook-switcher__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .notebook-switcher__header span {
   color: var(--color-muted);
   font-size: 0.75rem;
   font-weight: 800;
+}
+
+.modal-close {
+  width: 36px;
+  height: 36px;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
 .notebook-switcher__list {
