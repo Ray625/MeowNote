@@ -300,13 +300,9 @@ function formatTimeLabel(value: string): string {
     >
       <div class="event-modal__header">
         <div>
-          <span class="event-modal__eyebrow">
+          <span id="event-modal-title" class="event-modal__eyebrow">
             {{ isCreatingEventDraft ? '新增紀錄' : canEditEvent ? '編輯紀錄' : '檢視紀錄' }}
           </span>
-          <h2 id="event-modal-title" class="event-modal__title">
-            <span class="category-dot" aria-hidden="true"></span>
-            <span>{{ modalCategory?.name ?? '未分類' }}</span>
-          </h2>
         </div>
         <button
           class="ui-button ui-button--icon icon-button"
@@ -533,7 +529,7 @@ function formatTimeLabel(value: string): string {
 
 .event-modal__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
@@ -541,9 +537,11 @@ function formatTimeLabel(value: string): string {
 
 .event-modal__eyebrow {
   display: block;
-  margin-bottom: 6px;
-  color: var(--color-muted);
-  font-size: 0.8125rem;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .event-modal__title {
