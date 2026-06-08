@@ -38,6 +38,7 @@ export async function createRemoteCatEvent(
       severity: event.severity ?? null,
       note: event.note ?? null,
       values: event.values ?? {},
+      photos: event.photos ?? [],
       created_by: createdBy,
     })
     .select('*')
@@ -69,6 +70,7 @@ export async function updateRemoteCatEvent(
       severity: event.severity ?? null,
       note: event.note ?? null,
       values: event.values ?? {},
+      photos: event.photos ?? [],
     })
     .eq('id', event.id)
     .eq('notebook_id', notebookId)

@@ -40,9 +40,16 @@ export interface CatEvent {
   severity?: 1 | 2 | 3 | 4 | 5
   note?: string
   values?: Record<string, unknown>
+  photos?: EventPhoto[]
   createdBy?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface EventPhoto {
+  path: string
+  width?: number
+  height?: number
 }
 
 export type EventCategoryGroup = '飲食' | '健康' | '行為' | '日常' | '醫療'
@@ -146,8 +153,11 @@ export type UpdateCategoryInput = Partial<
 >
 
 export type CreateCatEventInput = Pick<CatEvent, 'catId' | 'categoryId'> &
-  Partial<Pick<CatEvent, 'occurredAt' | 'title' | 'severity' | 'note' | 'values'>>
+  Partial<Pick<CatEvent, 'id' | 'occurredAt' | 'title' | 'severity' | 'note' | 'photos' | 'values'>>
 
 export type UpdateCatEventInput = Partial<
-  Pick<CatEvent, 'catId' | 'categoryId' | 'occurredAt' | 'title' | 'severity' | 'note' | 'values'>
+  Pick<
+    CatEvent,
+    'catId' | 'categoryId' | 'occurredAt' | 'title' | 'severity' | 'note' | 'photos' | 'values'
+  >
 >

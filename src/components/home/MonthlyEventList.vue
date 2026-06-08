@@ -61,6 +61,18 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                   <span v-if="getEventValueText(item.event, item.category)">
                     · {{ getEventValueText(item.event, item.category) }}
                   </span>
+                  <span
+                    v-if="item.event.photos?.length"
+                    class="photo-attachment-icon"
+                    aria-label="有照片附件"
+                    title="有照片附件"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"
+                      />
+                    </svg>
+                  </span>
                 </strong>
                 <p v-if="item.event.note" class="month-event-item__search-note">
                   {{ item.event.note }}
@@ -83,6 +95,18 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                   <span v-if="item.event.title"> · {{ item.event.title }}</span>
                   <span v-if="getEventValueText(item.event, item.category)">
                     · {{ getEventValueText(item.event, item.category) }}
+                  </span>
+                  <span
+                    v-if="item.event.photos?.length"
+                    class="photo-attachment-icon"
+                    aria-label="有照片附件"
+                    title="有照片附件"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"
+                      />
+                    </svg>
                   </span>
                 </strong>
                 <span
@@ -276,6 +300,25 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   min-width: 0;
   color: var(--color-text);
   white-space: normal;
+}
+
+.photo-attachment-icon {
+  display: inline-flex;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: 0.35rem;
+  color: var(--color-muted);
+  vertical-align: -0.08em;
+}
+
+.photo-attachment-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
 }
 
 .month-event-item__search-note {

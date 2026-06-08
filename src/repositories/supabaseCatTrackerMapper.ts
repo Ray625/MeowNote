@@ -6,6 +6,7 @@ import type {
   EventCategory,
   EventCategoryGroup,
   CategoryStatisticsMode,
+  EventPhoto,
 } from '@/types'
 
 export interface SupabaseCatRow {
@@ -54,6 +55,7 @@ export interface SupabaseCatEventRow {
   severity: number | null
   note: string | null
   values: Record<string, unknown>
+  photos: EventPhoto[] | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -167,6 +169,7 @@ export function toInsertCatEventRow(
     severity: event.severity ?? null,
     note: event.note ?? null,
     values: event.values ?? {},
+    photos: normalizeEventPhotos(event.photos),
     created_by: createdBy,
   }
 }
@@ -181,10 +184,39 @@ export function fromCatEventRow(row: SupabaseCatEventRow): CatEvent {
     severity: isEventSeverity(row.severity) ? row.severity : undefined,
     note: row.note ?? undefined,
     values: row.values,
+    photos: normalizeEventPhotos(row.photos),
     createdBy: row.created_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+function normalizeEventPhotos(value: unknown): EventPhoto[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const photos: EventPhoto[] = []
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || !('path' in item)) {
+      continue
+    }
+
+    const photo = item as { path?: unknown; width?: unknown; height?: unknown }
+
+    if (typeof photo.path !== 'string' || !photo.path) {
+      continue
+    }
+
+    photos.push({
+      path: photo.path,
+      width: typeof photo.width === 'number' ? photo.width : undefined,
+      height: typeof photo.height === 'number' ? photo.height : undefined,
+    })
+  }
+
+  return photos
 }
 
 function isCatAvatarId(value: string | null): value is CatAvatarId {

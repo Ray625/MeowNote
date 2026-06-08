@@ -12,6 +12,7 @@ import {
   RemoteCatEventConflictError,
   updateRemoteCatEvent,
 } from '@/services/syncRemoteCatEvents'
+import { deleteEventPhotoPaths } from '@/services/eventPhotoStorage'
 import { createRemoteCat, deleteRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
 import {
   createRemoteCategory,
@@ -873,7 +874,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function createEvent(input: CreateCatEventInput): CatEvent {
     const now = getIsoNow()
     const event: CatEvent = {
-      id: createId('event'),
+      id: input.id ?? createId('event'),
       catId: input.catId,
       categoryId: input.categoryId,
       occurredAt: input.occurredAt ?? now,
@@ -881,6 +882,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       severity: input.severity,
       note: input.note,
       values: input.values,
+      photos: input.photos ?? [],
       createdBy: remoteAuth.user.value?.id,
       createdAt: now,
       updatedAt: now,
@@ -920,6 +922,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const previousEvent: CatEvent = {
       ...event,
       values: event.values ? { ...event.values } : undefined,
+      photos: event.photos ? [...event.photos] : [],
     }
     const expectedUpdatedAt = event.updatedAt
 
@@ -956,6 +959,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       ? {
           ...event,
           values: event.values ? { ...event.values } : undefined,
+          photos: event.photos ? [...event.photos] : [],
         }
       : undefined
 
@@ -969,7 +973,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     if (shouldDeleteRemote) {
       try {
-        await syncDeletedEvent(eventId, expectedUpdatedAt)
+        await syncDeletedEvent(
+          eventId,
+          expectedUpdatedAt,
+          event?.photos?.map((photo) => photo.path) ?? [],
+        )
       } catch (error) {
         if (deletedEvent) {
           const nextEvents = [...events.value]
@@ -1376,7 +1384,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
   }
 
-  async function syncDeletedEvent(eventId: string, expectedUpdatedAt?: string): Promise<void> {
+  async function syncDeletedEvent(
+    eventId: string,
+    expectedUpdatedAt?: string,
+    photoPaths: string[] = [],
+  ): Promise<void> {
     const notebookId = getRemoteNotebookId()
 
     if (!notebookId) {
@@ -1385,6 +1397,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     try {
       await deleteRemoteCatEvent(eventId, notebookId, expectedUpdatedAt)
+      if (photoPaths.length) {
+        await deleteEventPhotoPaths(photoPaths)
+      }
       remoteEventSyncError.value = ''
     } catch (error: unknown) {
       setRemoteEventSyncError(

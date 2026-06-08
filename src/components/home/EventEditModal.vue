@@ -1,14 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useClickOutside } from '@/composables/useClickOutside'
+import { useRemoteAuth } from '@/composables/useRemoteAuth'
+import {
+  createEventPhotoSignedUrls,
+  deleteEventPhotoPaths,
+  MAX_EVENT_PHOTO_COUNT,
+  uploadEventPhoto,
+} from '@/services/eventPhotoStorage'
 import { useCatTrackerStore } from '@/stores/catTracker'
-import type { EventCategory } from '@/types'
+import type { EventCategory, EventPhoto } from '@/types'
+import { createId } from '@/utils/id'
 
 const catTrackerStore = useCatTrackerStore()
+const remoteAuth = useRemoteAuth()
 const { activeCategories, categoriesById, editingCategory, editingEvent, isCreatingEventDraft } =
   storeToRefs(catTrackerStore)
 
@@ -22,6 +31,11 @@ const isCategoryMenuOpen = ref(false)
 const isSavingEvent = ref(false)
 const categorySelectRef = ref<HTMLElement>()
 const pendingCategoryId = ref<string>()
+const existingPhotos = ref<EventPhoto[]>([])
+const existingPhotoUrls = ref<Map<string, string>>(new Map())
+const pendingPhotos = ref<Array<{ id: string; file: File; previewUrl: string }>>([])
+const photoInputRef = ref<HTMLInputElement>()
+const previewPhotoIndex = ref<number>()
 
 const modalCategory = computed(
   () => categoriesById.value.get(selectedCategoryId.value) ?? editingCategory.value,
@@ -57,6 +71,46 @@ const canEditEvent = computed(() =>
       ? catTrackerStore.canModifyEvent(editingEvent.value)
       : false,
 )
+const canUploadPhotos = computed(() =>
+  Boolean(remoteAuth.activeNotebookId.value && canEditEvent.value),
+)
+const totalPhotoCount = computed(() => existingPhotos.value.length + pendingPhotos.value.length)
+const remainingPhotoSlots = computed(() => MAX_EVENT_PHOTO_COUNT - totalPhotoCount.value)
+const previewPhotos = computed(() => [
+  ...existingPhotos.value
+    .map((photo) => ({
+      key: photo.path,
+      kind: 'existing' as const,
+      src: existingPhotoUrls.value.get(photo.path) ?? '',
+      alt: '事件照片',
+    }))
+    .filter((photo) => photo.src),
+  ...pendingPhotos.value.map((photo) => ({
+    key: photo.id,
+    kind: 'pending' as const,
+    src: photo.previewUrl,
+    alt: '待上傳事件照片',
+  })),
+])
+const activePreviewPhoto = computed(() =>
+  typeof previewPhotoIndex.value === 'number'
+    ? previewPhotos.value[previewPhotoIndex.value]
+    : undefined,
+)
+const canShowPreviousPhoto = computed(() => (previewPhotoIndex.value ?? 0) > 0)
+const canShowNextPhoto = computed(
+  () => (previewPhotoIndex.value ?? 0) < previewPhotos.value.length - 1,
+)
+const canDeleteActivePreviewPhoto = computed(() =>
+  Boolean(canEditEvent.value && activePreviewPhoto.value),
+)
+const touchStartX = ref<number>()
+const previewDragOffset = ref(0)
+const isPreviewDragging = ref(false)
+const previewTrackStyle = computed(() => ({
+  transform: `translateX(calc(${-(previewPhotoIndex.value ?? 0) * 100}% + ${previewDragOffset.value}px))`,
+  transition: isPreviewDragging.value ? 'none' : undefined,
+}))
 
 useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
 
@@ -73,12 +127,20 @@ watch(
     editingOccurredTime.value = event ? toTimeInputValue(event.occurredAt) : ''
     editingNote.value = event?.note ?? ''
     editingNumericValue.value = getNumericValueText(event?.values)
+    existingPhotos.value = event?.photos ? [...event.photos] : []
+    void refreshExistingPhotoUrls(existingPhotos.value)
+    clearPendingPhotos()
+    closePhotoPreview()
     isCategoryMenuOpen.value = false
     pendingCategoryId.value = undefined
     isSavingEvent.value = false
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  clearPendingPhotos()
+})
 
 watch(
   modalCategory,
@@ -96,6 +158,127 @@ function closeEditEvent(): void {
   }
 
   catTrackerStore.closeEditEvent()
+}
+
+function closePhotoPreview(): void {
+  previewPhotoIndex.value = undefined
+  resetPhotoPreviewDrag()
+}
+
+function openPhotoPreview(photoKey: string): void {
+  const photoIndex = previewPhotos.value.findIndex((photo) => photo.key === photoKey)
+
+  if (photoIndex < 0) {
+    return
+  }
+
+  previewPhotoIndex.value = photoIndex
+}
+
+function showPreviousPhoto(): void {
+  if (!canShowPreviousPhoto.value || typeof previewPhotoIndex.value !== 'number') {
+    return
+  }
+
+  previewPhotoIndex.value -= 1
+  resetPhotoPreviewDrag()
+}
+
+function showNextPhoto(): void {
+  if (!canShowNextPhoto.value || typeof previewPhotoIndex.value !== 'number') {
+    return
+  }
+
+  previewPhotoIndex.value += 1
+  resetPhotoPreviewDrag()
+}
+
+function deleteActivePreviewPhoto(): void {
+  if (!canDeleteActivePreviewPhoto.value || !activePreviewPhoto.value) {
+    return
+  }
+
+  const currentIndex = previewPhotoIndex.value ?? 0
+  const deletingPhoto = activePreviewPhoto.value
+
+  if (deletingPhoto.kind === 'existing') {
+    removeExistingPhoto(deletingPhoto.key, false)
+  } else {
+    removePendingPhoto(deletingPhoto.key, false)
+  }
+
+  const nextPhotoCount = previewPhotos.value.length
+
+  if (nextPhotoCount === 0) {
+    closePhotoPreview()
+    return
+  }
+
+  previewPhotoIndex.value = Math.min(currentIndex, nextPhotoCount - 1)
+}
+
+function handlePreviewTouchStart(event: TouchEvent): void {
+  if (previewPhotos.value.length <= 1) {
+    return
+  }
+
+  touchStartX.value = event.touches[0]?.clientX
+  previewDragOffset.value = 0
+  isPreviewDragging.value = true
+}
+
+function handlePreviewTouchMove(event: TouchEvent): void {
+  if (typeof touchStartX.value !== 'number') {
+    return
+  }
+
+  const currentX = event.touches[0]?.clientX
+
+  if (typeof currentX !== 'number') {
+    return
+  }
+
+  const deltaX = currentX - touchStartX.value
+  const isDraggingPastStart = deltaX > 0 && !canShowPreviousPhoto.value
+  const isDraggingPastEnd = deltaX < 0 && !canShowNextPhoto.value
+
+  previewDragOffset.value = isDraggingPastStart || isDraggingPastEnd ? deltaX * 0.16 : deltaX
+}
+
+function handlePreviewTouchEnd(event: TouchEvent): void {
+  if (typeof touchStartX.value !== 'number') {
+    return
+  }
+
+  const endX = event.changedTouches[0]?.clientX
+
+  if (typeof endX !== 'number') {
+    touchStartX.value = undefined
+    return
+  }
+
+  const deltaX = endX - touchStartX.value
+
+  resetPhotoPreviewDrag()
+
+  if (Math.abs(deltaX) < 40) {
+    return
+  }
+
+  if (deltaX > 0 && canShowPreviousPhoto.value) {
+    showPreviousPhoto()
+    return
+  }
+
+  if (deltaX < 0 && canShowNextPhoto.value) {
+    showNextPhoto()
+  }
+}
+
+function resetPhotoPreviewDrag(): void {
+  touchStartX.value = undefined
+  previewDragOffset.value = 0
+  isPreviewDragging.value = false
 }
 
 function toggleCategoryMenu(): void {
@@ -154,25 +337,35 @@ async function saveEditingEvent(): Promise<void> {
     shouldSaveNumericValue && Number.isFinite(numericValue) && isValidRatingValue
 
   isSavingEvent.value = true
+  const uploadedPhotoPaths: string[] = []
 
   try {
+    const previousPhotos = editingEvent.value.photos ?? []
+    const removedPhotoPaths = previousPhotos
+      .map((photo) => photo.path)
+      .filter((path) => !existingPhotos.value.some((photo) => photo.path === path))
+    const uploadedPhotos = await uploadPendingPhotos(editingEvent.value.id)
+
+    uploadedPhotoPaths.push(...uploadedPhotos.map((photo) => photo.path))
+
     const eventInput = {
       categoryId: selectedCategoryId.value,
       occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
       title: editingTitle.value.trim() || undefined,
       note: editingNote.value.trim() || undefined,
-      values:
-        shouldPersistNumericValue
-          ? { amount: numericValue }
-          : hasCategoryChanged
+      photos: [...existingPhotos.value, ...uploadedPhotos],
+      values: shouldPersistNumericValue
+        ? { amount: numericValue }
+        : hasCategoryChanged
+          ? {}
+          : shouldSaveNumericValue
             ? {}
-            : shouldSaveNumericValue
-              ? {}
-              : {},
+            : {},
     }
 
     if (isCreatingEventDraft.value) {
       catTrackerStore.createEvent({
+        id: editingEvent.value.id,
         catId: editingEvent.value.catId,
         ...eventInput,
       })
@@ -180,8 +373,15 @@ async function saveEditingEvent(): Promise<void> {
       await catTrackerStore.updateEvent(editingEvent.value.id, eventInput)
     }
 
+    if (removedPhotoPaths.length) {
+      void deleteEventPhotoPaths(removedPhotoPaths)
+    }
+
     catTrackerStore.closeEditEvent()
   } catch {
+    if (uploadedPhotoPaths.length) {
+      void deleteEventPhotoPaths(uploadedPhotoPaths)
+    }
     // Store-level sync errors are surfaced by the global toast.
   } finally {
     isSavingEvent.value = false
@@ -194,6 +394,92 @@ function deleteEditingEvent(): void {
   }
 
   catTrackerStore.openDeleteConfirm(editingEvent.value.id)
+}
+
+function addPendingPhotos(event: Event): void {
+  if (!canUploadPhotos.value || remainingPhotoSlots.value <= 0) {
+    return
+  }
+
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? []).slice(0, remainingPhotoSlots.value)
+
+  pendingPhotos.value = [
+    ...pendingPhotos.value,
+    ...files.map((file) => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${createId('photo-preview')}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    })),
+  ]
+
+  input.value = ''
+}
+
+function removeExistingPhoto(path: string, shouldClosePreview = true): void {
+  if (!canEditEvent.value) {
+    return
+  }
+
+  existingPhotos.value = existingPhotos.value.filter((photo) => photo.path !== path)
+
+  if (shouldClosePreview) {
+    closePhotoPreview()
+  }
+}
+
+function removePendingPhoto(photoId: string, shouldClosePreview = true): void {
+  const photo = pendingPhotos.value.find((item) => item.id === photoId)
+
+  if (photo) {
+    URL.revokeObjectURL(photo.previewUrl)
+  }
+
+  pendingPhotos.value = pendingPhotos.value.filter((item) => item.id !== photoId)
+
+  if (shouldClosePreview) {
+    closePhotoPreview()
+  }
+}
+
+async function uploadPendingPhotos(eventId: string): Promise<EventPhoto[]> {
+  const notebookId = remoteAuth.activeNotebookId.value
+
+  if (!notebookId || pendingPhotos.value.length === 0) {
+    return []
+  }
+
+  const uploadedPhotos: EventPhoto[] = []
+
+  for (const [index, photo] of pendingPhotos.value.entries()) {
+    uploadedPhotos.push(
+      await uploadEventPhoto({
+        file: photo.file,
+        notebookId,
+        eventId,
+        index: existingPhotos.value.length + index + 1,
+      }),
+    )
+  }
+
+  return uploadedPhotos
+}
+
+async function refreshExistingPhotoUrls(photos: EventPhoto[]): Promise<void> {
+  try {
+    existingPhotoUrls.value = await createEventPhotoSignedUrls(photos.map((photo) => photo.path))
+  } catch {
+    existingPhotoUrls.value = new Map()
+  }
+}
+
+function clearPendingPhotos(): void {
+  for (const photo of pendingPhotos.value) {
+    URL.revokeObjectURL(photo.previewUrl)
+  }
+
+  pendingPhotos.value = []
+  closePhotoPreview()
 }
 
 function getCategoryStyle(category?: EventCategory): Record<string, string> {
@@ -249,7 +535,9 @@ function getNumericValueText(values?: Record<string, unknown>): string {
 }
 
 function getRatingMax(category?: EventCategory): number {
-  return typeof category?.valueMax === 'number' && Number.isInteger(category.valueMax) && category.valueMax >= 2
+  return typeof category?.valueMax === 'number' &&
+    Number.isInteger(category.valueMax) &&
+    category.valueMax >= 2
     ? category.valueMax
     : 10
 }
@@ -286,13 +574,13 @@ function formatDateLabel(value: string): string {
 function formatTimeLabel(value: string): string {
   return value || '選擇時間'
 }
-
 </script>
 
 <template>
   <div v-if="editingEvent" class="modal-backdrop" role="presentation" @click.self="closeEditEvent">
     <section
       class="event-modal"
+      :class="{ 'event-modal--preview-open': activePreviewPhoto }"
       aria-labelledby="event-modal-title"
       role="dialog"
       aria-modal="true"
@@ -453,6 +741,81 @@ function formatTimeLabel(value: string): string {
           ></textarea>
         </label>
 
+        <div class="field">
+          <div class="photo-field__header">
+            <span class="field__label">照片</span>
+            <span class="photo-field__count"
+              >{{ totalPhotoCount }} / {{ MAX_EVENT_PHOTO_COUNT }}</span
+            >
+          </div>
+          <div v-if="totalPhotoCount > 0" class="photo-grid">
+            <div v-for="photo in existingPhotos" :key="photo.path" class="photo-thumb">
+              <button
+                v-if="existingPhotoUrls.get(photo.path)"
+                class="photo-thumb__preview"
+                type="button"
+                aria-label="預覽照片"
+                @click="openPhotoPreview(photo.path)"
+              >
+                <img :src="existingPhotoUrls.get(photo.path)" alt="事件照片" />
+              </button>
+              <span v-else class="photo-thumb__placeholder">圖片載入中</span>
+              <button
+                v-if="canEditEvent"
+                class="photo-thumb__remove"
+                type="button"
+                aria-label="移除照片"
+                :disabled="isSavingEvent"
+                @click="removeExistingPhoto(photo.path)"
+              >
+                ×
+              </button>
+            </div>
+            <div v-for="photo in pendingPhotos" :key="photo.id" class="photo-thumb">
+              <button
+                class="photo-thumb__preview"
+                type="button"
+                aria-label="預覽待上傳照片"
+                @click="openPhotoPreview(photo.id)"
+              >
+                <img :src="photo.previewUrl" alt="待上傳事件照片" />
+              </button>
+              <button
+                class="photo-thumb__remove"
+                type="button"
+                aria-label="移除照片"
+                :disabled="isSavingEvent"
+                @click="removePendingPhoto(photo.id)"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          <input
+            ref="photoInputRef"
+            class="visually-hidden-input"
+            type="file"
+            accept="image/*,.heic,.heif"
+            multiple
+            :disabled="!canUploadPhotos || remainingPhotoSlots <= 0 || isSavingEvent"
+            @change="addPendingPhotos"
+          />
+          <button
+            v-if="canEditEvent && remainingPhotoSlots > 0"
+            class="ui-button ui-button--secondary photo-upload-button"
+            type="button"
+            :disabled="!canUploadPhotos || isSavingEvent"
+            @click="photoInputRef?.click()"
+          >
+            加入照片
+          </button>
+          <p v-if="canEditEvent && !canUploadPhotos" class="photo-field__hint">
+            登入並使用雲端筆記簿後可以上傳照片。
+          </p>
+          <p v-else class="photo-field__hint">每筆紀錄最多 3 張</p>
+        </div>
+
         <p v-if="!canEditEvent" class="readonly-message">
           這筆紀錄由其他成員建立，你可以查看內容，但不能編輯或刪除。
         </p>
@@ -498,6 +861,72 @@ function formatTimeLabel(value: string): string {
       @cancel="cancelCategoryChange"
       @confirm="confirmCategoryChange"
     />
+
+    <div
+      v-if="activePreviewPhoto"
+      class="photo-preview-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="照片預覽"
+      @click.self="closePhotoPreview"
+      @wheel.prevent
+      @touchstart.passive="handlePreviewTouchStart"
+      @touchmove.passive="handlePreviewTouchMove"
+      @touchend.passive="handlePreviewTouchEnd"
+    >
+      <header class="photo-preview__header">
+        <button
+          class="photo-preview__header-button photo-preview__back"
+          type="button"
+          aria-label="返回編輯紀錄"
+          @click="closePhotoPreview"
+        >
+          <span aria-hidden="true"></span>
+          返回
+        </button>
+        <strong>照片</strong>
+        <button
+          v-if="canDeleteActivePreviewPhoto"
+          class="photo-preview__header-button photo-preview__delete"
+          type="button"
+          aria-label="刪除照片"
+          @click="deleteActivePreviewPhoto"
+        >
+          刪除
+        </button>
+        <span v-else class="photo-preview__header-spacer" aria-hidden="true"></span>
+      </header>
+
+      <div class="photo-preview__stage">
+        <button
+          class="photo-preview__edge-hit-area photo-preview__edge-hit-area--previous"
+          type="button"
+          aria-label="上一張照片"
+          :disabled="!canShowPreviousPhoto"
+          @click="showPreviousPhoto"
+        ></button>
+        <div class="photo-preview__track" :style="previewTrackStyle">
+          <div v-for="photo in previewPhotos" :key="photo.key" class="photo-preview__slide">
+            <img class="photo-preview__image" :src="photo.src" :alt="photo.alt" />
+          </div>
+        </div>
+        <button
+          class="photo-preview__edge-hit-area photo-preview__edge-hit-area--next"
+          type="button"
+          aria-label="下一張照片"
+          :disabled="!canShowNextPhoto"
+          @click="showNextPhoto"
+        ></button>
+      </div>
+
+      <div v-if="previewPhotos.length > 1" class="photo-preview__dots" aria-label="照片頁數">
+        <span
+          v-for="(photo, index) in previewPhotos"
+          :key="photo.key"
+          :class="{ 'photo-preview__dot--active': index === previewPhotoIndex }"
+        ></span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -525,6 +954,10 @@ function formatTimeLabel(value: string): string {
   border-radius: 12px;
   background: var(--color-surface);
   box-shadow: 0 22px 60px var(--shadow-color);
+}
+
+.event-modal--preview-open {
+  overflow: hidden;
 }
 
 .event-modal__header {
@@ -822,6 +1255,336 @@ function formatTimeLabel(value: string): string {
 .field__control--textarea {
   min-height: 120px;
   resize: vertical;
+}
+
+.photo-field__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.photo-field__count,
+.photo-field__hint {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.photo-field__hint {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.photo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photo-thumb {
+  position: relative;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+}
+
+.photo-thumb__preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-thumb__placeholder {
+  padding: 8px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.photo-thumb__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  color: var(--color-danger);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.photo-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #000;
+  color: #fff;
+  touch-action: none;
+}
+
+.photo-preview__header {
+  display: grid;
+  min-height: 58px;
+  grid-template-columns: minmax(84px, 1fr) auto minmax(84px, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid color-mix(in srgb, #fff 14%, transparent);
+  padding: calc(env(safe-area-inset-top) + 8px) 16px 8px;
+}
+
+.photo-preview__header strong {
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+.photo-preview__header-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.photo-preview__back {
+  justify-self: start;
+  gap: 4px;
+}
+
+.photo-preview__back span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-bottom: 3px solid currentColor;
+  border-left: 3px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.photo-preview__delete {
+  justify-self: end;
+}
+
+.photo-preview__header-spacer {
+  min-width: 84px;
+}
+
+.photo-preview__stage {
+  position: relative;
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.photo-preview__track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 180ms ease;
+  will-change: transform;
+}
+
+.photo-preview__slide {
+  display: grid;
+  min-width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.photo-preview__image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.photo-preview__edge-hit-area {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 24%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.photo-preview__edge-hit-area--previous {
+  left: 0;
+}
+
+.photo-preview__edge-hit-area--next {
+  right: 0;
+}
+
+.photo-preview__dots {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 12px);
+}
+
+.photo-preview__dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 38%, transparent);
+}
+
+.photo-preview__dots .photo-preview__dot--active {
+  background: var(--color-primary);
+}
+
+@media (min-width: 768px) {
+  .photo-preview-backdrop {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: 100dvh;
+    padding: 18px;
+    background: color-mix(in srgb, #000 82%, transparent);
+  }
+
+  .photo-preview__header {
+    width: min(100%, 920px);
+    min-height: 0;
+    justify-self: center;
+    border-bottom: 0;
+    padding: 0 0 12px;
+  }
+
+  .photo-preview__stage {
+    width: min(100%, 920px);
+    min-height: 0;
+    justify-self: center;
+    overflow: hidden;
+  }
+
+  .photo-preview__track {
+    transition: none;
+  }
+
+  .photo-preview__image {
+    max-width: 100%;
+    max-height: calc(100dvh - 132px);
+    border-radius: 10px;
+    box-shadow: 0 18px 56px color-mix(in srgb, #000 56%, transparent);
+  }
+
+  .photo-preview__edge-hit-area {
+    top: 50%;
+    bottom: auto;
+    width: 44px;
+    height: 56px;
+    border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, #000 46%, transparent);
+    color: #fff;
+    font-size: 2.4rem;
+    font-weight: 900;
+    transform: translateY(-50%);
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      color 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .photo-preview__edge-hit-area:hover {
+    border-color: color-mix(in srgb, #fff 50%, transparent);
+    color: color-mix(in srgb, #fff 80%, transparent);
+    cursor: pointer;
+  }
+
+  .photo-preview__edge-hit-area:disabled {
+    border-color: color-mix(in srgb, #fff 70%, transparent);
+    color: color-mix(in srgb, #fff 70%, transparent);
+    cursor: default;
+    opacity: 0.58;
+  }
+
+  .photo-preview__edge-hit-area::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: 13px;
+    height: 13px;
+    border-bottom: 4px solid currentColor;
+    content: '';
+    transform-origin: center;
+  }
+
+  .photo-preview__edge-hit-area--previous {
+    left: 12px;
+  }
+
+  .photo-preview__edge-hit-area--previous::before {
+    border-left: 4px solid currentColor;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  .photo-preview__edge-hit-area--next {
+    right: 12px;
+  }
+
+  .photo-preview__edge-hit-area--next::before {
+    border-right: 4px solid currentColor;
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+
+  .photo-preview__dots {
+    min-height: 34px;
+    padding: 12px 16px 0;
+  }
+}
+
+.photo-upload-button {
+  min-height: 42px;
+}
+
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .rating-slider {

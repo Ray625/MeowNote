@@ -110,12 +110,30 @@ create table if not exists public.cat_events (
   severity smallint check (severity is null or severity between 1 and 5),
   note text,
   values jsonb not null default '{}'::jsonb,
+  photos jsonb not null default '[]'::jsonb,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (cat_id, notebook_id) references public.cats(id, notebook_id) on delete cascade,
   foreign key (category_id, notebook_id) references public.event_categories(id, notebook_id) on delete restrict
 );
+
+alter table public.cat_events
+  add column if not exists photos jsonb not null default '[]'::jsonb;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'event-photos',
+  'event-photos',
+  false,
+  5242880,
+  array['image/webp']::text[]
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 create index if not exists idx_notebook_members_user_id
   on public.notebook_members(user_id);
@@ -464,6 +482,9 @@ drop policy if exists "Owners and editors can delete cat events" on public.cat_e
 drop policy if exists "Owners and editors can create cat events" on public.cat_events;
 drop policy if exists "Owners can update all events and editors can update own events" on public.cat_events;
 drop policy if exists "Owners can delete all events and editors can delete own events" on public.cat_events;
+drop policy if exists "Notebook members can read event photos" on storage.objects;
+drop policy if exists "Owners and editors can upload event photos" on storage.objects;
+drop policy if exists "Owners and editors can delete event photos" on storage.objects;
 
 create policy "Users can read their profile"
 on public.profiles for select
@@ -609,4 +630,31 @@ using (
     public.can_create_notebook_event(notebook_id)
     and created_by = auth.uid()
   )
+);
+
+create policy "Notebook members can read event photos"
+on storage.objects for select
+to authenticated
+using (
+  bucket_id = 'event-photos'
+  and (storage.foldername(name))[1] = 'notebooks'
+  and public.is_notebook_member(((storage.foldername(name))[2])::uuid)
+);
+
+create policy "Owners and editors can upload event photos"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'event-photos'
+  and (storage.foldername(name))[1] = 'notebooks'
+  and public.can_create_notebook_event(((storage.foldername(name))[2])::uuid)
+);
+
+create policy "Owners and editors can delete event photos"
+on storage.objects for delete
+to authenticated
+using (
+  bucket_id = 'event-photos'
+  and (storage.foldername(name))[1] = 'notebooks'
+  and public.can_create_notebook_event(((storage.foldername(name))[2])::uuid)
 );

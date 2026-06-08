@@ -241,8 +241,15 @@ interface CatEvent {
   severity?: 1 | 2 | 3 | 4 | 5
   note?: string
   values?: Record<string, unknown>
+  photos?: EventPhoto[]
   createdAt: string
   updatedAt: string
+}
+
+interface EventPhoto {
+  path: string
+  width?: number
+  height?: number
 }
 ```
 
@@ -255,6 +262,10 @@ Notes:
 - `occurredAt` is the event time and is used for calendar grouping and stats.
 - `title`, `severity`, `note`, and `values` are optional detail fields.
 - `values` is intentionally JSON-shaped so future value types can be added without changing the event table.
+- `photos` stores Supabase Storage paths only; do not store public URLs.
+- event photos live in the private `event-photos` bucket and are displayed through signed URLs.
+- v1 supports up to 3 photos per event.
+- photo uploads are compressed and converted to WebP before upload.
 - shared notebook editors can edit/delete only events whose `createdBy` matches their current user ID.
 - owners can edit/delete all events in their owned notebook.
 
@@ -269,7 +280,7 @@ Event duplication behavior:
 - duplicating an event creates an unsaved draft first
 - the duplicated draft should copy category, title, note, severity, and structured values
 - `occurredAt` should be reset to the current time
-- future photo or attachment fields must not be copied automatically, because media should represent the specific moment or condition being recorded
+- photo or attachment fields must not be copied automatically, because media should represent the specific moment or condition being recorded
 
 ## Supabase Tables
 

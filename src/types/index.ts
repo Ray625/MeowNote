@@ -10,6 +10,7 @@ export type {
   CreateCategoryInput,
   EventCategory,
   EventCategoryGroup,
+  EventPhoto,
   EventSeverity,
   UpdateCategoryInput,
   UpdateCatInput,
