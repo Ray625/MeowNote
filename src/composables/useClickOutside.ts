@@ -2,7 +2,10 @@ import { onBeforeUnmount, onMounted, type Ref } from 'vue'
 
 type MaybeElementRef = Ref<HTMLElement | null | undefined>
 
-export function useClickOutside(target: MaybeElementRef, onOutsideClick: () => void): void {
+export function useClickOutside(
+  target: MaybeElementRef,
+  onOutsideClick: (event: PointerEvent) => void,
+): void {
   function handlePointerDown(event: PointerEvent): void {
     const element = target.value
     const eventTarget = event.target
@@ -11,7 +14,7 @@ export function useClickOutside(target: MaybeElementRef, onOutsideClick: () => v
       return
     }
 
-    onOutsideClick()
+    onOutsideClick(event)
   }
 
   onMounted(() => {

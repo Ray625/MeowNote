@@ -13,7 +13,7 @@ import {
   uploadEventPhoto,
 } from '@/services/eventPhotoStorage'
 import { useCatTrackerStore } from '@/stores/catTracker'
-import type { EventCategory, EventPhoto } from '@/types'
+import type { CatEvent, EventCategory, EventPhoto } from '@/types'
 import { createId } from '@/utils/id'
 
 const catTrackerStore = useCatTrackerStore()
@@ -111,6 +111,15 @@ const previewTrackStyle = computed(() => ({
   transform: `translateX(calc(${-(previewPhotoIndex.value ?? 0) * 100}% + ${previewDragOffset.value}px))`,
   transition: isPreviewDragging.value ? 'none' : undefined,
 }))
+
+interface EventFormSnapshot {
+  categoryId: string
+  occurredAt: string
+  title?: string
+  note?: string
+  photos: EventPhoto[]
+  values: Record<string, unknown>
+}
 
 useBodyScrollLock(computed(() => Boolean(editingEvent.value)))
 
@@ -336,32 +345,43 @@ async function saveEditingEvent(): Promise<void> {
   const shouldPersistNumericValue =
     shouldSaveNumericValue && Number.isFinite(numericValue) && isValidRatingValue
 
+  const previousPhotos = editingEvent.value.photos ?? []
+  const removedPhotoPaths = previousPhotos
+    .map((photo) => photo.path)
+    .filter((path) => !existingPhotos.value.some((photo) => photo.path === path))
+  const eventInput = {
+    categoryId: selectedCategoryId.value,
+    occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
+    title: editingTitle.value.trim() || undefined,
+    note: editingNote.value.trim() || undefined,
+    photos: [...existingPhotos.value],
+    values: shouldPersistNumericValue
+      ? { amount: numericValue }
+      : hasCategoryChanged
+        ? {}
+        : shouldSaveNumericValue
+          ? {}
+          : {},
+  }
+
+  if (
+    !isCreatingEventDraft.value &&
+    pendingPhotos.value.length === 0 &&
+    removedPhotoPaths.length === 0 &&
+    !hasEventFormChanges(editingEvent.value, eventInput, selectedCategory)
+  ) {
+    catTrackerStore.closeEditEvent()
+    return
+  }
+
   isSavingEvent.value = true
   const uploadedPhotoPaths: string[] = []
 
   try {
-    const previousPhotos = editingEvent.value.photos ?? []
-    const removedPhotoPaths = previousPhotos
-      .map((photo) => photo.path)
-      .filter((path) => !existingPhotos.value.some((photo) => photo.path === path))
     const uploadedPhotos = await uploadPendingPhotos(editingEvent.value.id)
 
     uploadedPhotoPaths.push(...uploadedPhotos.map((photo) => photo.path))
-
-    const eventInput = {
-      categoryId: selectedCategoryId.value,
-      occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
-      title: editingTitle.value.trim() || undefined,
-      note: editingNote.value.trim() || undefined,
-      photos: [...existingPhotos.value, ...uploadedPhotos],
-      values: shouldPersistNumericValue
-        ? { amount: numericValue }
-        : hasCategoryChanged
-          ? {}
-          : shouldSaveNumericValue
-            ? {}
-            : {},
-    }
+    eventInput.photos = [...existingPhotos.value, ...uploadedPhotos]
 
     if (isCreatingEventDraft.value) {
       catTrackerStore.createEvent({
@@ -526,6 +546,65 @@ function confirmCategoryChange(): void {
 
 function hasEventValues(values?: Record<string, unknown>): boolean {
   return Boolean(values && Object.keys(values).length > 0)
+}
+
+function hasEventFormChanges(
+  event: CatEvent,
+  snapshot: EventFormSnapshot,
+  selectedCategory?: EventCategory,
+): boolean {
+  const originalSnapshot = getOriginalEventFormSnapshot(event, selectedCategory)
+
+  return (
+    originalSnapshot.categoryId !== snapshot.categoryId ||
+    originalSnapshot.occurredAt !== snapshot.occurredAt ||
+    originalSnapshot.title !== snapshot.title ||
+    originalSnapshot.note !== snapshot.note ||
+    !arePhotoListsEqual(originalSnapshot.photos, snapshot.photos) ||
+    !areEventValuesEqual(originalSnapshot.values, snapshot.values)
+  )
+}
+
+function getOriginalEventFormSnapshot(
+  event: CatEvent,
+  selectedCategory?: EventCategory,
+): EventFormSnapshot {
+  const originalCategory = categoriesById.value.get(event.categoryId)
+  const shouldCompareNumericValue =
+    selectedCategory?.id === event.categoryId &&
+    (originalCategory?.statisticsMode === 'sum' ||
+      originalCategory?.statisticsMode === 'measurement' ||
+      originalCategory?.statisticsMode === 'rating')
+  const originalAmount = shouldCompareNumericValue ? event.values?.amount : undefined
+
+  return {
+    categoryId: event.categoryId,
+    occurredAt: fromDateAndTimeInputValues(toDateInputValue(event.occurredAt), toTimeInputValue(event.occurredAt)),
+    title: event.title?.trim() || undefined,
+    note: event.note?.trim() || undefined,
+    photos: event.photos ?? [],
+    values: typeof originalAmount === 'number' && Number.isFinite(originalAmount) ? { amount: originalAmount } : {},
+  }
+}
+
+function arePhotoListsEqual(left: EventPhoto[], right: EventPhoto[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every((photo, index) => {
+    const otherPhoto = right[index]
+
+    if (!otherPhoto) {
+      return false
+    }
+
+    return photo.path === otherPhoto.path && photo.width === otherPhoto.width && photo.height === otherPhoto.height
+  })
+}
+
+function areEventValuesEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 function getNumericValueText(values?: Record<string, unknown>): string {

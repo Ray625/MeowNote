@@ -24,6 +24,7 @@ const isMonthPickerOpen = ref(false)
 const isToolMenuOpen = ref(false)
 const monthPickerRef = ref<HTMLElement>()
 const toolMenuRef = ref<HTMLElement>()
+const filterPopoverRef = ref<HTMLElement>()
 const pickerYear = ref(visibleMonth.value.getFullYear())
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
@@ -45,6 +46,19 @@ useClickOutside(monthPickerRef, () => {
 
 useClickOutside(toolMenuRef, () => {
   isToolMenuOpen.value = false
+})
+
+useClickOutside(filterPopoverRef, (event) => {
+  const eventTarget = event.target
+
+  if (
+    eventTarget instanceof Element &&
+    eventTarget.closest('[data-event-filter-trigger="true"]')
+  ) {
+    return
+  }
+
+  catTrackerStore.closeEventFilter()
 })
 
 function syncMonthPicker(): void {
@@ -108,6 +122,7 @@ function openFilterFromTools(): void {
         :aria-expanded="isEventFilterOpen"
         aria-haspopup="dialog"
         aria-label="篩選搜尋結果"
+        data-event-filter-trigger="true"
         @click="catTrackerStore.toggleEventFilter"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true" class="calendar-search-filter__icon">
@@ -197,7 +212,12 @@ function openFilterFromTools(): void {
               </svg>
               <span>搜尋</span>
             </button>
-            <button type="button" role="menuitem" @click="openFilterFromTools">
+            <button
+              type="button"
+              role="menuitem"
+              data-event-filter-trigger="true"
+              @click="openFilterFromTools"
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true" class="tool-menu-icon">
                 <path
                   :d="
@@ -228,7 +248,9 @@ function openFilterFromTools(): void {
       </div>
     </div>
 
-    <EventFilterPopover v-if="isEventFilterOpen" />
+    <div v-if="isEventFilterOpen" ref="filterPopoverRef">
+      <EventFilterPopover />
+    </div>
 
     <div v-if="!isEventSearchOpen" class="calendar-header">
       <button

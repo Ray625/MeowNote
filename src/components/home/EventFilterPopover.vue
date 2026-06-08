@@ -15,31 +15,33 @@ const { eventFilterCategoryIds, groupedEventFilterCategories, hasEventCategoryFi
         <span v-if="eventFilterCategoryIds.length > 0">已選 {{ eventFilterCategoryIds.length }} 項</span>
       </div>
 
-      <div v-if="groupedEventFilterCategories.length > 0" class="event-filter-groups">
-        <section
-          v-for="group in groupedEventFilterCategories"
-          :key="group.group"
-          class="event-filter-group"
-        >
-          <h2>{{ group.group }}</h2>
-          <div class="event-filter-options">
-            <button
-              v-for="category in group.categories"
-              :key="category.id"
-              class="event-filter-option"
-              :class="{
-                'event-filter-option--active': eventFilterCategoryIds.includes(category.id),
-              }"
-              type="button"
-              @click="catTrackerStore.toggleEventFilterCategory(category.id)"
-            >
-              {{ category.name }}
-            </button>
-          </div>
-        </section>
-      </div>
+      <div class="event-filter-body">
+        <div v-if="groupedEventFilterCategories.length > 0" class="event-filter-groups">
+          <section
+            v-for="group in groupedEventFilterCategories"
+            :key="group.group"
+            class="event-filter-group"
+          >
+            <h2>{{ group.group }}</h2>
+            <div class="event-filter-options">
+              <button
+                v-for="category in group.categories"
+                :key="category.id"
+                class="event-filter-option"
+                :class="{
+                  'event-filter-option--active': eventFilterCategoryIds.includes(category.id),
+                }"
+                type="button"
+                @click="catTrackerStore.toggleEventFilterCategory(category.id)"
+              >
+                {{ category.name }}
+              </button>
+            </div>
+          </section>
+        </div>
 
-      <p v-else class="event-filter-empty">目前沒有可篩選的紀錄分類。</p>
+        <p v-else class="event-filter-empty">目前沒有可篩選的紀錄分類。</p>
+      </div>
 
       <div class="event-filter-actions">
         <button
@@ -69,8 +71,9 @@ const { eventFilterCategoryIds, groupedEventFilterCategories, hasEventCategoryFi
 
 .event-filter-panel {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: min(430px, calc(100dvh - 140px));
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   gap: 12px;
   border: 1px solid var(--color-border);
@@ -92,6 +95,13 @@ const { eventFilterCategoryIds, groupedEventFilterCategories, hasEventCategoryFi
 .event-filter-empty {
   color: var(--color-muted);
   font-size: 0.875rem;
+}
+
+.event-filter-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
 }
 
 .event-filter-groups {
