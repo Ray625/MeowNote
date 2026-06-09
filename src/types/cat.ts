@@ -48,6 +48,7 @@ export interface CatEvent {
 
 export interface EventPhoto {
   path: string
+  thumbnailPath?: string
   width?: number
   height?: number
 }

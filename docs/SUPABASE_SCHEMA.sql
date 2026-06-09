@@ -461,9 +461,10 @@ set search_path = public, storage
 as $$
 declare
   target_notebook_id uuid := public.get_event_photo_notebook_id(object_name);
-  object_size bigint := coalesce((object_metadata->>'size')::bigint, 0);
+  object_size bigint := nullif(object_metadata->>'size', '')::bigint;
   notebook_used_bytes bigint;
   recent_upload_count integer;
+  original_object_name text;
   notebook_quota_bytes bigint := 200 * 1024 * 1024;
   recent_upload_limit integer := 15;
 begin
@@ -475,7 +476,9 @@ begin
     return false;
   end if;
 
-  if object_size <= 0 or object_size > 2097152 then
+  -- Storage may not populate metadata.size until after the insert policy runs.
+  -- The bucket file_size_limit remains the authoritative 2 MB per-file limit.
+  if object_size is not null and object_size > 2097152 then
     return false;
   end if;
 
@@ -486,7 +489,29 @@ begin
     and public.get_event_photo_notebook_id(name) = target_notebook_id
     and metadata ? 'size';
 
-  if notebook_used_bytes + object_size > notebook_quota_bytes then
+  if notebook_used_bytes >= notebook_quota_bytes then
+    return false;
+  end if;
+
+  if object_size is not null
+    and notebook_used_bytes + object_size > notebook_quota_bytes
+  then
+    return false;
+  end if;
+
+  if object_name like '%/thumbnail.webp' then
+    original_object_name := regexp_replace(object_name, 'thumbnail\.webp$', 'original.webp');
+
+    return exists (
+      select 1
+      from storage.objects
+      where bucket_id = 'event-photos'
+        and name = original_object_name
+        and owner_id = auth.uid()::text
+    );
+  end if;
+
+  if object_name not like '%/original.webp' then
     return false;
   end if;
 
@@ -495,6 +520,7 @@ begin
   from storage.objects
   where bucket_id = 'event-photos'
     and owner_id = auth.uid()::text
+    and name like '%/original.webp'
     and created_at > now() - interval '10 minutes';
 
   return recent_upload_count < recent_upload_limit;

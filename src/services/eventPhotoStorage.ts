@@ -12,6 +12,8 @@ const MIN_PHOTO_EDGE = 960
 const INITIAL_WEBP_QUALITY = 0.76
 const MIN_WEBP_QUALITY = 0.58
 const TARGET_PHOTO_BYTES = 900 * 1024
+const THUMBNAIL_MAX_EDGE = 320
+const THUMBNAIL_WEBP_QUALITY = 0.68
 const SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60
 const SIGNED_URL_REFRESH_BUFFER_MS = 5 * 60 * 1000
 
@@ -31,6 +33,7 @@ interface UploadEventPhotoInput {
 
 interface ProcessedPhoto {
   file: File
+  thumbnailFile: File
   width: number
   height: number
 }
@@ -46,24 +49,44 @@ export async function uploadEventPhoto({
   }
 
   const processedPhoto = await processEventPhoto(file)
-  const path = buildEventPhotoPath(notebookId, eventId, index)
+  const { path, thumbnailPath } = buildEventPhotoPaths(notebookId, eventId, index)
   const { error } = await supabase.storage
     .from(EVENT_PHOTO_BUCKET)
     .upload(path, processedPhoto.file, {
       cacheControl: '31536000',
       contentType: 'image/webp',
-      upsert: true,
+      upsert: false,
     })
 
   if (error) {
     throw error
   }
 
+  const { error: thumbnailError } = await supabase.storage
+    .from(EVENT_PHOTO_BUCKET)
+    .upload(thumbnailPath, processedPhoto.thumbnailFile, {
+      cacheControl: '31536000',
+      contentType: 'image/webp',
+      upsert: false,
+    })
+
+  if (thumbnailError) {
+    await deleteEventPhotoPaths([path])
+    throw thumbnailError
+  }
+
   return {
     path,
+    thumbnailPath,
     width: processedPhoto.width,
     height: processedPhoto.height,
   }
+}
+
+export function getEventPhotoStoragePaths(photos: EventPhoto[]): string[] {
+  return photos.flatMap((photo) =>
+    photo.thumbnailPath ? [photo.path, photo.thumbnailPath] : [photo.path],
+  )
 }
 
 export async function createEventPhotoSignedUrls(paths: string[]): Promise<Map<string, string>> {
@@ -134,15 +157,27 @@ export async function deleteEventPhotoPaths(paths: string[]): Promise<void> {
 async function processEventPhoto(file: File): Promise<ProcessedPhoto> {
   const imageBlob = await normalizeReadableImageBlob(file)
   const bitmap = await createImageBitmap(imageBlob)
-  const encodedPhoto = await encodeWebpUnderTarget(bitmap)
+  try {
+    const encodedPhoto = await encodeWebpUnderTarget(bitmap)
+    const thumbnail = await encodeThumbnail(bitmap)
 
-  bitmap.close()
-
-  return {
-    file: new File([encodedPhoto.blob], `${createId('event-photo')}.webp`, { type: 'image/webp' }),
-    width: encodedPhoto.width,
-    height: encodedPhoto.height,
+    return {
+      file: new File([encodedPhoto.blob], 'original.webp', { type: 'image/webp' }),
+      thumbnailFile: new File([thumbnail], 'thumbnail.webp', { type: 'image/webp' }),
+      width: encodedPhoto.width,
+      height: encodedPhoto.height,
+    }
+  } finally {
+    bitmap.close()
   }
+}
+
+async function encodeThumbnail(bitmap: ImageBitmap): Promise<Blob> {
+  const ratio = Math.min(1, THUMBNAIL_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+  const width = Math.max(1, Math.round(bitmap.width * ratio))
+  const height = Math.max(1, Math.round(bitmap.height * ratio))
+
+  return drawAndEncodeWebp(bitmap, width, height, THUMBNAIL_WEBP_QUALITY)
 }
 
 async function encodeWebpUnderTarget(bitmap: ImageBitmap): Promise<{
@@ -251,6 +286,15 @@ function isHeicFile(file: File): boolean {
   )
 }
 
-function buildEventPhotoPath(notebookId: string, eventId: string, index: number): string {
-  return `notebooks/${notebookId}/events/${eventId}/${Date.now()}-${index}-${createId('photo')}.webp`
+function buildEventPhotoPaths(
+  notebookId: string,
+  eventId: string,
+  index: number,
+): { path: string; thumbnailPath: string } {
+  const directory = `notebooks/${notebookId}/events/${eventId}/${Date.now()}-${index}-${createId('photo')}`
+
+  return {
+    path: `${directory}/original.webp`,
+    thumbnailPath: `${directory}/thumbnail.webp`,
+  }
 }

@@ -12,7 +12,7 @@ import {
   RemoteCatEventConflictError,
   updateRemoteCatEvent,
 } from '@/services/syncRemoteCatEvents'
-import { deleteEventPhotoPaths } from '@/services/eventPhotoStorage'
+import { deleteEventPhotoPaths, getEventPhotoStoragePaths } from '@/services/eventPhotoStorage'
 import { createRemoteCat, deleteRemoteCat, updateRemoteCat } from '@/services/syncRemoteCats'
 import {
   createRemoteCategory,
@@ -417,9 +417,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     return [...groups.values()]
   }
-  const editingEvent = computed(() =>
-    draftEvent.value ??
-    (editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined),
+  const editingEvent = computed(
+    () =>
+      draftEvent.value ??
+      (editingEventId.value ? eventsById.value.get(editingEventId.value) : undefined),
   )
   const isCreatingEventDraft = computed(() => Boolean(draftEvent.value))
   const editingCategory = computed(() =>
@@ -582,13 +583,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const category = sourceEvent ? categoriesById.value.get(sourceEvent.categoryId) : undefined
     const sourceCat = sourceEvent ? catsById.value.get(sourceEvent.catId) : undefined
 
-    if (
-      !sourceEvent ||
-      !sourceCat ||
-      sourceCat.isArchived ||
-      !category ||
-      category.isArchived
-    ) {
+    if (!sourceEvent || !sourceCat || sourceCat.isArchived || !category || category.isArchived) {
       return undefined
     }
 
@@ -849,7 +844,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       valueLabel:
         nextStatisticsMode === 'count' ? undefined : (nextInput.valueLabel ?? category.valueLabel),
       valueMax:
-        nextStatisticsMode === 'rating' ? (nextInput.valueMax ?? category.valueMax ?? 10) : undefined,
+        nextStatisticsMode === 'rating'
+          ? (nextInput.valueMax ?? category.valueMax ?? 10)
+          : undefined,
       valueUnit:
         nextStatisticsMode === 'count' || nextStatisticsMode === 'rating'
           ? undefined
@@ -976,13 +973,15 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         await syncDeletedEvent(
           eventId,
           expectedUpdatedAt,
-          event?.photos?.map((photo) => photo.path) ?? [],
+          getEventPhotoStoragePaths(event?.photos ?? []),
         )
       } catch (error) {
         if (deletedEvent) {
           const nextEvents = [...events.value]
           const insertIndex =
-            deletedEventIndex >= 0 ? Math.min(deletedEventIndex, nextEvents.length) : nextEvents.length
+            deletedEventIndex >= 0
+              ? Math.min(deletedEventIndex, nextEvents.length)
+              : nextEvents.length
 
           nextEvents.splice(insertIndex, 0, deletedEvent)
           events.value = nextEvents
@@ -1120,7 +1119,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     return remoteAuth.activeNotebookId.value
   }
 
-  function markLocalChangeIfSignedOut(input?: Parameters<typeof markSignedOutNotebookCacheDirty>[0]): void {
+  function markLocalChangeIfSignedOut(
+    input?: Parameters<typeof markSignedOutNotebookCacheDirty>[0],
+  ): void {
     if (!remoteAuth.user.value) {
       markSignedOutNotebookCacheDirty(input)
     }
@@ -1150,10 +1151,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return true
     }
 
-    return (
-      !remoteAuth.activeNotebookRole.value ||
-      remoteAuth.activeNotebookRole.value === 'owner'
-    )
+    return !remoteAuth.activeNotebookRole.value || remoteAuth.activeNotebookRole.value === 'owner'
   }
 
   function getFallbackSelectedCatId(excludedCatId?: string): string {

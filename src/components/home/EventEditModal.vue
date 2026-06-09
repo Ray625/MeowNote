@@ -9,6 +9,7 @@ import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   createEventPhotoSignedUrls,
   deleteEventPhotoPaths,
+  getEventPhotoStoragePaths,
   MAX_EVENT_PHOTO_COUNT,
   MAX_ORIGINAL_EVENT_PHOTO_BYTES,
   MAX_PENDING_ORIGINAL_EVENT_PHOTO_BYTES,
@@ -35,6 +36,7 @@ const categorySelectRef = ref<HTMLElement>()
 const pendingCategoryId = ref<string>()
 const existingPhotos = ref<EventPhoto[]>([])
 const existingPhotoUrls = ref<Map<string, string>>(new Map())
+const existingFullPhotoUrls = ref<Map<string, string>>(new Map())
 const pendingPhotos = ref<Array<{ id: string; file: File; previewUrl: string }>>([])
 const photoUploadError = ref('')
 const photoInputRef = ref<HTMLInputElement>()
@@ -84,7 +86,10 @@ const previewPhotos = computed(() => [
     .map((photo) => ({
       key: photo.path,
       kind: 'existing' as const,
-      src: existingPhotoUrls.value.get(photo.path) ?? '',
+      src:
+        existingFullPhotoUrls.value.get(photo.path) ??
+        existingPhotoUrls.value.get(photo.path) ??
+        '',
       alt: '事件照片',
     }))
     .filter((photo) => photo.src),
@@ -164,6 +169,18 @@ watch(
   },
   { immediate: true },
 )
+
+watch(previewPhotoIndex, (index) => {
+  if (typeof index !== 'number') {
+    return
+  }
+
+  const photo = previewPhotos.value[index]
+
+  if (photo?.kind === 'existing') {
+    void ensureFullPhotoUrl(photo.key)
+  }
+})
 
 function closeEditEvent(): void {
   if (isSavingEvent.value) {
@@ -350,9 +367,10 @@ async function saveEditingEvent(): Promise<void> {
     shouldSaveNumericValue && Number.isFinite(numericValue) && isValidRatingValue
 
   const previousPhotos = editingEvent.value.photos ?? []
-  const removedPhotoPaths = previousPhotos
-    .map((photo) => photo.path)
-    .filter((path) => !existingPhotos.value.some((photo) => photo.path === path))
+  const removedPhotos = previousPhotos.filter(
+    (photo) => !existingPhotos.value.some((existingPhoto) => existingPhoto.path === photo.path),
+  )
+  const removedPhotoPaths = getEventPhotoStoragePaths(removedPhotos)
   const eventInput = {
     categoryId: selectedCategoryId.value,
     occurredAt: fromDateAndTimeInputValues(editingOccurredDate.value, editingOccurredTime.value),
@@ -384,7 +402,7 @@ async function saveEditingEvent(): Promise<void> {
   try {
     const uploadedPhotos = await uploadPendingPhotos(editingEvent.value.id)
 
-    uploadedPhotoPaths.push(...uploadedPhotos.map((photo) => photo.path))
+    uploadedPhotoPaths.push(...getEventPhotoStoragePaths(uploadedPhotos))
     eventInput.photos = [...existingPhotos.value, ...uploadedPhotos]
 
     if (isCreatingEventDraft.value) {
@@ -429,7 +447,10 @@ function addPendingPhotos(event: Event): void {
   const input = event.target as HTMLInputElement
   const selectedFiles = Array.from(input.files ?? [])
   const acceptedFiles: File[] = []
-  const pendingOriginalBytes = pendingPhotos.value.reduce((total, photo) => total + photo.file.size, 0)
+  const pendingOriginalBytes = pendingPhotos.value.reduce(
+    (total, photo) => total + photo.file.size,
+    0,
+  )
   let nextPendingOriginalBytes = pendingOriginalBytes
 
   photoUploadError.value = ''
@@ -541,9 +562,37 @@ function getPhotoUploadErrorMessage(error: unknown): string {
 
 async function refreshExistingPhotoUrls(photos: EventPhoto[]): Promise<void> {
   try {
-    existingPhotoUrls.value = await createEventPhotoSignedUrls(photos.map((photo) => photo.path))
+    const displayPaths = photos.map((photo) => photo.thumbnailPath ?? photo.path)
+    const signedUrls = await createEventPhotoSignedUrls(displayPaths)
+
+    existingPhotoUrls.value = new Map(
+      photos.flatMap((photo) => {
+        const signedUrl = signedUrls.get(photo.thumbnailPath ?? photo.path)
+
+        return signedUrl ? [[photo.path, signedUrl] as const] : []
+      }),
+    )
+    existingFullPhotoUrls.value = new Map()
   } catch {
     existingPhotoUrls.value = new Map()
+    existingFullPhotoUrls.value = new Map()
+  }
+}
+
+async function ensureFullPhotoUrl(path: string): Promise<void> {
+  if (existingFullPhotoUrls.value.has(path)) {
+    return
+  }
+
+  try {
+    const signedUrls = await createEventPhotoSignedUrls([path])
+    const signedUrl = signedUrls.get(path)
+
+    if (signedUrl) {
+      existingFullPhotoUrls.value = new Map(existingFullPhotoUrls.value).set(path, signedUrl)
+    }
+  } catch {
+    // Keep the thumbnail visible when the full-size image cannot be loaded.
   }
 }
 
@@ -633,11 +682,17 @@ function getOriginalEventFormSnapshot(
 
   return {
     categoryId: event.categoryId,
-    occurredAt: fromDateAndTimeInputValues(toDateInputValue(event.occurredAt), toTimeInputValue(event.occurredAt)),
+    occurredAt: fromDateAndTimeInputValues(
+      toDateInputValue(event.occurredAt),
+      toTimeInputValue(event.occurredAt),
+    ),
     title: event.title?.trim() || undefined,
     note: event.note?.trim() || undefined,
     photos: event.photos ?? [],
-    values: typeof originalAmount === 'number' && Number.isFinite(originalAmount) ? { amount: originalAmount } : {},
+    values:
+      typeof originalAmount === 'number' && Number.isFinite(originalAmount)
+        ? { amount: originalAmount }
+        : {},
   }
 }
 
@@ -653,11 +708,19 @@ function arePhotoListsEqual(left: EventPhoto[], right: EventPhoto[]): boolean {
       return false
     }
 
-    return photo.path === otherPhoto.path && photo.width === otherPhoto.width && photo.height === otherPhoto.height
+    return (
+      photo.path === otherPhoto.path &&
+      photo.thumbnailPath === otherPhoto.thumbnailPath &&
+      photo.width === otherPhoto.width &&
+      photo.height === otherPhoto.height
+    )
   })
 }
 
-function areEventValuesEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+function areEventValuesEqual(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 

@@ -203,7 +203,12 @@ function normalizeEventPhotos(value: unknown): EventPhoto[] {
       continue
     }
 
-    const photo = item as { path?: unknown; width?: unknown; height?: unknown }
+    const photo = item as {
+      path?: unknown
+      thumbnailPath?: unknown
+      width?: unknown
+      height?: unknown
+    }
 
     if (typeof photo.path !== 'string' || !photo.path) {
       continue
@@ -211,6 +216,10 @@ function normalizeEventPhotos(value: unknown): EventPhoto[] {
 
     photos.push({
       path: photo.path,
+      thumbnailPath:
+        typeof photo.thumbnailPath === 'string' && photo.thumbnailPath
+          ? photo.thumbnailPath
+          : undefined,
       width: typeof photo.width === 'number' ? photo.width : undefined,
       height: typeof photo.height === 'number' ? photo.height : undefined,
     })
