@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import FixedModal from '@/components/common/FixedModal.vue'
 import { CATEGORY_GROUP_ORDER, getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useClickOutside } from '@/composables/useClickOutside'
@@ -773,16 +774,17 @@ function formatTimeLabel(value: string): string {
 </script>
 
 <template>
-  <div v-if="editingEvent" class="modal-backdrop" role="presentation" @click.self="closeEditEvent">
-    <section
-      class="event-modal"
-      :class="{ 'event-modal--preview-open': activePreviewPhoto }"
-      aria-labelledby="event-modal-title"
-      role="dialog"
-      aria-modal="true"
-      :style="getCategoryStyle(modalCategory)"
+  <div v-if="editingEvent">
+    <FixedModal
+      panel-tag="form"
+      labelledby="event-modal-title"
+      accented
+      :close-on-backdrop="!isSavingEvent"
+      :panel-style="getCategoryStyle(modalCategory)"
+      @close="closeEditEvent"
+      @submit.prevent="saveEditingEvent"
     >
-      <div class="event-modal__header">
+      <template #header>
         <div>
           <span id="event-modal-title" class="event-modal__eyebrow">
             {{ isCreatingEventDraft ? '新增紀錄' : canEditEvent ? '編輯紀錄' : '檢視紀錄' }}
@@ -797,263 +799,258 @@ function formatTimeLabel(value: string): string {
         >
           ×
         </button>
-      </div>
+      </template>
 
-      <form class="event-form" @submit.prevent="saveEditingEvent">
-        <div class="event-form__body">
-          <div ref="categorySelectRef" class="field category-select-field">
-            <span class="field__label">分類</span>
-            <button
-              class="category-select-trigger"
-              type="button"
-              :disabled="!canEditEvent"
-              :aria-expanded="isCategoryMenuOpen"
-              aria-haspopup="listbox"
-              @click="toggleCategoryMenu"
-            >
-              <span class="category-select-trigger__content">
-                <span class="category-dot" aria-hidden="true"></span>
-                <span>{{ modalCategory?.name ?? '選擇分類' }}</span>
-              </span>
-              <span class="category-select-trigger__chevron" aria-hidden="true">⌄</span>
-            </button>
-
-            <div v-if="isCategoryMenuOpen" class="category-menu" role="listbox">
-              <section
-                v-for="group in groupedActiveCategories"
-                :key="group.group"
-                class="category-menu__group"
-                :aria-label="group.group"
-              >
-                <h3 class="category-menu__group-title">{{ group.group }}</h3>
-                <button
-                  v-for="category in group.categories"
-                  :key="category.id"
-                  class="category-option"
-                  :class="{ 'category-option--selected': selectedCategoryId === category.id }"
-                  :style="getCategoryStyle(category)"
-                  type="button"
-                  role="option"
-                  :aria-selected="selectedCategoryId === category.id"
-                  @click="requestCategoryChange(category.id)"
-                >
-                  <span class="category-option__check" aria-hidden="true">
-                    {{ selectedCategoryId === category.id ? '✓' : '' }}
-                  </span>
-                  <span class="category-dot" aria-hidden="true"></span>
-                  <span class="category-option__name">{{ category.name }}</span>
-                </button>
-              </section>
-            </div>
-          </div>
-
-          <label class="field">
-            <span class="field__label">發生時間</span>
-            <div class="datetime-fields">
-              <div class="native-picker-field">
-                <div class="datetime-display" aria-hidden="true">
-                  <span class="datetime-display__label">日期</span>
-                  <span class="datetime-display__value">{{ occurredDateLabel }}</span>
-                </div>
-                <input
-                  v-model="editingOccurredDate"
-                  class="native-picker-input"
-                  type="date"
-                  aria-label="選擇日期"
-                  :disabled="!canEditEvent"
-                  @click="showNativePicker"
-                />
-              </div>
-              <div class="native-picker-field">
-                <div class="datetime-display" aria-hidden="true">
-                  <span class="datetime-display__label">時間</span>
-                  <span class="datetime-display__value">{{ occurredTimeLabel }}</span>
-                </div>
-                <input
-                  v-model="editingOccurredTime"
-                  class="native-picker-input"
-                  type="time"
-                  aria-label="選擇時間"
-                  :disabled="!canEditEvent"
-                  @click="showNativePicker"
-                />
-              </div>
-            </div>
-          </label>
-
-          <label v-if="shouldShowNumericValue" class="field">
-            <span class="field__label">
-              {{ modalCategory?.valueLabel || '數值' }}
-              <template v-if="modalCategory?.valueUnit">({{ modalCategory.valueUnit }})</template>
+      <template #body>
+        <div ref="categorySelectRef" class="field category-select-field">
+          <span class="field__label">分類</span>
+          <button
+            class="category-select-trigger"
+            type="button"
+            :disabled="!canEditEvent"
+            :aria-expanded="isCategoryMenuOpen"
+            aria-haspopup="listbox"
+            @click="toggleCategoryMenu"
+          >
+            <span class="category-select-trigger__content">
+              <span class="category-dot" aria-hidden="true"></span>
+              <span>{{ modalCategory?.name ?? '選擇分類' }}</span>
             </span>
-            <div v-if="isRatingValue" class="rating-control">
-              <input
-                v-model.number="editingNumericValue"
-                class="rating-slider"
-                type="range"
-                min="1"
-                :max="ratingMax"
-                step="1"
-                :disabled="!canEditEvent"
-              />
-              <div class="rating-ticks" aria-hidden="true">
-                <span v-for="value in ratingMax" :key="value"></span>
-              </div>
-              <div class="rating-scale" aria-hidden="true">
-                <span>1</span>
-                <span>{{ ratingMax }}</span>
-              </div>
-              <span class="rating-current">目前評分：{{ ratingDisplayValue }}</span>
-            </div>
-            <input
-              v-else
-              v-model="editingNumericValue"
-              class="field__control"
-              type="number"
-              inputmode="decimal"
-              step="any"
-              :disabled="!canEditEvent"
-            />
-          </label>
+            <span class="category-select-trigger__chevron" aria-hidden="true">⌄</span>
+          </button>
 
-          <label class="field">
-            <span class="field__label">標題</span>
-            <input
-              v-model="editingTitle"
-              class="field__control"
-              type="text"
-              maxlength="40"
-              :disabled="!canEditEvent"
-            />
-          </label>
-
-          <label class="field">
-            <span class="field__label">備註</span>
-            <textarea
-              v-model="editingNote"
-              class="field__control field__control--textarea"
-              placeholder="補充症狀、狀態或其他觀察"
-              rows="5"
-              :disabled="!canEditEvent"
-            ></textarea>
-          </label>
-
-          <div class="field">
-            <div class="photo-field__header">
-              <span class="field__label">照片</span>
-              <span class="photo-field__count"
-                >{{ totalPhotoCount }} / {{ MAX_EVENT_PHOTO_COUNT }}</span
-              >
-            </div>
-            <div v-if="totalPhotoCount > 0" class="photo-grid">
-              <div v-for="photo in existingPhotos" :key="photo.path" class="photo-thumb">
-                <button
-                  v-if="existingPhotoUrls.get(photo.path)"
-                  class="photo-thumb__preview"
-                  type="button"
-                  aria-label="預覽照片"
-                  @click="openPhotoPreview(photo.path)"
-                >
-                  <img :src="existingPhotoUrls.get(photo.path)" alt="事件照片" />
-                </button>
-                <span v-else class="photo-thumb__placeholder">圖片載入中</span>
-                <button
-                  v-if="canEditEvent"
-                  class="photo-thumb__remove"
-                  type="button"
-                  aria-label="移除照片"
-                  :disabled="isSavingEvent"
-                  @click="removeExistingPhoto(photo.path)"
-                >
-                  ×
-                </button>
-              </div>
-              <div v-for="photo in pendingPhotos" :key="photo.id" class="photo-thumb">
-                <button
-                  class="photo-thumb__preview"
-                  type="button"
-                  aria-label="預覽待上傳照片"
-                  @click="openPhotoPreview(photo.id)"
-                >
-                  <img :src="photo.previewUrl" alt="待上傳事件照片" />
-                </button>
-                <button
-                  class="photo-thumb__remove"
-                  type="button"
-                  aria-label="移除照片"
-                  :disabled="isSavingEvent"
-                  @click="removePendingPhoto(photo.id)"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            <input
-              ref="photoInputRef"
-              class="visually-hidden-input"
-              type="file"
-              accept="image/*,.heic,.heif"
-              multiple
-              :disabled="!canUploadPhotos || remainingPhotoSlots <= 0 || isSavingEvent"
-              @change="addPendingPhotos"
-            />
-            <button
-              v-if="canEditEvent && remainingPhotoSlots > 0"
-              class="ui-button ui-button--secondary photo-upload-button"
-              type="button"
-              :disabled="!canUploadPhotos || isSavingEvent"
-              @click="photoInputRef?.click()"
+          <div v-if="isCategoryMenuOpen" class="category-menu" role="listbox">
+            <section
+              v-for="group in groupedActiveCategories"
+              :key="group.group"
+              class="category-menu__group"
+              :aria-label="group.group"
             >
-              加入照片
-            </button>
-            <p v-if="canEditEvent && !canUploadPhotos" class="photo-field__hint">
-              登入並使用雲端筆記簿後可以上傳照片。
-            </p>
-            <p v-else-if="photoUploadError" class="photo-field__error">{{ photoUploadError }}</p>
-            <p v-else class="photo-field__hint">每筆紀錄最多 3 張</p>
+              <h3 class="category-menu__group-title">{{ group.group }}</h3>
+              <button
+                v-for="category in group.categories"
+                :key="category.id"
+                class="category-option"
+                :class="{ 'category-option--selected': selectedCategoryId === category.id }"
+                :style="getCategoryStyle(category)"
+                type="button"
+                role="option"
+                :aria-selected="selectedCategoryId === category.id"
+                @click="requestCategoryChange(category.id)"
+              >
+                <span class="category-option__check" aria-hidden="true">
+                  {{ selectedCategoryId === category.id ? '✓' : '' }}
+                </span>
+                <span class="category-dot" aria-hidden="true"></span>
+                <span class="category-option__name">{{ category.name }}</span>
+              </button>
+            </section>
           </div>
-
-          <p v-if="!canEditEvent" class="readonly-message">
-            這筆紀錄由其他成員建立，你可以查看內容，但不能編輯或刪除。
-          </p>
         </div>
 
-        <footer class="event-form__footer">
-          <div
-            class="event-form__actions"
-            :class="{ 'event-form__actions--single': !canEditEvent }"
-          >
-            <button
-              class="ui-button ui-button--secondary secondary-button"
-              type="button"
-              :disabled="isSavingEvent"
-              @click="closeEditEvent"
+        <label class="field">
+          <span class="field__label">發生時間</span>
+          <div class="datetime-fields">
+            <div class="native-picker-field">
+              <div class="datetime-display" aria-hidden="true">
+                <span class="datetime-display__label">日期</span>
+                <span class="datetime-display__value">{{ occurredDateLabel }}</span>
+              </div>
+              <input
+                v-model="editingOccurredDate"
+                class="native-picker-input"
+                type="date"
+                aria-label="選擇日期"
+                :disabled="!canEditEvent"
+                @click="showNativePicker"
+              />
+            </div>
+            <div class="native-picker-field">
+              <div class="datetime-display" aria-hidden="true">
+                <span class="datetime-display__label">時間</span>
+                <span class="datetime-display__value">{{ occurredTimeLabel }}</span>
+              </div>
+              <input
+                v-model="editingOccurredTime"
+                class="native-picker-input"
+                type="time"
+                aria-label="選擇時間"
+                :disabled="!canEditEvent"
+                @click="showNativePicker"
+              />
+            </div>
+          </div>
+        </label>
+
+        <label v-if="shouldShowNumericValue" class="field">
+          <span class="field__label">
+            {{ modalCategory?.valueLabel || '數值' }}
+            <template v-if="modalCategory?.valueUnit">({{ modalCategory.valueUnit }})</template>
+          </span>
+          <div v-if="isRatingValue" class="rating-control">
+            <input
+              v-model.number="editingNumericValue"
+              class="rating-slider"
+              type="range"
+              min="1"
+              :max="ratingMax"
+              step="1"
+              :disabled="!canEditEvent"
+            />
+            <div class="rating-ticks" aria-hidden="true">
+              <span v-for="value in ratingMax" :key="value"></span>
+            </div>
+            <div class="rating-scale" aria-hidden="true">
+              <span>1</span>
+              <span>{{ ratingMax }}</span>
+            </div>
+            <span class="rating-current">目前評分：{{ ratingDisplayValue }}</span>
+          </div>
+          <input
+            v-else
+            v-model="editingNumericValue"
+            class="field__control"
+            type="number"
+            inputmode="decimal"
+            step="any"
+            :disabled="!canEditEvent"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field__label">標題</span>
+          <input
+            v-model="editingTitle"
+            class="field__control"
+            type="text"
+            maxlength="40"
+            :disabled="!canEditEvent"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field__label">備註</span>
+          <textarea
+            v-model="editingNote"
+            class="field__control field__control--textarea"
+            placeholder="補充症狀、狀態或其他觀察"
+            rows="5"
+            :disabled="!canEditEvent"
+          ></textarea>
+        </label>
+
+        <div class="field">
+          <div class="photo-field__header">
+            <span class="field__label">照片</span>
+            <span class="photo-field__count"
+              >{{ totalPhotoCount }} / {{ MAX_EVENT_PHOTO_COUNT }}</span
             >
-              {{ canEditEvent ? '取消' : '關閉' }}
-            </button>
-            <button
-              v-if="canEditEvent"
-              class="ui-button ui-button--primary primary-button"
-              type="submit"
-              :disabled="isSavingEvent"
-            >
-              {{ isSavingEvent ? '儲存中' : '儲存' }}
-            </button>
+          </div>
+          <div v-if="totalPhotoCount > 0" class="photo-grid">
+            <div v-for="photo in existingPhotos" :key="photo.path" class="photo-thumb">
+              <button
+                v-if="existingPhotoUrls.get(photo.path)"
+                class="photo-thumb__preview"
+                type="button"
+                aria-label="預覽照片"
+                @click="openPhotoPreview(photo.path)"
+              >
+                <img :src="existingPhotoUrls.get(photo.path)" alt="事件照片" />
+              </button>
+              <span v-else class="photo-thumb__placeholder">圖片載入中</span>
+              <button
+                v-if="canEditEvent"
+                class="photo-thumb__remove"
+                type="button"
+                aria-label="移除照片"
+                :disabled="isSavingEvent"
+                @click="removeExistingPhoto(photo.path)"
+              >
+                ×
+              </button>
+            </div>
+            <div v-for="photo in pendingPhotos" :key="photo.id" class="photo-thumb">
+              <button
+                class="photo-thumb__preview"
+                type="button"
+                aria-label="預覽待上傳照片"
+                @click="openPhotoPreview(photo.id)"
+              >
+                <img :src="photo.previewUrl" alt="待上傳事件照片" />
+              </button>
+              <button
+                class="photo-thumb__remove"
+                type="button"
+                aria-label="移除照片"
+                :disabled="isSavingEvent"
+                @click="removePendingPhoto(photo.id)"
+              >
+                ×
+              </button>
+            </div>
           </div>
 
+          <input
+            ref="photoInputRef"
+            class="visually-hidden-input"
+            type="file"
+            accept="image/*,.heic,.heif"
+            multiple
+            :disabled="!canUploadPhotos || remainingPhotoSlots <= 0 || isSavingEvent"
+            @change="addPendingPhotos"
+          />
           <button
-            v-if="canEditEvent && !isCreatingEventDraft"
-            class="ui-button ui-button--danger danger-button"
+            v-if="canEditEvent && remainingPhotoSlots > 0"
+            class="ui-button ui-button--secondary photo-upload-button"
+            type="button"
+            :disabled="!canUploadPhotos || isSavingEvent"
+            @click="photoInputRef?.click()"
+          >
+            加入照片
+          </button>
+          <p v-if="canEditEvent && !canUploadPhotos" class="photo-field__hint">
+            登入並使用雲端筆記簿後可以上傳照片。
+          </p>
+          <p v-else-if="photoUploadError" class="photo-field__error">{{ photoUploadError }}</p>
+          <p v-else class="photo-field__hint">每筆紀錄最多 3 張</p>
+        </div>
+
+        <p v-if="!canEditEvent" class="readonly-message">
+          這筆紀錄由其他成員建立，你可以查看內容，但不能編輯或刪除。
+        </p>
+      </template>
+
+      <template #footer>
+        <div class="event-form__actions" :class="{ 'event-form__actions--single': !canEditEvent }">
+          <button
+            class="ui-button ui-button--secondary secondary-button"
             type="button"
             :disabled="isSavingEvent"
-            @click="deleteEditingEvent"
+            @click="closeEditEvent"
           >
-            刪除紀錄
+            {{ canEditEvent ? '取消' : '關閉' }}
           </button>
-        </footer>
-      </form>
-    </section>
+          <button
+            v-if="canEditEvent"
+            class="ui-button ui-button--primary primary-button"
+            type="submit"
+            :disabled="isSavingEvent"
+          >
+            {{ isSavingEvent ? '儲存中' : '儲存' }}
+          </button>
+        </div>
+
+        <button
+          v-if="canEditEvent && !isCreatingEventDraft"
+          class="ui-button ui-button--danger danger-button"
+          type="button"
+          :disabled="isSavingEvent"
+          @click="deleteEditingEvent"
+        >
+          刪除紀錄
+        </button>
+      </template>
+    </FixedModal>
 
     <ConfirmDialog
       v-if="isCategoryChangeConfirmOpen"
@@ -1135,46 +1132,6 @@ function formatTimeLabel(value: string): string {
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  overscroll-behavior: contain;
-  padding: 16px;
-  background: var(--overlay-color);
-}
-
-.event-modal {
-  display: flex;
-  width: min(100%, 520px);
-  max-height: calc(100dvh - 32px);
-  flex-direction: column;
-  overflow: hidden;
-  overscroll-behavior: contain;
-  border: 1px solid color-mix(in srgb, var(--category-color) 34%, var(--color-border));
-  border-radius: 12px;
-  background: var(--color-surface);
-  box-shadow: 0 22px 60px var(--shadow-color);
-}
-
-.event-modal--preview-open {
-  overflow: hidden;
-}
-
-.event-modal__header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px;
-  border-bottom: 1px solid var(--color-border);
-}
-
 .event-modal__eyebrow {
   display: block;
   margin: 0;
@@ -1182,15 +1139,6 @@ function formatTimeLabel(value: string): string {
   font-size: 1.05rem;
   font-weight: 800;
   line-height: 1.25;
-}
-
-.event-modal__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: color-mix(in srgb, var(--category-color) 82%, var(--color-text));
-  font-size: 1.25rem;
 }
 
 .category-dot {
@@ -1206,32 +1154,6 @@ function formatTimeLabel(value: string): string {
   height: 36px;
   font-size: 1.35rem;
   line-height: 1;
-}
-
-.event-form {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.event-form__body {
-  display: grid;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  gap: 14px;
-  padding: 18px;
-  scrollbar-gutter: stable;
-}
-
-.event-form__footer {
-  display: grid;
-  flex: 0 0 auto;
-  gap: 10px;
-  padding: 14px 18px 18px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
 }
 
 .field {
@@ -1893,27 +1815,6 @@ function formatTimeLabel(value: string): string {
 }
 
 @media (max-width: 560px) {
-  .modal-backdrop {
-    padding: 10px;
-  }
-
-  .event-modal {
-    max-height: calc(100dvh - 20px);
-  }
-
-  .event-modal__header {
-    padding: 16px;
-  }
-
-  .event-form__body {
-    padding: 16px;
-    scrollbar-gutter: auto;
-  }
-
-  .event-form__footer {
-    padding: 12px 16px 16px;
-  }
-
   .datetime-fields {
     grid-template-columns: 1fr;
   }

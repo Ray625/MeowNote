@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DogAvatarToggle from '@/components/common/DogAvatarToggle.vue'
+import FixedModal from '@/components/common/FixedModal.vue'
 import FixedSelect from '@/components/common/FixedSelect.vue'
 import {
   CAT_AVATAR_OPTIONS,
@@ -33,23 +34,10 @@ import type {
   EventCategoryGroup,
 } from '@/types'
 const catTrackerStore = useCatTrackerStore()
-const {
-  categories,
-  categoriesByGroup,
-  cats,
-  selectedCatId,
-} = storeToRefs(catTrackerStore)
+const { categories, categoriesByGroup, cats, selectedCatId } = storeToRefs(catTrackerStore)
 const { isDarkMode, toggleDarkMode } = useTheme()
-const {
-  activeNotebookId,
-  activeNotebookRole,
-  initializeAuth,
-  isSignedIn,
-} = useRemoteAuth()
-const {
-  isDogAvatarMode,
-  setDogAvatarMode: setStoredDogAvatarMode,
-} = useDogAvatarPreference()
+const { activeNotebookId, activeNotebookRole, initializeAuth, isSignedIn } = useRemoteAuth()
+const { isDogAvatarMode, setDogAvatarMode: setStoredDogAvatarMode } = useDogAvatarPreference()
 
 type SettingsSection = 'categories' | 'pets'
 type SelectOption = { value: string; label: string }
@@ -745,7 +733,6 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       ?.categories.filter((category) => !category.isArchived) ?? []
   )
 }
-
 </script>
 
 <template>
@@ -1030,250 +1017,234 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
       </div>
     </div>
 
-    <div
+    <FixedModal
       v-if="isCategoryModalOpen"
-      class="category-modal-backdrop"
-      role="presentation"
-      @click.self="closeCategoryModal"
+      panel-tag="form"
+      labelledby="category-modal-title"
+      @close="closeCategoryModal"
+      @submit.prevent="saveCategory"
     >
-      <section
-        class="category-modal"
-        aria-labelledby="category-modal-title"
-        role="dialog"
-        aria-modal="true"
-      >
-        <form class="category-form" @submit.prevent="saveCategory">
-          <div class="category-form__header">
-            <h2 id="category-modal-title">{{ formTitle }}</h2>
+      <template #header>
+        <h2 id="category-modal-title" class="fixed-form-title">{{ formTitle }}</h2>
+        <button
+          class="ui-button ui-button--icon modal-close"
+          type="button"
+          aria-label="關閉分類視窗"
+          @click="closeCategoryModal"
+        >
+          ×
+        </button>
+      </template>
+
+      <template #body>
+        <label class="field">
+          <span class="field__label">名稱</span>
+          <input v-model="categoryName" class="field__control" type="text" required />
+        </label>
+
+        <div class="field">
+          <span class="field__label">群組</span>
+          <FixedSelect v-model="categoryGroup" :options="categoryGroupOptions" />
+        </div>
+
+        <div class="field">
+          <span class="field__label">顏色</span>
+          <div class="color-palette" role="radiogroup" aria-label="分類顏色">
             <button
-              class="ui-button ui-button--icon modal-close"
+              v-for="colorOption in CATEGORY_COLOR_OPTIONS"
+              :key="colorOption.id"
+              class="color-swatch"
+              :class="{ 'color-swatch--selected': categoryColorId === colorOption.id }"
+              :style="{
+                '--swatch-color': colorOption.value,
+                '--swatch-background': colorOption.background,
+                '--swatch-border': colorOption.border,
+              }"
               type="button"
-              aria-label="關閉分類視窗"
-              @click="closeCategoryModal"
+              role="radio"
+              :aria-checked="categoryColorId === colorOption.id"
+              :aria-label="colorOption.label"
+              :title="colorOption.label"
+              @click="selectCategoryColor(colorOption.id)"
             >
-              ×
+              <span class="color-swatch__dot" aria-hidden="true"></span>
             </button>
           </div>
+        </div>
 
+        <div class="field">
+          <div class="field__label-row">
+            <span class="field__label">統計方式</span>
+            <button
+              class="field-help-button"
+              type="button"
+              :aria-expanded="isStatisticsHelpOpen"
+              aria-controls="statistics-mode-help"
+              aria-label="查看統計方式說明"
+              @click="isStatisticsHelpOpen = !isStatisticsHelpOpen"
+            >
+              ?
+            </button>
+          </div>
+          <FixedSelect v-model="categoryStatisticsMode" :options="categoryStatisticsModeOptions" />
+        </div>
+
+        <template v-if="categoryStatisticsMode !== 'count'">
           <label class="field">
-            <span class="field__label">名稱</span>
-            <input v-model="categoryName" class="field__control" type="text" required />
+            <span class="field__label">數值名稱</span>
+            <input
+              v-model="categoryValueLabel"
+              class="field__control"
+              type="text"
+              :placeholder="
+                categoryStatisticsMode === 'rating' ? '評分' : '例如：飲水量、體重、劑量'
+              "
+            />
           </label>
 
-          <div class="field">
-            <span class="field__label">群組</span>
-            <FixedSelect v-model="categoryGroup" :options="categoryGroupOptions" />
-          </div>
+          <label v-if="categoryStatisticsMode === 'rating'" class="field">
+            <span class="field__label">評分最大值</span>
+            <input
+              v-model="categoryValueMax"
+              class="field__control"
+              type="number"
+              inputmode="numeric"
+              min="2"
+              step="1"
+              required
+            />
+          </label>
 
-          <div class="field">
-            <span class="field__label">顏色</span>
-            <div class="color-palette" role="radiogroup" aria-label="分類顏色">
-              <button
-                v-for="colorOption in CATEGORY_COLOR_OPTIONS"
-                :key="colorOption.id"
-                class="color-swatch"
-                :class="{ 'color-swatch--selected': categoryColorId === colorOption.id }"
-                :style="{
-                  '--swatch-color': colorOption.value,
-                  '--swatch-background': colorOption.background,
-                  '--swatch-border': colorOption.border,
-                }"
-                type="button"
-                role="radio"
-                :aria-checked="categoryColorId === colorOption.id"
-                :aria-label="colorOption.label"
-                :title="colorOption.label"
-                @click="selectCategoryColor(colorOption.id)"
-              >
-                <span class="color-swatch__dot" aria-hidden="true"></span>
-              </button>
-            </div>
-          </div>
+          <label v-if="categoryStatisticsMode !== 'rating'" class="field">
+            <span class="field__label">單位</span>
+            <input
+              v-model="categoryValueUnit"
+              class="field__control"
+              type="text"
+              placeholder="例如：ml、g、kg"
+            />
+          </label>
+        </template>
+      </template>
 
-          <div class="field">
-            <div class="field__label-row">
-              <span class="field__label">統計方式</span>
-              <button
-                class="field-help-button"
-                type="button"
-                :aria-expanded="isStatisticsHelpOpen"
-                aria-controls="statistics-mode-help"
-                aria-label="查看統計方式說明"
-                @click="isStatisticsHelpOpen = !isStatisticsHelpOpen"
-              >
-                ?
-              </button>
-            </div>
-            <FixedSelect v-model="categoryStatisticsMode" :options="categoryStatisticsModeOptions" />
-          </div>
+      <template #footer>
+        <div class="category-form__actions">
+          <button
+            class="ui-button ui-button--secondary save-button"
+            type="button"
+            @click="closeCategoryModal"
+          >
+            取消
+          </button>
+          <button class="ui-button ui-button--primary save-button" type="submit">
+            {{ isEditing ? '儲存分類' : '新增分類' }}
+          </button>
+        </div>
+      </template>
+    </FixedModal>
 
-          <template v-if="categoryStatisticsMode !== 'count'">
-            <label class="field">
-              <span class="field__label">數值名稱</span>
-              <input
-                v-model="categoryValueLabel"
-                class="field__control"
-                type="text"
-                :placeholder="
-                  categoryStatisticsMode === 'rating' ? '評分' : '例如：飲水量、體重、劑量'
-                "
-              />
-            </label>
-
-            <label v-if="categoryStatisticsMode === 'rating'" class="field">
-              <span class="field__label">評分最大值</span>
-              <input
-                v-model="categoryValueMax"
-                class="field__control"
-                type="number"
-                inputmode="numeric"
-                min="2"
-                step="1"
-                required
-              />
-            </label>
-
-            <label v-if="categoryStatisticsMode !== 'rating'" class="field">
-              <span class="field__label">單位</span>
-              <input
-                v-model="categoryValueUnit"
-                class="field__control"
-                type="text"
-                placeholder="例如：ml、g、kg"
-              />
-            </label>
-          </template>
-
-          <div class="category-form__actions">
-            <button
-              class="ui-button ui-button--secondary save-button"
-              type="button"
-              @click="closeCategoryModal"
-            >
-              取消
-            </button>
-            <button class="ui-button ui-button--primary save-button" type="submit">
-              {{ isEditing ? '儲存分類' : '新增分類' }}
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>
-
-    <div
+    <FixedModal
       v-if="isCatModalOpen"
-      class="category-modal-backdrop"
-      role="presentation"
-      @click.self="closeCatModal"
+      panel-tag="form"
+      labelledby="cat-modal-title"
+      @close="closeCatModal"
+      @submit.prevent="saveCat"
     >
-      <section
-        class="category-modal cat-modal"
-        aria-labelledby="cat-modal-title"
-        role="dialog"
-        aria-modal="true"
-      >
-        <form class="category-form cat-form" @submit.prevent="saveCat">
-          <div class="category-form__header">
-            <h2 id="cat-modal-title">{{ catFormTitle }}</h2>
-            <button
-              class="ui-button ui-button--icon modal-close"
-              type="button"
-              aria-label="關閉寵物視窗"
-              @click="closeCatModal"
-            >
-              ×
-            </button>
+      <template #header>
+        <h2 id="cat-modal-title" class="fixed-form-title">{{ catFormTitle }}</h2>
+        <button
+          class="ui-button ui-button--icon modal-close"
+          type="button"
+          aria-label="關閉寵物視窗"
+          @click="closeCatModal"
+        >
+          ×
+        </button>
+      </template>
+
+      <template #body>
+        <label class="field">
+          <span class="field__label">名字</span>
+          <input v-model="catName" class="field__control" type="text" required />
+        </label>
+
+        <label class="field">
+          <span class="field__label">生日</span>
+          <input v-model="catBirthday" class="field__control" type="date" />
+        </label>
+
+        <div class="field">
+          <span class="field__label">性別</span>
+          <FixedSelect v-model="catSex" :options="catSexOptions" />
+        </div>
+
+        <label class="field">
+          <span class="field__label">體重 kg</span>
+          <input v-model="catWeightKg" class="field__control" type="number" min="0" step="0.1" />
+        </label>
+
+        <div class="field">
+          <div class="cat-avatar-header">
+            <span class="field__label">頭貼</span>
+            <DogAvatarToggle
+              :model-value="isDogAvatarMode"
+              @update:model-value="setDogAvatarMode"
+            />
           </div>
-
-          <div class="cat-form__body">
-            <label class="field">
-              <span class="field__label">名字</span>
-              <input v-model="catName" class="field__control" type="text" required />
-            </label>
-
-            <label class="field">
-              <span class="field__label">生日</span>
-              <input v-model="catBirthday" class="field__control" type="date" />
-            </label>
-
-            <div class="field">
-              <span class="field__label">性別</span>
-              <FixedSelect v-model="catSex" :options="catSexOptions" />
-            </div>
-
-            <label class="field">
-              <span class="field__label">體重 kg</span>
-              <input
-                v-model="catWeightKg"
-                class="field__control"
-                type="number"
-                min="0"
-                step="0.1"
-              />
-            </label>
-
-            <div class="field">
-              <div class="cat-avatar-header">
-                <span class="field__label">頭貼</span>
-                <DogAvatarToggle
-                  :model-value="isDogAvatarMode"
-                  @update:model-value="setDogAvatarMode"
-                />
-              </div>
-              <div
-                class="cat-avatar-options"
-                role="radiogroup"
-                :aria-label="isDogAvatarMode ? '選擇狗狗頭貼' : '選擇貓咪頭貼'"
+          <div
+            class="cat-avatar-options"
+            role="radiogroup"
+            :aria-label="isDogAvatarMode ? '選擇狗狗頭貼' : '選擇貓咪頭貼'"
+          >
+            <button
+              v-for="avatar in visibleCatAvatarOptions"
+              :key="avatar.id"
+              class="cat-avatar-option"
+              :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
+              type="button"
+              role="radio"
+              :aria-checked="catAvatarId === avatar.id"
+              :aria-label="avatar.label"
+              :title="avatar.label"
+              @click="selectCatAvatar(avatar.id)"
+            >
+              <span
+                class="pet-avatar pet-avatar--option"
+                :class="{ 'pet-avatar--dog': isDogAvatarId(avatar.id) }"
+                aria-hidden="true"
               >
-                <button
-                  v-for="avatar in visibleCatAvatarOptions"
-                  :key="avatar.id"
-                  class="cat-avatar-option"
-                  :class="{ 'cat-avatar-option--selected': catAvatarId === avatar.id }"
-                  type="button"
-                  role="radio"
-                  :aria-checked="catAvatarId === avatar.id"
-                  :aria-label="avatar.label"
-                  :title="avatar.label"
-                  @click="selectCatAvatar(avatar.id)"
-                >
-                  <span
-                    class="pet-avatar pet-avatar--option"
-                    :class="{ 'pet-avatar--dog': isDogAvatarId(avatar.id) }"
-                    aria-hidden="true"
-                  >
-                    <img :src="avatar.image" :alt="avatar.label" />
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div class="field">
-              <span class="field__label">絕育狀態</span>
-              <FixedSelect v-model="catIsNeutered" :options="catIsNeuteredOptions" />
-            </div>
-
-            <label class="field">
-              <span class="field__label">備註</span>
-              <textarea v-model="catNote" class="field__control pet-note" rows="4"></textarea>
-            </label>
-          </div>
-
-          <div class="category-form__actions cat-form__actions">
-            <button
-              class="ui-button ui-button--secondary save-button"
-              type="button"
-              @click="closeCatModal"
-            >
-              取消
-            </button>
-            <button class="ui-button ui-button--primary save-button" type="submit">
-              {{ isEditingCat ? '儲存寵物' : '新增寵物' }}
+                <img :src="avatar.image" :alt="avatar.label" />
+              </span>
             </button>
           </div>
-        </form>
-      </section>
-    </div>
+        </div>
+
+        <div class="field">
+          <span class="field__label">絕育狀態</span>
+          <FixedSelect v-model="catIsNeutered" :options="catIsNeuteredOptions" />
+        </div>
+
+        <label class="field">
+          <span class="field__label">備註</span>
+          <textarea v-model="catNote" class="field__control pet-note" rows="4"></textarea>
+        </label>
+      </template>
+
+      <template #footer>
+        <div class="category-form__actions">
+          <button
+            class="ui-button ui-button--secondary save-button"
+            type="button"
+            @click="closeCatModal"
+          >
+            取消
+          </button>
+          <button class="ui-button ui-button--primary save-button" type="submit">
+            {{ isEditingCat ? '儲存寵物' : '新增寵物' }}
+          </button>
+        </div>
+      </template>
+    </FixedModal>
 
     <div
       v-if="isStatisticsHelpOpen"
@@ -1641,6 +1612,12 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 .category-form {
   display: grid;
   gap: 12px;
+}
+
+.fixed-form-title {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
 }
 
 .category-form__header {
@@ -2090,39 +2067,6 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
   box-shadow: 0 22px 60px var(--shadow-color);
 }
 
-.cat-modal {
-  display: flex;
-  max-height: 75vh;
-  flex-direction: column;
-  overflow: hidden;
-  overscroll-behavior: contain;
-}
-
-.cat-form {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.cat-form__body {
-  display: grid;
-  width: 100%;
-  max-width: 100%;
-  min-height: 0;
-  min-width: 0;
-  gap: 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-}
-
-.cat-form__actions {
-  padding-top: 12px;
-  border-top: 1px solid var(--color-divider);
-  background: var(--color-surface);
-}
-
 .cat-detail-modal {
   display: grid;
   gap: 14px;
@@ -2309,10 +2253,6 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
 
   .category-modal {
     padding: 16px;
-  }
-
-  .cat-form__body {
-    padding: 0 4px;
   }
 
   .field__control[type='date'] {
