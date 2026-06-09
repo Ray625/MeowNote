@@ -10,6 +10,8 @@ import {
   createEventPhotoSignedUrls,
   deleteEventPhotoPaths,
   MAX_EVENT_PHOTO_COUNT,
+  MAX_ORIGINAL_EVENT_PHOTO_BYTES,
+  MAX_PENDING_ORIGINAL_EVENT_PHOTO_BYTES,
   uploadEventPhoto,
 } from '@/services/eventPhotoStorage'
 import { useCatTrackerStore } from '@/stores/catTracker'
@@ -34,6 +36,7 @@ const pendingCategoryId = ref<string>()
 const existingPhotos = ref<EventPhoto[]>([])
 const existingPhotoUrls = ref<Map<string, string>>(new Map())
 const pendingPhotos = ref<Array<{ id: string; file: File; previewUrl: string }>>([])
+const photoUploadError = ref('')
 const photoInputRef = ref<HTMLInputElement>()
 const previewPhotoIndex = ref<number>()
 
@@ -139,6 +142,7 @@ watch(
     existingPhotos.value = event?.photos ? [...event.photos] : []
     void refreshExistingPhotoUrls(existingPhotos.value)
     clearPendingPhotos()
+    photoUploadError.value = ''
     closePhotoPreview()
     isCategoryMenuOpen.value = false
     pendingCategoryId.value = undefined
@@ -398,10 +402,11 @@ async function saveEditingEvent(): Promise<void> {
     }
 
     catTrackerStore.closeEditEvent()
-  } catch {
+  } catch (error) {
     if (uploadedPhotoPaths.length) {
       void deleteEventPhotoPaths(uploadedPhotoPaths)
     }
+    photoUploadError.value = getPhotoUploadErrorMessage(error)
     // Store-level sync errors are surfaced by the global toast.
   } finally {
     isSavingEvent.value = false
@@ -422,11 +427,41 @@ function addPendingPhotos(event: Event): void {
   }
 
   const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? []).slice(0, remainingPhotoSlots.value)
+  const selectedFiles = Array.from(input.files ?? [])
+  const acceptedFiles: File[] = []
+  const pendingOriginalBytes = pendingPhotos.value.reduce((total, photo) => total + photo.file.size, 0)
+  let nextPendingOriginalBytes = pendingOriginalBytes
+
+  photoUploadError.value = ''
+
+  for (const file of selectedFiles) {
+    if (acceptedFiles.length >= remainingPhotoSlots.value) {
+      photoUploadError.value = `每筆紀錄最多 ${MAX_EVENT_PHOTO_COUNT} 張照片。`
+      break
+    }
+
+    if (file.size > MAX_ORIGINAL_EVENT_PHOTO_BYTES) {
+      photoUploadError.value = `單張照片原始檔不能超過 ${formatFileSize(MAX_ORIGINAL_EVENT_PHOTO_BYTES)}。`
+      continue
+    }
+
+    if (nextPendingOriginalBytes + file.size > MAX_PENDING_ORIGINAL_EVENT_PHOTO_BYTES) {
+      photoUploadError.value = `這次待上傳的照片總量不能超過 ${formatFileSize(MAX_PENDING_ORIGINAL_EVENT_PHOTO_BYTES)}。`
+      continue
+    }
+
+    nextPendingOriginalBytes += file.size
+    acceptedFiles.push(file)
+  }
+
+  if (acceptedFiles.length === 0) {
+    input.value = ''
+    return
+  }
 
   pendingPhotos.value = [
     ...pendingPhotos.value,
-    ...files.map((file) => ({
+    ...acceptedFiles.map((file) => ({
       id: `${file.name}-${file.size}-${file.lastModified}-${createId('photo-preview')}`,
       file,
       previewUrl: URL.createObjectURL(file),
@@ -456,6 +491,7 @@ function removePendingPhoto(photoId: string, shouldClosePreview = true): void {
   }
 
   pendingPhotos.value = pendingPhotos.value.filter((item) => item.id !== photoId)
+  photoUploadError.value = ''
 
   if (shouldClosePreview) {
     closePhotoPreview()
@@ -483,6 +519,24 @@ async function uploadPendingPhotos(eventId: string): Promise<EventPhoto[]> {
   }
 
   return uploadedPhotos
+}
+
+function formatFileSize(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)}MB`
+}
+
+function getPhotoUploadErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : ''
+
+  if (message.includes('row-level security') || message.includes('violates row-level security')) {
+    return '照片上傳未通過安全限制，可能已超過配額或短時間上傳太多。'
+  }
+
+  if (message) {
+    return `照片上傳失敗：${message}`
+  }
+
+  return '照片上傳失敗，請稍後再試。'
 }
 
 async function refreshExistingPhotoUrls(photos: EventPhoto[]): Promise<void> {
@@ -892,6 +946,7 @@ function formatTimeLabel(value: string): string {
           <p v-if="canEditEvent && !canUploadPhotos" class="photo-field__hint">
             登入並使用雲端筆記簿後可以上傳照片。
           </p>
+          <p v-else-if="photoUploadError" class="photo-field__error">{{ photoUploadError }}</p>
           <p v-else class="photo-field__hint">每筆紀錄最多 3 張</p>
         </div>
 
@@ -1344,14 +1399,21 @@ function formatTimeLabel(value: string): string {
 }
 
 .photo-field__count,
-.photo-field__hint {
+.photo-field__hint,
+.photo-field__error {
   color: var(--color-muted);
   font-size: 0.8125rem;
 }
 
-.photo-field__hint {
+.photo-field__hint,
+.photo-field__error {
   margin: 0;
   line-height: 1.5;
+}
+
+.photo-field__error {
+  color: var(--color-danger);
+  font-weight: 700;
 }
 
 .photo-grid {

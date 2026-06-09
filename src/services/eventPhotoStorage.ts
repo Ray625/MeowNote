@@ -4,6 +4,8 @@ import { createId } from '@/utils/id'
 
 export const EVENT_PHOTO_BUCKET = 'event-photos'
 export const MAX_EVENT_PHOTO_COUNT = 3
+export const MAX_ORIGINAL_EVENT_PHOTO_BYTES = 10 * 1024 * 1024
+export const MAX_PENDING_ORIGINAL_EVENT_PHOTO_BYTES = 30 * 1024 * 1024
 
 const INITIAL_MAX_PHOTO_EDGE = 1280
 const MIN_PHOTO_EDGE = 960

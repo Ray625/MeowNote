@@ -126,7 +126,7 @@ values (
   'event-photos',
   'event-photos',
   false,
-  5242880,
+  2097152,
   array['image/webp']::text[]
 )
 on conflict (id) do update
@@ -434,6 +434,73 @@ $$;
 
 grant execute on function public.delete_owned_notebook_without_events(uuid) to authenticated;
 
+create or replace function public.get_event_photo_notebook_id(object_name text)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, storage
+as $$
+  select case
+    when (storage.foldername(object_name))[1] = 'notebooks'
+      and (storage.foldername(object_name))[2] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    then ((storage.foldername(object_name))[2])::uuid
+    else null
+  end;
+$$;
+
+create or replace function public.can_upload_event_photo_object(
+  object_name text,
+  object_metadata jsonb
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, storage
+as $$
+declare
+  target_notebook_id uuid := public.get_event_photo_notebook_id(object_name);
+  object_size bigint := coalesce((object_metadata->>'size')::bigint, 0);
+  notebook_used_bytes bigint;
+  recent_upload_count integer;
+  notebook_quota_bytes bigint := 200 * 1024 * 1024;
+  recent_upload_limit integer := 15;
+begin
+  if target_notebook_id is null then
+    return false;
+  end if;
+
+  if not public.can_create_notebook_event(target_notebook_id) then
+    return false;
+  end if;
+
+  if object_size <= 0 or object_size > 2097152 then
+    return false;
+  end if;
+
+  select coalesce(sum((metadata->>'size')::bigint), 0)
+  into notebook_used_bytes
+  from storage.objects
+  where bucket_id = 'event-photos'
+    and public.get_event_photo_notebook_id(name) = target_notebook_id
+    and metadata ? 'size';
+
+  if notebook_used_bytes + object_size > notebook_quota_bytes then
+    return false;
+  end if;
+
+  select count(*)
+  into recent_upload_count
+  from storage.objects
+  where bucket_id = 'event-photos'
+    and owner_id = auth.uid()::text
+    and created_at > now() - interval '10 minutes';
+
+  return recent_upload_count < recent_upload_limit;
+end;
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.notebooks enable row level security;
 alter table public.notebook_members enable row level security;
@@ -648,6 +715,7 @@ with check (
   bucket_id = 'event-photos'
   and (storage.foldername(name))[1] = 'notebooks'
   and public.can_create_notebook_event(((storage.foldername(name))[2])::uuid)
+  and public.can_upload_event_photo_object(name, metadata)
 );
 
 create policy "Owners and editors can delete event photos"
