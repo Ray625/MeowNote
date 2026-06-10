@@ -56,9 +56,16 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                   {{ item.dateText }} · {{ item.time }}
                 </time>
                 <strong class="month-event-item__search-title">
-                  <span>{{ item.category?.name ?? '未分類' }}</span>
-                  <span v-if="item.event.title"> · {{ item.event.title }}</span>
-                  <span v-if="getEventValueText(item.event, item.category)">
+                  <span class="month-event-item__category-name">
+                    {{ item.category?.name ?? '未分類' }}
+                  </span>
+                  <span v-if="item.event.title" class="month-event-item__title">
+                    · {{ item.event.title }}
+                  </span>
+                  <span
+                    v-if="getEventValueText(item.event, item.category)"
+                    class="month-event-item__value"
+                  >
                     · {{ getEventValueText(item.event, item.category) }}
                   </span>
                   <span
@@ -91,9 +98,16 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
               <span class="category-dot" aria-hidden="true"></span>
               <div class="month-event-item__content">
                 <strong class="month-event-item__summary">
-                  <span>{{ item.category?.name ?? '未分類' }}</span>
-                  <span v-if="item.event.title"> · {{ item.event.title }}</span>
-                  <span v-if="getEventValueText(item.event, item.category)">
+                  <span class="month-event-item__category-name">
+                    {{ item.category?.name ?? '未分類' }}
+                  </span>
+                  <span v-if="item.event.title" class="month-event-item__title">
+                    · {{ item.event.title }}
+                  </span>
+                  <span
+                    v-if="getEventValueText(item.event, item.category)"
+                    class="month-event-item__value"
+                  >
                     · {{ getEventValueText(item.event, item.category) }}
                   </span>
                   <span
@@ -109,13 +123,9 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
                     </svg>
                   </span>
                 </strong>
-                <span
-                  v-if="
-                    !item.event.title && !getEventValueText(item.event, item.category) && item.event.note
-                  "
-                >
+                <p v-if="item.event.note" class="month-event-item__note">
                   {{ item.event.note }}
-                </span>
+                </p>
                 <span
                   v-else-if="
                     !item.event.title &&
@@ -174,7 +184,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 }
 
 .month-event-group__header span,
-.month-event-item__content span,
 .empty-state {
   color: var(--color-muted);
 }
@@ -302,6 +311,25 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   white-space: normal;
 }
 
+.month-event-item__category-name {
+  color: color-mix(in srgb, var(--category-color) 82%, var(--color-text));
+}
+
+.month-event-item__title,
+.month-event-item__value {
+  color: var(--color-text);
+}
+
+.month-event-item__note {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .photo-attachment-icon {
   display: inline-flex;
   width: 1.05rem;
@@ -327,7 +355,6 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
   font-size: 0.875rem;
 }
 
-.month-event-item__content span,
 .month-event-item__content small {
   overflow: hidden;
   text-overflow: ellipsis;

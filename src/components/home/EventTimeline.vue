@@ -249,7 +249,7 @@ function getCategoryStyle(category?: EventCategory): Record<string, string> {
 .event-item__note {
   flex-basis: 100%;
   overflow: hidden;
-  color: var(--color-text);
+  color: var(--color-muted);
   font-size: 0.9375rem;
   line-height: 1.3;
   text-overflow: ellipsis;
