@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useClickOutside } from '@/composables/useClickOutside'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 
 export interface FixedSelectOption {
   value: string
@@ -20,39 +19,115 @@ const emit = defineEmits<{
 
 const isOpen = ref(false)
 const selectRef = ref<HTMLElement>()
+const triggerRef = ref<HTMLButtonElement>()
+const menuRef = ref<HTMLElement>()
+const menuStyle = ref<CSSProperties>({})
 
-useClickOutside(selectRef, () => {
-  isOpen.value = false
+watch(isOpen, async (open) => {
+  if (!open) {
+    return
+  }
+
+  await nextTick()
+  updateMenuPosition()
+  menuRef.value
+    ?.querySelector<HTMLElement>('.fixed-select__option--selected')
+    ?.scrollIntoView({ block: 'nearest' })
 })
 
-function toggleMenu(): void {
+onMounted(() => {
+  document.addEventListener('pointerdown', closeFromOutside, true)
+  document.addEventListener('keydown', closeFromEscape)
+  window.addEventListener('resize', updateMenuPosition)
+  window.addEventListener('scroll', updateMenuPosition, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeFromOutside, true)
+  document.removeEventListener('keydown', closeFromEscape)
+  window.removeEventListener('resize', updateMenuPosition)
+  window.removeEventListener('scroll', updateMenuPosition, true)
+})
+
+async function toggleMenu(): Promise<void> {
   isOpen.value = !isOpen.value
+
+  if (isOpen.value) {
+    await nextTick()
+    updateMenuPosition()
+  }
 }
 
 function selectOption(value: string): void {
   emit('update:modelValue', value)
   isOpen.value = false
+  triggerRef.value?.focus()
 }
 
-function closeOnFocusOut(event: FocusEvent): void {
-  const currentTarget = event.currentTarget
-  const nextTarget = event.relatedTarget
+function closeFromOutside(event: PointerEvent): void {
+  const target = event.target
 
   if (
-    currentTarget instanceof HTMLElement &&
-    nextTarget instanceof Node &&
-    currentTarget.contains(nextTarget)
+    !isOpen.value ||
+    !(target instanceof Node) ||
+    selectRef.value?.contains(target) ||
+    menuRef.value?.contains(target)
   ) {
     return
   }
 
   isOpen.value = false
 }
+
+function closeFromEscape(event: KeyboardEvent): void {
+  if (!isOpen.value || event.key !== 'Escape') {
+    return
+  }
+
+  isOpen.value = false
+  triggerRef.value?.focus()
+}
+
+function updateMenuPosition(): void {
+  if (!isOpen.value || !triggerRef.value) {
+    return
+  }
+
+  const viewportMargin = 12
+  const menuGap = 8
+  const triggerRect = triggerRef.value.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - triggerRect.bottom - viewportMargin - menuGap
+  const spaceAbove = triggerRect.top - viewportMargin - menuGap
+  const shouldOpenAbove = spaceBelow < 180 && spaceAbove > spaceBelow
+  const availableHeight = Math.max(80, shouldOpenAbove ? spaceAbove : spaceBelow)
+  const maxHeight = Math.min(320, Math.floor(availableHeight))
+  const width = Math.min(triggerRect.width, window.innerWidth - viewportMargin * 2)
+  const left = Math.min(
+    Math.max(viewportMargin, triggerRect.left),
+    window.innerWidth - viewportMargin - width,
+  )
+
+  menuStyle.value = {
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(width)}px`,
+    maxHeight: `${maxHeight}px`,
+    ...(shouldOpenAbove
+      ? {
+          bottom: `${Math.round(window.innerHeight - triggerRect.top + menuGap)}px`,
+          top: 'auto',
+        }
+      : {
+          top: `${Math.round(triggerRect.bottom + menuGap)}px`,
+          bottom: 'auto',
+        }),
+  }
+}
 </script>
 
 <template>
-  <div ref="selectRef" class="fixed-select" @focusout="closeOnFocusOut">
+  <div ref="selectRef" class="fixed-select">
     <button
+      ref="triggerRef"
       class="fixed-select__trigger"
       type="button"
       :disabled="disabled || options.length === 0"
@@ -66,23 +141,31 @@ function closeOnFocusOut(event: FocusEvent): void {
       <span class="fixed-select__chevron" aria-hidden="true">▾</span>
     </button>
 
-    <div v-if="isOpen" class="fixed-select__menu" role="listbox">
-      <button
-        v-for="option in options"
-        :key="option.value"
-        class="fixed-select__option"
-        :class="{ 'fixed-select__option--selected': option.value === modelValue }"
-        type="button"
-        role="option"
-        :aria-selected="option.value === modelValue"
-        @click="selectOption(option.value)"
+    <Teleport to="body">
+      <div
+        v-if="isOpen"
+        ref="menuRef"
+        class="fixed-select__menu"
+        :style="menuStyle"
+        role="listbox"
       >
-        <span class="fixed-select__check" aria-hidden="true">
-          {{ option.value === modelValue ? '✓' : '' }}
-        </span>
-        <span class="fixed-select__label">{{ option.label }}</span>
-      </button>
-    </div>
+        <button
+          v-for="option in options"
+          :key="option.value"
+          class="fixed-select__option"
+          :class="{ 'fixed-select__option--selected': option.value === modelValue }"
+          type="button"
+          role="option"
+          :aria-selected="option.value === modelValue"
+          @click="selectOption(option.value)"
+        >
+          <span class="fixed-select__check" aria-hidden="true">
+            {{ option.value === modelValue ? '✓' : '' }}
+          </span>
+          <span class="fixed-select__label">{{ option.label }}</span>
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -131,15 +214,12 @@ function closeOnFocusOut(event: FocusEvent): void {
 }
 
 .fixed-select__menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  left: 0;
-  z-index: 20;
+  position: fixed;
+  z-index: 60;
   display: grid;
-  max-height: min(320px, 42dvh);
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 8px;
