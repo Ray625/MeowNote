@@ -5,24 +5,50 @@ import TodayButton from '@/components/common/TodayButton.vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import {
-  getCountTrendStats,
-  getMeasurementStats,
-  getRatingStats,
-  getSumDailyStats,
   type CountCategoryStats,
   type MeasurementStats,
   type RatingStats,
   type SumDailyStats,
 } from '@/services/catTrackerStats'
+import {
+  getCountDetailStats,
+  getDetailGranularityLabel,
+  getMeasurementDetailStats,
+  getRatingDetailStats,
+  getSumDetailStats,
+} from '@/services/statsDetailData'
+import {
+  formatStatsOverviewDateInput,
+  formatStatsOverviewRangeTitle,
+  getPreviousStatsOverviewRange,
+  getStatsOverviewRange,
+  parseStatsOverviewDateInput,
+  shiftStatsOverviewReferenceDate,
+  STATS_OVERVIEW_RANGE_OPTIONS,
+  type StatsOverviewRangeMode,
+} from '@/services/statsOverviewRange'
+import {
+  getCurrentCountLabel,
+  getPreviousPeriodLabel,
+} from '@/services/statsOverviewSummary'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
 const props = defineProps<{
   initialCategoryId?: string
+  categoryIds?: string[]
+  initialRangeMode?: StatsOverviewRangeMode
+  initialReferenceDate?: string
 }>()
 
 const emit = defineEmits<{
   back: []
+  rangeChange: [
+    selection: {
+      rangeMode: StatsOverviewRangeMode
+      referenceDate: string
+    },
+  ]
 }>()
 
 type StatsMode = 'count' | 'sum' | 'measurement' | 'rating'
@@ -33,11 +59,13 @@ type RangePickerMode = 'day' | 'week' | 'twoMonth' | 'month' | 'halfYear'
 
 const catTrackerStore = useCatTrackerStore()
 const { categories, events, selectedCatId } = storeToRefs(catTrackerStore)
-const countInterval = ref<CountInterval>('week')
-const measurementInterval = ref<MeasurementInterval>('week')
-const ratingInterval = ref<ValueTrendInterval>('week')
+const rangeMode = ref<StatsOverviewRangeMode>(props.initialRangeMode ?? '7d')
 const selectedStatsCategoryId = ref('')
-const statsReferenceDate = ref(new Date())
+const statsReferenceDate = ref(
+  props.initialReferenceDate
+    ? (parseStatsOverviewDateInput(props.initialReferenceDate) ?? new Date())
+    : new Date(),
+)
 const isRangePickerOpen = ref(false)
 const isStatsCategoryMenuOpen = ref(false)
 const statsCategorySelectRef = ref<HTMLElement>()
@@ -58,102 +86,31 @@ useClickOutside(rangePickerRef, () => {
   isRangePickerOpen.value = false
 })
 
-const periodCount = computed(() =>
-  countInterval.value === 'day' ? 7 : countInterval.value === 'week' ? 8 : 6,
+const recentPeriodText = computed(() =>
+  getCurrentCountLabel(rangeMode.value).replace('總次數', '').trim(),
 )
-const periodUnitText = computed(() =>
-  countInterval.value === 'day' ? '天' : countInterval.value === 'week' ? '週' : '個月',
-)
-const recentPeriodText = computed(() => `最近 ${periodCount.value} ${periodUnitText.value}`)
-const previousPeriodText = computed(() => `前 ${periodCount.value} ${periodUnitText.value}`)
+const previousPeriodText = computed(() => getPreviousPeriodLabel(rangeMode.value))
 const selectedStatsCategory = computed(() =>
   statCategories.value.find((category) => category.id === selectedStatsCategoryId.value),
 )
 const statsMode = computed<StatsMode>(() => selectedStatsCategory.value?.statisticsMode ?? 'count')
-const currentRange = computed(() => {
-  if (statsMode.value === 'count') {
-    if (countInterval.value === 'day') {
-      return getStatsRange(statsReferenceDate.value, 'week', 1)
-    }
-
-    return getStatsRange(statsReferenceDate.value, countInterval.value, periodCount.value)
-  }
-
-  if (statsMode.value === 'rating' && ratingInterval.value === 'day') {
-    return getStatsRange(statsReferenceDate.value, 'day', 1)
-  }
-
-  if (statsMode.value === 'measurement') {
-    return getStatsRange(
-      statsReferenceDate.value,
-      'day',
-      measurementInterval.value === 'month' ? 30 : 7,
-    )
-  }
-
-  if (statsMode.value === 'rating') {
-    return getStatsRange(statsReferenceDate.value, 'day', ratingInterval.value === 'month' ? 30 : 7)
-  }
-
-  return getStatsRange(statsReferenceDate.value, 'day', 7)
-})
-const rangeTitle = computed(
-  () => `${formatRangeDate(currentRange.value.start)} - ${formatRangeDate(currentRange.value.end)}`,
+const currentRange = computed(() => getStatsOverviewRange(rangeMode.value, statsReferenceDate.value))
+const previousRange = computed(() =>
+  getPreviousStatsOverviewRange(rangeMode.value, currentRange.value),
 )
-const nextRangeReferenceDate = computed(() => getNextRangeReferenceDate())
+const rangeTitle = computed(() =>
+  formatStatsOverviewRangeTitle(rangeMode.value, currentRange.value),
+)
+const nextRangeReferenceDate = computed(() =>
+  shiftStatsOverviewReferenceDate(rangeMode.value, statsReferenceDate.value, 1),
+)
 const canShowNextRange = computed(
-  () => getStatsRangeStart(nextRangeReferenceDate.value) <= startOfDay(new Date()),
+  () => nextRangeReferenceDate.value <= startOfDay(new Date()),
 )
 const rangePickerMonthIndex = computed(() => statsReferenceDate.value.getMonth())
-const rangePickerMode = computed<RangePickerMode>(() => {
-  if (statsMode.value === 'count') {
-    if (countInterval.value === 'day') {
-      return 'week'
-    }
-
-    if (countInterval.value === 'week') {
-      return 'twoMonth'
-    }
-
-    return 'halfYear'
-  }
-
-  if (statsMode.value === 'sum') {
-    return 'week'
-  }
-
-  if (statsMode.value === 'measurement') {
-    return measurementInterval.value === 'week' ? 'week' : 'month'
-  }
-
-  if (ratingInterval.value === 'day') {
-    return 'day'
-  }
-
-  return ratingInterval.value === 'week' ? 'week' : 'month'
-})
-const rangePickerLabel = computed(() => {
-  if (rangePickerMode.value === 'day') {
-    return '選擇日期'
-  }
-
-  if (rangePickerMode.value === 'week') {
-    return '選擇週區間'
-  }
-
-  if (rangePickerMode.value === 'twoMonth') {
-    return '選擇雙月區間'
-  }
-
-  if (rangePickerMode.value === 'halfYear') {
-    return '選擇半年區間'
-  }
-
-  return '選擇月份'
-})
-const shouldShowRangePickerHint = computed(
-  () => !(statsMode.value === 'count' && countInterval.value === 'day'),
-)
+const rangePickerMode = computed<RangePickerMode>(() => 'day')
+const rangePickerLabel = computed(() => '選擇區間結束日期')
+const shouldShowRangePickerHint = computed(() => true)
 const rangePickerMonthLabel = computed(
   () =>
     `${rangePickerYear.value}年${new Intl.DateTimeFormat('zh-TW', { month: 'long' }).format(
@@ -231,6 +188,10 @@ const recordedCategoryIds = computed(
 const statCategories = computed(() =>
   categories.value
     .filter((category) => recordedCategoryIds.value.has(category.id))
+    .filter(
+      (category) =>
+        !props.categoryIds?.length || props.categoryIds.includes(category.id),
+    )
     .filter((category) =>
       ['count', 'sum', 'measurement', 'rating'].includes(category.statisticsMode),
     )
@@ -250,47 +211,45 @@ const groupedStatCategories = computed(() => {
     categories: groupCategories,
   }))
 })
-const countStats = computed(() =>
-  getCountTrendStats({
-    categories: categories.value,
-    events: events.value,
-    catId: selectedCatId.value,
-    interval: countInterval.value,
-    periods: periodCount.value,
-    referenceDate: statsReferenceDate.value,
-  }),
-)
 const selectedCountStats = computed(() =>
-  countStats.value.find((stats) => stats.category.id === selectedStatsCategoryId.value),
-)
-const selectedSumStats = computed(() =>
-  getSumDailyStats({
+  getCountDetailStats({
     categories: categories.value,
     events: events.value,
     catId: selectedCatId.value,
     categoryId: selectedStatsCategoryId.value,
-    referenceDate: statsReferenceDate.value,
-    days: 7,
+    rangeMode: rangeMode.value,
+    currentRange: currentRange.value,
+    previousRange: previousRange.value,
+  }),
+)
+const selectedSumStats = computed(() =>
+  getSumDetailStats({
+    categories: categories.value,
+    events: events.value,
+    catId: selectedCatId.value,
+    categoryId: selectedStatsCategoryId.value,
+    rangeMode: rangeMode.value,
+    currentRange: currentRange.value,
   }),
 )
 const selectedMeasurementStats = computed(() =>
-  getMeasurementStats({
+  getMeasurementDetailStats({
     categories: categories.value,
     events: events.value,
     catId: selectedCatId.value,
     categoryId: selectedStatsCategoryId.value,
-    interval: measurementInterval.value,
-    referenceDate: statsReferenceDate.value,
+    rangeMode: rangeMode.value,
+    currentRange: currentRange.value,
   }),
 )
 const selectedRatingStats = computed(() =>
-  getRatingStats({
+  getRatingDetailStats({
     categories: categories.value,
     events: events.value,
     catId: selectedCatId.value,
     categoryId: selectedStatsCategoryId.value,
-    interval: ratingInterval.value,
-    referenceDate: statsReferenceDate.value,
+    rangeMode: rangeMode.value,
+    currentRange: currentRange.value,
   }),
 )
 
@@ -315,15 +274,13 @@ watch(
 )
 
 watch(
-  [selectedStatsCategoryId, selectedCatId],
-  ([categoryId]) => {
-    const latestDate = getLatestCategoryEventDate(categoryId)
-
-    if (latestDate) {
-      statsReferenceDate.value = latestDate
-    }
+  [rangeMode, statsReferenceDate],
+  ([nextRangeMode, nextReferenceDate]) => {
+    emit('rangeChange', {
+      rangeMode: nextRangeMode,
+      referenceDate: formatStatsOverviewDateInput(nextReferenceDate),
+    })
   },
-  { immediate: true },
 )
 
 function getStatsStyle(stats: CountCategoryStats): Record<string, string> {
@@ -354,14 +311,6 @@ function getCategoryOptionStyle(category?: EventCategory): Record<string, string
   return {
     '--category-color': getCategoryColorValue(category),
   }
-}
-
-function getLatestCategoryEventDate(categoryId: string): Date | null {
-  const latestEvent = events.value
-    .filter((event) => event.catId === selectedCatId.value && event.categoryId === categoryId)
-    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())[0]
-
-  return latestEvent ? new Date(latestEvent.occurredAt) : null
 }
 
 function getMeasurementChartStyle(stats: MeasurementStats): Record<string, string> {
@@ -434,9 +383,20 @@ function getAmountText(value: number, stats: SumDailyStats): string {
 }
 
 function getDailyAverageText(stats: SumDailyStats): string {
-  const recordedDays = stats.buckets.filter((bucket) => bucket.total > 0).length
+  const recordedDays =
+    stats.recordedDays ?? stats.buckets.filter((bucket) => bucket.total > 0).length
 
   return getAmountText(stats.rangeTotal / Math.max(recordedDays, 1), stats)
+}
+
+function shouldShowChartLabel(index: number, pointCount: number): boolean {
+  if (pointCount <= 8) {
+    return true
+  }
+
+  const labelStep = Math.ceil(pointCount / 6)
+
+  return index === 0 || index === pointCount - 1 || index % labelStep === 0
 }
 
 function getMeasurementText(value: number, stats: MeasurementStats): string {
@@ -675,28 +635,16 @@ function hasRecordInRange(start: Date, end: Date): boolean {
 }
 
 function showPreviousRange(): void {
-  if (statsMode.value === 'measurement') {
-    statsReferenceDate.value = shiftDate(
-      statsReferenceDate.value,
-      'day',
-      -getValueTrendShift(measurementInterval.value),
-    )
-    return
-  }
+  statsReferenceDate.value = shiftStatsOverviewReferenceDate(
+    rangeMode.value,
+    statsReferenceDate.value,
+    -1,
+  )
+}
 
-  if (statsMode.value === 'rating') {
-    statsReferenceDate.value = shiftDate(
-      statsReferenceDate.value,
-      'day',
-      -getValueTrendShift(ratingInterval.value),
-    )
-    return
-  }
-
-  statsReferenceDate.value =
-    statsMode.value === 'count'
-      ? shiftDate(statsReferenceDate.value, countInterval.value, -periodCount.value)
-      : shiftDate(statsReferenceDate.value, 'day', -7)
+function selectRangeMode(mode: StatsOverviewRangeMode): void {
+  rangeMode.value = mode
+  isRangePickerOpen.value = false
 }
 
 function showNextRange(): void {
@@ -708,17 +656,7 @@ function showNextRange(): void {
 }
 
 function getNextRangeReferenceDate(): Date {
-  if (statsMode.value === 'measurement') {
-    return shiftDate(statsReferenceDate.value, 'day', getValueTrendShift(measurementInterval.value))
-  }
-
-  if (statsMode.value === 'rating') {
-    return shiftDate(statsReferenceDate.value, 'day', getValueTrendShift(ratingInterval.value))
-  }
-
-  return statsMode.value === 'count'
-    ? shiftDate(statsReferenceDate.value, countInterval.value, periodCount.value)
-    : shiftDate(statsReferenceDate.value, 'day', 7)
+  return shiftStatsOverviewReferenceDate(rangeMode.value, statsReferenceDate.value, 1)
 }
 
 function showTodayRange(): void {
@@ -727,27 +665,7 @@ function showTodayRange(): void {
 }
 
 function getStatsRangeStart(referenceDate: Date): Date {
-  if (statsMode.value === 'count') {
-    if (countInterval.value === 'day') {
-      return getStatsRange(referenceDate, 'week', 1).start
-    }
-
-    return getStatsRange(referenceDate, countInterval.value, periodCount.value).start
-  }
-
-  if (statsMode.value === 'rating' && ratingInterval.value === 'day') {
-    return getStatsRange(referenceDate, 'day', 1).start
-  }
-
-  if (statsMode.value === 'measurement') {
-    return getStatsRange(referenceDate, 'day', measurementInterval.value === 'month' ? 30 : 7).start
-  }
-
-  if (statsMode.value === 'rating') {
-    return getStatsRange(referenceDate, 'day', ratingInterval.value === 'month' ? 30 : 7).start
-  }
-
-  return getStatsRange(referenceDate, 'day', 7).start
+  return getStatsOverviewRange(rangeMode.value, referenceDate).start
 }
 
 function getStatsRange(referenceDate: Date, interval: CountInterval, periods: number) {
@@ -835,7 +753,7 @@ function formatDateInputValue(date: Date): string {
     <section class="stats-section" aria-labelledby="stats-item-label">
       <div class="stats-field__label-row">
         <span id="stats-item-label">紀錄項目</span>
-        <small>僅顯示實際有紀錄的分類</small>
+        <small>僅顯示已加入統計頁的分類</small>
       </div>
       <div class="stats-controls">
         <div class="stats-field">
@@ -896,109 +814,24 @@ function formatDateInputValue(date: Date): string {
           </div>
         </div>
 
-        <div
-          v-if="statsMode === 'count'"
-          class="interval-tabs"
-          role="tablist"
-          aria-label="統計區間"
-        >
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': countInterval === 'day' }"
-            type="button"
-            role="tab"
-            :aria-selected="countInterval === 'day'"
-            @click="countInterval = 'day'"
-          >
-            日
-          </button>
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': countInterval === 'week' }"
-            type="button"
-            role="tab"
-            :aria-selected="countInterval === 'week'"
-            @click="countInterval = 'week'"
-          >
-            週
-          </button>
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': countInterval === 'month' }"
-            type="button"
-            role="tab"
-            :aria-selected="countInterval === 'month'"
-            @click="countInterval = 'month'"
-          >
-            月
-          </button>
-        </div>
+        <span class="stats-granularity">
+          圖表：{{ getDetailGranularityLabel(rangeMode) }}
+        </span>
+      </div>
 
-        <div
-          v-else-if="statsMode === 'measurement'"
-          class="interval-tabs interval-tabs--measurement"
-          role="tablist"
-          aria-label="測量統計區間"
+      <div class="stats-detail-range-tabs" role="tablist" aria-label="時間區間">
+        <button
+          v-for="option in STATS_OVERVIEW_RANGE_OPTIONS"
+          :key="option.value"
+          class="stats-detail-range-tab"
+          :class="{ 'stats-detail-range-tab--active': rangeMode === option.value }"
+          type="button"
+          role="tab"
+          :aria-selected="rangeMode === option.value"
+          @click="selectRangeMode(option.value)"
         >
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': measurementInterval === 'week' }"
-            type="button"
-            role="tab"
-            :aria-selected="measurementInterval === 'week'"
-            @click="measurementInterval = 'week'"
-          >
-            週
-          </button>
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': measurementInterval === 'month' }"
-            type="button"
-            role="tab"
-            :aria-selected="measurementInterval === 'month'"
-            @click="measurementInterval = 'month'"
-          >
-            月
-          </button>
-        </div>
-
-        <div
-          v-else-if="statsMode === 'rating'"
-          class="interval-tabs interval-tabs--rating"
-          role="tablist"
-          aria-label="評分統計區間"
-        >
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': ratingInterval === 'day' }"
-            type="button"
-            role="tab"
-            :aria-selected="ratingInterval === 'day'"
-            @click="ratingInterval = 'day'"
-          >
-            日
-          </button>
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': ratingInterval === 'week' }"
-            type="button"
-            role="tab"
-            :aria-selected="ratingInterval === 'week'"
-            @click="ratingInterval = 'week'"
-          >
-            週
-          </button>
-          <button
-            class="interval-tab"
-            :class="{ 'interval-tab--active': ratingInterval === 'month' }"
-            type="button"
-            role="tab"
-            :aria-selected="ratingInterval === 'month'"
-            @click="ratingInterval = 'month'"
-          >
-            月
-          </button>
-        </div>
+          {{ option.label }}
+        </button>
       </div>
 
       <div class="range-controls" aria-label="統計日期區間">
@@ -1238,19 +1071,32 @@ function formatDateInputValue(date: Date): string {
             aria-label="近期趨勢"
             :style="getCountBarsStyle(selectedCountStats)"
           >
-            <div
-              v-for="bucket in selectedCountStats.buckets"
-              :key="bucket.key"
-              class="count-bar"
-              :class="{ 'count-bar--today': isTodayInRange(bucket.start, bucket.end) }"
-            >
-              <span
-                class="count-bar__fill"
-                :style="{ height: getBarHeight(bucket.count, selectedCountStats) }"
-                :title="`${bucket.label}: ${bucket.count} 次`"
-              ></span>
-              <small>{{ bucket.count }}</small>
-              <em>{{ bucket.label }}</em>
+            <div class="count-bars__plot">
+              <div
+                v-for="bucket in selectedCountStats.buckets"
+                :key="bucket.key"
+                class="count-bar"
+              >
+                <span
+                  class="count-bar__fill"
+                  :style="{ height: getBarHeight(bucket.count, selectedCountStats) }"
+                  :title="`${bucket.label}: ${bucket.count} 次`"
+                ></span>
+                <small>{{ bucket.count }}</small>
+              </div>
+            </div>
+            <div class="count-bars__labels" aria-hidden="true">
+              <em
+                v-for="(bucket, index) in selectedCountStats.buckets"
+                :key="bucket.key"
+                :class="{ 'count-bar-label--today': isTodayInRange(bucket.start, bucket.end) }"
+              >
+                {{
+                  shouldShowChartLabel(index, selectedCountStats.buckets.length)
+                    ? bucket.label
+                    : ''
+                }}
+              </em>
             </div>
           </div>
 
@@ -1292,19 +1138,32 @@ function formatDateInputValue(date: Date): string {
           </div>
 
           <div class="count-bars" aria-label="每日總量" :style="getSumBarsStyle(selectedSumStats)">
-            <div
-              v-for="bucket in selectedSumStats.buckets"
-              :key="bucket.key"
-              class="count-bar"
-              :class="{ 'count-bar--today': isTodayInRange(bucket.start, bucket.end) }"
-            >
-              <span
-                class="count-bar__fill"
-                :style="{ height: getSumBarHeight(bucket.total, selectedSumStats) }"
-                :title="`${bucket.label}: ${getAmountText(bucket.total, selectedSumStats)}`"
-              ></span>
-              <small>{{ formatAmount(bucket.total) }}</small>
-              <em>{{ bucket.label }}</em>
+            <div class="count-bars__plot">
+              <div
+                v-for="bucket in selectedSumStats.buckets"
+                :key="bucket.key"
+                class="count-bar"
+              >
+                <span
+                  class="count-bar__fill"
+                  :style="{ height: getSumBarHeight(bucket.total, selectedSumStats) }"
+                  :title="`${bucket.label}: ${getAmountText(bucket.total, selectedSumStats)}`"
+                ></span>
+                <small>{{ formatAmount(bucket.total) }}</small>
+              </div>
+            </div>
+            <div class="count-bars__labels" aria-hidden="true">
+              <em
+                v-for="(bucket, index) in selectedSumStats.buckets"
+                :key="bucket.key"
+                :class="{ 'count-bar-label--today': isTodayInRange(bucket.start, bucket.end) }"
+              >
+                {{
+                  shouldShowChartLabel(index, selectedSumStats.buckets.length)
+                    ? bucket.label
+                    : ''
+                }}
+              </em>
             </div>
           </div>
 
@@ -1390,7 +1249,7 @@ function formatDateInputValue(date: Date): string {
 
             <div class="trend-labels">
               <div
-                v-for="point in selectedMeasurementStats.points"
+                v-for="(point, index) in selectedMeasurementStats.points"
                 :key="point.key"
                 class="trend-label"
                 :class="{ 'trend-label--today': isPointOnToday(point) }"
@@ -1398,7 +1257,11 @@ function formatDateInputValue(date: Date): string {
                 <small>{{
                   typeof point.value === 'number' ? formatAmount(point.value) : '-'
                 }}</small>
-                <em>{{ point.label }}</em>
+                <em>{{
+                  shouldShowChartLabel(index, selectedMeasurementStats.points.length)
+                    ? point.label
+                    : ''
+                }}</em>
               </div>
             </div>
           </div>
@@ -1480,7 +1343,7 @@ function formatDateInputValue(date: Date): string {
 
             <div class="trend-labels">
               <div
-                v-for="point in selectedRatingStats.points"
+                v-for="(point, index) in selectedRatingStats.points"
                 :key="point.key"
                 class="trend-label"
                 :class="{ 'trend-label--today': isPointOnToday(point) }"
@@ -1488,14 +1351,18 @@ function formatDateInputValue(date: Date): string {
                 <small>{{
                   typeof point.value === 'number' ? formatAmount(point.value) : '-'
                 }}</small>
-                <em>{{ point.label }}</em>
+                <em>{{
+                  shouldShowChartLabel(index, selectedRatingStats.points.length)
+                    ? point.label
+                    : ''
+                }}</em>
               </div>
             </div>
           </div>
 
           <div class="count-card__meta">
             <span>最近 {{ formatLatestDate(selectedRatingStats.latestOccurredAt) }}</span>
-            <span>{{ ratingInterval === 'day' ? '單日多筆' : '只顯示有紀錄日期' }}</span>
+            <span>{{ rangeMode === 'day' ? '單日多筆' : getDetailGranularityLabel(rangeMode) }}</span>
           </div>
         </article>
       </div>
@@ -1576,11 +1443,55 @@ function formatDateInputValue(date: Date): string {
 .stats-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-granularity {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .stats-controls--single {
   grid-template-columns: 1fr;
+}
+
+.stats-detail-range-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-background);
+  scrollbar-width: none;
+}
+
+.stats-detail-range-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.stats-detail-range-tab {
+  min-height: 40px;
+  border: 0;
+  border-right: 1px solid var(--color-divider);
+  padding: 0 10px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.stats-detail-range-tab:last-child {
+  border-right: 0;
+}
+
+.stats-detail-range-tab--active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .mode-tabs {
@@ -2093,9 +2004,18 @@ function formatDateInputValue(date: Date): string {
 
 .count-bars {
   display: grid;
+  gap: 4px;
+}
+
+.count-bars__plot,
+.count-bars__labels {
+  display: grid;
   grid-template-columns: repeat(var(--count-bucket-count), minmax(0, 1fr));
-  align-items: end;
   gap: 6px;
+}
+
+.count-bars__plot {
+  align-items: end;
   min-height: 76px;
 }
 
@@ -2120,17 +2040,19 @@ function formatDateInputValue(date: Date): string {
   font-weight: 800;
 }
 
-.count-bar em {
+.count-bars__labels em {
   overflow: hidden;
+  min-width: 0;
   max-width: 100%;
   color: var(--color-muted);
   font-size: 0.6875rem;
   font-style: normal;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.count-bar--today em {
+.count-bar-label--today {
   color: var(--color-text);
   font-weight: 800;
 }
@@ -2232,14 +2154,17 @@ function formatDateInputValue(date: Date): string {
 
 @media (hover: hover) and (pointer: fine) {
   .mode-tab:hover,
-  .interval-tab:hover {
+  .interval-tab:hover,
+  .stats-detail-range-tab:hover {
     background: color-mix(in srgb, var(--color-primary) 18%, transparent);
     color: var(--color-text);
   }
 
   .mode-tab--active:hover,
-  .interval-tab--active:hover {
+  .interval-tab--active:hover,
+  .stats-detail-range-tab--active:hover {
     background: var(--color-primary);
+    color: var(--color-on-primary);
   }
 }
 
@@ -2253,6 +2178,14 @@ function formatDateInputValue(date: Date): string {
   .stats-field {
     width: 100%;
     justify-self: stretch;
+  }
+
+  .stats-granularity {
+    justify-self: center;
+  }
+
+  .stats-detail-range-tabs {
+    grid-template-columns: repeat(6, 72px);
   }
 
   .interval-tabs {

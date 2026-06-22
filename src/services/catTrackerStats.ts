@@ -33,6 +33,7 @@ export interface SumDailyStats {
   currentDayTotal: number
   maxDailyTotal: number
   minDailyTotal: number
+  recordedDays?: number
   buckets: SumDailyBucket[]
   latestOccurredAt?: string
 }
@@ -275,6 +276,7 @@ export function getSumDailyStats({
     currentDayTotal,
     maxDailyTotal: Math.max(...bucketTotals, 0),
     minDailyTotal: Math.min(...bucketTotals),
+    recordedDays: buckets.filter((bucket) => bucket.total > 0).length,
     buckets,
     latestOccurredAt,
   }

@@ -48,8 +48,20 @@ import {
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
+const props = defineProps<{
+  initialRangeMode?: StatsOverviewRangeMode
+  initialReferenceDate?: string
+}>()
+
 const emit = defineEmits<{
-  openCategory: [categoryId: string]
+  openCategory: [
+    selection: {
+      categoryId: string
+      categoryIds: string[]
+      rangeMode: StatsOverviewRangeMode
+      referenceDate: string
+    },
+  ]
 }>()
 
 const catTrackerStore = useCatTrackerStore()
@@ -61,8 +73,12 @@ const isManagerOpen = ref(false)
 const draggingCategoryId = ref<string>()
 const dragTargetCategoryId = ref<string>()
 const dragTargetPosition = ref<'before' | 'after'>('before')
-const rangeMode = ref<StatsOverviewRangeMode>('7d')
-const statsReferenceDate = ref(new Date())
+const rangeMode = ref<StatsOverviewRangeMode>(props.initialRangeMode ?? '7d')
+const statsReferenceDate = ref(
+  props.initialReferenceDate
+    ? (parseStatsOverviewDateInput(props.initialReferenceDate) ?? new Date())
+    : new Date(),
+)
 const draftReferenceDate = ref(formatStatsOverviewDateInput(statsReferenceDate.value))
 const isRangePickerOpen = ref(false)
 const rangePickerRef = ref<HTMLElement>()
@@ -386,6 +402,15 @@ function applyReferenceDate(): void {
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
+
+function openCategory(categoryId: string): void {
+  emit('openCategory', {
+    categoryId,
+    categoryIds: [...selectedCategoryIds.value],
+    rangeMode: rangeMode.value,
+    referenceDate: formatStatsOverviewDateInput(statsReferenceDate.value),
+  })
+}
 </script>
 
 <template>
@@ -507,7 +532,7 @@ function startOfLocalDay(date: Date): Date {
         <button
           class="stats-overview-card__main"
           type="button"
-          @click="emit('openCategory', category.id)"
+          @click="openCategory(category.id)"
         >
           <span class="stats-overview-card__dot" aria-hidden="true"></span>
           <span class="stats-overview-card__content">
@@ -549,7 +574,10 @@ function startOfLocalDay(date: Date): Date {
                 </b>
               </span>
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
-              <small class="stats-overview-card__record-days">
+              <small
+                v-if="getSumSummary(category.id)!.currentCount > 0"
+                class="stats-overview-card__record-days"
+              >
                 有紀錄 {{ getSumSummary(category.id)!.currentRecordedDays }} 天・共
                 {{ getSumSummary(category.id)!.currentCount }} 筆
               </small>
@@ -603,7 +631,10 @@ function startOfLocalDay(date: Date): Date {
                 </span>
               </span>
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
-              <small class="stats-overview-card__record-days">
+              <small
+                v-if="getMeasurementSummary(category.id)!.currentCount > 0"
+                class="stats-overview-card__record-days"
+              >
                 有紀錄 {{ getMeasurementSummary(category.id)!.currentRecordedDays }} 天・共
                 {{ getMeasurementSummary(category.id)!.currentCount }} 筆
               </small>
@@ -650,7 +681,10 @@ function startOfLocalDay(date: Date): Date {
                 </b>
               </span>
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
-              <small class="stats-overview-card__record-days">
+              <small
+                v-if="getRatingSummary(category.id)!.currentCount > 0"
+                class="stats-overview-card__record-days"
+              >
                 有紀錄 {{ getRatingSummary(category.id)!.currentRecordedDays }} 天・共
                 {{ getRatingSummary(category.id)!.currentCount }} 筆
               </small>
