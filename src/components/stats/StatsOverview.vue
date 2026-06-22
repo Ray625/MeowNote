@@ -25,10 +25,25 @@ import {
 } from '@/services/statsOverviewRange'
 import {
   formatCountDelta,
+  formatRatingDelta,
+  formatRatingScore,
+  formatSumDelta,
+  formatSummaryAmount,
+  formatSummaryDate,
   getCountOverviewSummary,
   getCurrentCountLabel,
+  getCurrentMeasurementLabel,
+  getCurrentRatingLabel,
+  getCurrentSumLabel,
+  getMeasurementOverviewSummary,
+  getPreviousMeasurementLabel,
   getPreviousPeriodLabel,
+  getRatingOverviewSummary,
+  getSumOverviewSummary,
   type CountOverviewSummary,
+  type MeasurementOverviewSummary,
+  type RatingOverviewSummary,
+  type SumOverviewSummary,
 } from '@/services/statsOverviewSummary'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
@@ -140,6 +155,58 @@ const countSummariesByCategoryId = computed(
         ]),
     ),
 )
+const sumSummariesByCategoryId = computed(
+  () =>
+    new Map(
+      selectedCategories.value
+        .filter((category) => category.statisticsMode === 'sum')
+        .map((category) => [
+          category.id,
+          getSumOverviewSummary({
+            category,
+            events: events.value,
+            catId: selectedCatId.value,
+            rangeMode: rangeMode.value,
+            currentRange: currentRange.value,
+            previousRange: previousRange.value,
+          }),
+        ]),
+    ),
+)
+const measurementSummariesByCategoryId = computed(
+  () =>
+    new Map(
+      selectedCategories.value
+        .filter((category) => category.statisticsMode === 'measurement')
+        .map((category) => [
+          category.id,
+          getMeasurementOverviewSummary({
+            category,
+            events: events.value,
+            catId: selectedCatId.value,
+            currentRange: currentRange.value,
+            previousRange: previousRange.value,
+          }),
+        ]),
+    ),
+)
+const ratingSummariesByCategoryId = computed(
+  () =>
+    new Map(
+      selectedCategories.value
+        .filter((category) => category.statisticsMode === 'rating')
+        .map((category) => [
+          category.id,
+          getRatingOverviewSummary({
+            category,
+            events: events.value,
+            catId: selectedCatId.value,
+            currentRange: currentRange.value,
+            previousRange: previousRange.value,
+          }),
+        ]),
+    ),
+)
 
 useBodyScrollLock(computed(() => isManagerOpen.value || shouldShowSetup.value))
 useClickOutside(rangePickerRef, () => {
@@ -179,6 +246,18 @@ function getCategoryStyle(category: EventCategory): Record<string, string> {
 
 function getCountSummary(categoryId: string): CountOverviewSummary | undefined {
   return countSummariesByCategoryId.value.get(categoryId)
+}
+
+function getSumSummary(categoryId: string): SumOverviewSummary | undefined {
+  return sumSummariesByCategoryId.value.get(categoryId)
+}
+
+function getMeasurementSummary(categoryId: string): MeasurementOverviewSummary | undefined {
+  return measurementSummariesByCategoryId.value.get(categoryId)
+}
+
+function getRatingSummary(categoryId: string): RatingOverviewSummary | undefined {
+  return ratingSummariesByCategoryId.value.get(categoryId)
 }
 
 function openManager(): void {
@@ -452,6 +531,148 @@ function startOfLocalDay(date: Date): Date {
                 >
                   {{ formatCountDelta(getCountSummary(category.id)!.delta) }}
                 </span>
+              </small>
+            </template>
+            <template v-else-if="category.statisticsMode === 'sum' && getSumSummary(category.id)">
+              <span
+                v-if="typeof getSumSummary(category.id)!.currentValue === 'number'"
+                class="stats-overview-card__primary"
+              >
+                {{ getCurrentSumLabel(rangeMode) }}
+                <b>
+                  {{
+                    formatSummaryAmount(
+                      getSumSummary(category.id)!.currentValue!,
+                      category,
+                    )
+                  }}
+                </b>
+              </span>
+              <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__comparison">
+                <template v-if="typeof getSumSummary(category.id)!.previousValue === 'number'">
+                  {{ getPreviousPeriodLabel(rangeMode) }}
+                  {{
+                    formatSummaryAmount(
+                      getSumSummary(category.id)!.previousValue!,
+                      category,
+                    )
+                  }}
+                  <template v-if="typeof getSumSummary(category.id)!.delta === 'number'">
+                    ｜{{ formatSumDelta(getSumSummary(category.id)!.delta!, category) }}
+                  </template>
+                </template>
+                <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
+              </small>
+              <small v-if="rangeMode !== 'day'" class="stats-overview-card__record-days">
+                有紀錄 {{ getSumSummary(category.id)!.currentRecordedDays }} 天
+              </small>
+            </template>
+            <template
+              v-else-if="
+                category.statisticsMode === 'measurement' &&
+                getMeasurementSummary(category.id)
+              "
+            >
+              <span
+                v-if="typeof getMeasurementSummary(category.id)!.currentValue === 'number'"
+                class="stats-overview-card__primary"
+              >
+                {{ getCurrentMeasurementLabel(rangeMode) }}
+                <b>
+                  {{
+                    formatSummaryAmount(
+                      getMeasurementSummary(category.id)!.currentValue!,
+                      category,
+                    )
+                  }}
+                </b>
+                <span
+                  v-if="
+                    rangeMode !== 'day' &&
+                    getMeasurementSummary(category.id)!.currentOccurredAt
+                  "
+                  class="stats-overview-card__date"
+                >
+                  （{{
+                    formatSummaryDate(
+                      getMeasurementSummary(category.id)!.currentOccurredAt!,
+                    )
+                  }}）
+                </span>
+              </span>
+              <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__comparison">
+                <template
+                  v-if="typeof getMeasurementSummary(category.id)!.previousValue === 'number'"
+                >
+                  {{ getPreviousMeasurementLabel(rangeMode) }}
+                  {{
+                    formatSummaryAmount(
+                      getMeasurementSummary(category.id)!.previousValue!,
+                      category,
+                    )
+                  }}
+                  <template
+                    v-if="typeof getMeasurementSummary(category.id)!.delta === 'number'"
+                  >
+                    ｜{{
+                      formatSumDelta(
+                        getMeasurementSummary(category.id)!.delta!,
+                        category,
+                      )
+                    }}
+                  </template>
+                </template>
+                <template v-else>{{ getPreviousMeasurementLabel(rangeMode) }}沒有紀錄</template>
+              </small>
+              <small class="stats-overview-card__record-days">
+                區間內 {{ getMeasurementSummary(category.id)!.currentCount }} 筆
+              </small>
+            </template>
+            <template
+              v-else-if="category.statisticsMode === 'rating' && getRatingSummary(category.id)"
+            >
+              <span
+                v-if="typeof getRatingSummary(category.id)!.currentAverage === 'number'"
+                class="stats-overview-card__primary"
+              >
+                {{ getCurrentRatingLabel(rangeMode) }}
+                <b>
+                  {{
+                    formatRatingScore(
+                      getRatingSummary(category.id)!.currentAverage!,
+                      category,
+                    )
+                  }}
+                </b>
+              </span>
+              <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__comparison">
+                <template
+                  v-if="typeof getRatingSummary(category.id)!.previousAverage === 'number'"
+                >
+                  {{ getPreviousPeriodLabel(rangeMode) }}
+                  {{
+                    formatRatingScore(
+                      getRatingSummary(category.id)!.previousAverage!,
+                      category,
+                    )
+                  }}
+                  <template v-if="typeof getRatingSummary(category.id)!.delta === 'number'">
+                    ｜{{ formatRatingDelta(getRatingSummary(category.id)!.delta!) }}
+                  </template>
+                </template>
+                <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
+              </small>
+              <small class="stats-overview-card__record-days">
+                <template v-if="rangeMode === 'day'">
+                  當日共 {{ getRatingSummary(category.id)!.currentCount }} 筆
+                </template>
+                <template v-else>
+                  有紀錄 {{ getRatingSummary(category.id)!.currentRecordedDays }} 天・共
+                  {{ getRatingSummary(category.id)!.currentCount }} 筆
+                </template>
               </small>
             </template>
             <small v-else>統計摘要將在下一階段接上</small>
@@ -793,12 +1014,21 @@ function startOfLocalDay(date: Date): Date {
   font-size: 1.05rem;
 }
 
+.stats-overview-card__date {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
 .stats-overview-card__empty-period {
   color: var(--color-muted);
   font-size: 0.875rem;
 }
 
 .stats-overview-card__comparison {
+  font-size: 0.8125rem;
+}
+
+.stats-overview-card__record-days {
   font-size: 0.8125rem;
 }
 
