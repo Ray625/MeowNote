@@ -3,13 +3,26 @@ import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import CatSwitcher from '@/components/common/CatSwitcher.vue'
 import FixedModal from '@/components/common/FixedModal.vue'
+import TodayButton from '@/components/common/TodayButton.vue'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   loadStatsPreference,
   saveStatsPreference,
 } from '@/repositories/statsPreferenceRepository'
+import {
+  formatStatsOverviewDateInput,
+  formatStatsOverviewRangeTitle,
+  getPreviousStatsOverviewRange,
+  getStatsOverviewRange,
+  isSameStatsOverviewDate,
+  parseStatsOverviewDateInput,
+  shiftStatsOverviewReferenceDate,
+  STATS_OVERVIEW_RANGE_OPTIONS,
+  type StatsOverviewRangeMode,
+} from '@/services/statsOverviewRange'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -26,6 +39,11 @@ const isManagerOpen = ref(false)
 const draggingCategoryId = ref<string>()
 const dragTargetCategoryId = ref<string>()
 const dragTargetPosition = ref<'before' | 'after'>('before')
+const rangeMode = ref<StatsOverviewRangeMode>('7d')
+const statsReferenceDate = ref(new Date())
+const draftReferenceDate = ref(formatStatsOverviewDateInput(statsReferenceDate.value))
+const isRangePickerOpen = ref(false)
+const rangePickerRef = ref<HTMLElement>()
 
 const preferenceScopeKey = computed(
   () => `${user.value?.id ?? 'guest'}:${activeNotebookId.value || 'local'}`,
@@ -78,8 +96,31 @@ const groupedAvailableCategories = computed(() => {
     categories: groupCategories,
   }))
 })
+const currentRange = computed(() => getStatsOverviewRange(rangeMode.value, statsReferenceDate.value))
+const previousRange = computed(() =>
+  getPreviousStatsOverviewRange(rangeMode.value, currentRange.value),
+)
+const rangeTitle = computed(() =>
+  formatStatsOverviewRangeTitle(rangeMode.value, currentRange.value),
+)
+const todayInputValue = computed(() => formatStatsOverviewDateInput(new Date()))
+const canShowNextRange = computed(() => {
+  const nextReferenceDate = shiftStatsOverviewReferenceDate(
+    rangeMode.value,
+    statsReferenceDate.value,
+    1,
+  )
+
+  return nextReferenceDate <= startOfLocalDay(new Date())
+})
+const isCurrentRange = computed(() =>
+  isSameStatsOverviewDate(statsReferenceDate.value, new Date()),
+)
 
 useBodyScrollLock(computed(() => isManagerOpen.value || shouldShowSetup.value))
+useClickOutside(rangePickerRef, () => {
+  isRangePickerOpen.value = false
+})
 
 watch(
   preferenceScopeKey,
@@ -185,6 +226,59 @@ function clearDragState(): void {
   draggingCategoryId.value = undefined
   dragTargetCategoryId.value = undefined
 }
+
+function selectRangeMode(mode: StatsOverviewRangeMode): void {
+  rangeMode.value = mode
+  isRangePickerOpen.value = false
+}
+
+function showPreviousRange(): void {
+  statsReferenceDate.value = shiftStatsOverviewReferenceDate(
+    rangeMode.value,
+    statsReferenceDate.value,
+    -1,
+  )
+  isRangePickerOpen.value = false
+}
+
+function showNextRange(): void {
+  if (!canShowNextRange.value) {
+    return
+  }
+
+  statsReferenceDate.value = shiftStatsOverviewReferenceDate(
+    rangeMode.value,
+    statsReferenceDate.value,
+    1,
+  )
+  isRangePickerOpen.value = false
+}
+
+function showTodayRange(): void {
+  statsReferenceDate.value = new Date()
+  draftReferenceDate.value = formatStatsOverviewDateInput(statsReferenceDate.value)
+  isRangePickerOpen.value = false
+}
+
+function toggleRangePicker(): void {
+  draftReferenceDate.value = formatStatsOverviewDateInput(statsReferenceDate.value)
+  isRangePickerOpen.value = !isRangePickerOpen.value
+}
+
+function applyReferenceDate(): void {
+  const selectedDate = parseStatsOverviewDateInput(draftReferenceDate.value)
+
+  if (!selectedDate || selectedDate > startOfLocalDay(new Date())) {
+    return
+  }
+
+  statsReferenceDate.value = selectedDate
+  isRangePickerOpen.value = false
+}
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
 </script>
 
 <template>
@@ -192,10 +286,90 @@ function clearDragState(): void {
     <header class="stats-overview__header">
       <CatSwitcher />
       <h1 id="stats-overview-title">統計</h1>
-      <button class="ui-button ui-button--primary stats-overview__manage" type="button" @click="openManager">
-        管理統計
-      </button>
+      <div class="stats-overview__header-actions">
+        <TodayButton v-if="!isCurrentRange" @click="showTodayRange" />
+        <button
+          class="ui-button ui-button--primary stats-overview__manage"
+          type="button"
+          @click="openManager"
+        >
+          管理統計
+        </button>
+      </div>
     </header>
+
+    <section v-if="selectedCategories.length > 0" class="stats-range-panel" aria-label="統計區間">
+      <div class="stats-range-tabs" role="tablist" aria-label="時間區間">
+        <button
+          v-for="option in STATS_OVERVIEW_RANGE_OPTIONS"
+          :key="option.value"
+          class="stats-range-tab"
+          :class="{ 'stats-range-tab--active': rangeMode === option.value }"
+          type="button"
+          role="tab"
+          :aria-selected="rangeMode === option.value"
+          @click="selectRangeMode(option.value)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+
+      <div class="stats-range-controls">
+        <button
+          class="ui-button ui-button--icon stats-range-button"
+          type="button"
+          aria-label="上一個統計區間"
+          @click="showPreviousRange"
+        >
+          ‹
+        </button>
+
+        <div ref="rangePickerRef" class="stats-range-picker">
+          <button
+            class="stats-range-title"
+            type="button"
+            :aria-expanded="isRangePickerOpen"
+            aria-haspopup="dialog"
+            @click="toggleRangePicker"
+          >
+            <span>{{ rangeTitle }}</span>
+            <span aria-hidden="true">▾</span>
+          </button>
+
+          <div
+            v-if="isRangePickerOpen"
+            class="stats-range-picker__menu"
+            role="dialog"
+            aria-label="選擇統計區間結束日期"
+          >
+            <label>
+              <span>區間結束日期</span>
+              <input
+                v-model="draftReferenceDate"
+                type="date"
+                :max="todayInputValue"
+                @change="applyReferenceDate"
+                @keydown.enter.prevent="applyReferenceDate"
+              />
+            </label>
+          </div>
+        </div>
+
+        <button
+          class="ui-button ui-button--icon stats-range-button"
+          type="button"
+          aria-label="下一個統計區間"
+          :disabled="!canShowNextRange"
+          @click="showNextRange"
+        >
+          ›
+        </button>
+      </div>
+
+      <p class="stats-range-panel__comparison">
+        比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}
+      </p>
+    </section>
 
     <div v-if="selectedCategories.length > 0" class="stats-overview__cards">
       <article
@@ -330,10 +504,144 @@ function clearDragState(): void {
 }
 
 .stats-overview__manage {
-  justify-self: end;
   min-height: 36px;
   padding: 0 12px;
   font-size: 0.875rem;
+}
+
+.stats-overview__header-actions {
+  display: flex;
+  justify-self: end;
+  gap: 8px;
+}
+
+.stats-range-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.stats-range-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  scrollbar-width: none;
+}
+
+.stats-range-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.stats-range-tab {
+  min-height: 40px;
+  border: 0;
+  border-right: 1px solid var(--color-divider);
+  padding: 0 10px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.stats-range-tab:last-child {
+  border-right: 0;
+}
+
+.stats-range-tab--active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.stats-range-controls {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-range-button {
+  width: 42px;
+  height: 42px;
+  font-size: 1.5rem;
+}
+
+.stats-range-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.stats-range-title {
+  display: grid;
+  width: 100%;
+  min-height: 42px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.stats-range-title span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-range-title span:last-child {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.stats-range-picker__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  z-index: 15;
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 18px 44px var(--shadow-color);
+}
+
+.stats-range-picker__menu label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.stats-range-picker__menu input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.stats-range-panel__comparison {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  text-align: center;
 }
 
 .stats-overview__cards {
@@ -512,9 +820,13 @@ function clearDragState(): void {
     grid-row: 1;
   }
 
-  .stats-overview__manage {
+  .stats-overview__header-actions {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .stats-range-tabs {
+    grid-template-columns: repeat(6, 72px);
   }
 }
 </style>
