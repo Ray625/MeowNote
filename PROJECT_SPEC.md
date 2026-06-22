@@ -9,6 +9,7 @@ For technical details, see:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Data Model](docs/DATA_MODEL.md)
 - [Supabase Schema](docs/SUPABASE_SCHEMA.sql)
+- [Statistics Page Redesign](docs/STATS_PAGE_REDESIGN.md)
 
 ## Product Goal
 
