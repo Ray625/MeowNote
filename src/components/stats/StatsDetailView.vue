@@ -2,10 +2,12 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import TodayButton from '@/components/common/TodayButton.vue'
+import StatsDatePicker from '@/components/stats/StatsDatePicker.vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import {
   type CountCategoryStats,
+  type MeasurementPoint,
   type MeasurementStats,
   type RatingStats,
   type SumDailyStats,
@@ -56,6 +58,17 @@ type CountInterval = 'day' | 'week' | 'month'
 type ValueTrendInterval = 'day' | 'week' | 'month'
 type MeasurementInterval = 'week' | 'month'
 type RangePickerMode = 'day' | 'week' | 'twoMonth' | 'month' | 'halfYear'
+type ChartTooltip = {
+  key: string
+  label: string
+  value: string
+  x: number
+}
+type TrendAxisTick = {
+  key: string
+  label: string
+  x: number
+}
 
 const catTrackerStore = useCatTrackerStore()
 const { categories, events, selectedCatId } = storeToRefs(catTrackerStore)
@@ -70,6 +83,8 @@ const isRangePickerOpen = ref(false)
 const isStatsCategoryMenuOpen = ref(false)
 const statsCategorySelectRef = ref<HTMLElement>()
 const rangePickerRef = ref<HTMLElement>()
+const chartInteractionRef = ref<HTMLElement>()
+const activeChartTooltip = ref<ChartTooltip>()
 const rangePickerYear = ref(statsReferenceDate.value.getFullYear())
 const rangePickerMonth = ref(statsReferenceDate.value.getMonth())
 
@@ -86,6 +101,10 @@ useClickOutside(rangePickerRef, () => {
   isRangePickerOpen.value = false
 })
 
+useClickOutside(chartInteractionRef, () => {
+  activeChartTooltip.value = undefined
+})
+
 const recentPeriodText = computed(() =>
   getCurrentCountLabel(rangeMode.value).replace('總次數', '').trim(),
 )
@@ -98,6 +117,39 @@ const currentRange = computed(() => getStatsOverviewRange(rangeMode.value, stats
 const previousRange = computed(() =>
   getPreviousStatsOverviewRange(rangeMode.value, currentRange.value),
 )
+const trendAxisTicks = computed<TrendAxisTick[]>(() => {
+  if (rangeMode.value === 'day') {
+    return Array.from({ length: 6 }, (_, index) => ({
+      key: `hour-${index * 4}`,
+      label: `${String(index * 4).padStart(2, '0')}:00`,
+      x: 8 + (index / 5) * 84,
+    }))
+  }
+
+  const dayCount =
+    Math.round(
+      (startOfDay(currentRange.value.end).getTime() -
+        startOfDay(currentRange.value.start).getTime()) /
+        86_400_000,
+    ) + 1
+  const tickCount = rangeMode.value === '7d' ? 7 : 6
+  const dayOffsets = Array.from({ length: tickCount }, (_, index) =>
+    Math.round((index / (tickCount - 1)) * (dayCount - 1)),
+  )
+
+  return dayOffsets.map((dayOffset, index) => {
+    const date = addDays(currentRange.value.start, dayOffset)
+
+    return {
+      key: formatDateInputValue(date),
+      label:
+        rangeMode.value === 'year' || rangeMode.value === 'halfYear'
+          ? `${date.getFullYear()}/${date.getMonth() + 1}`
+          : `${date.getMonth() + 1}/${date.getDate()}`,
+      x: 8 + (index / (tickCount - 1)) * 84,
+    }
+  })
+})
 const rangeTitle = computed(() =>
   formatStatsOverviewRangeTitle(rangeMode.value, currentRange.value),
 )
@@ -283,6 +335,10 @@ watch(
   },
 )
 
+watch([selectedStatsCategoryId, rangeMode, statsReferenceDate], () => {
+  activeChartTooltip.value = undefined
+})
+
 function getStatsStyle(stats: CountCategoryStats): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(stats.category),
@@ -313,18 +369,6 @@ function getCategoryOptionStyle(category?: EventCategory): Record<string, string
   }
 }
 
-function getMeasurementChartStyle(stats: MeasurementStats): Record<string, string> {
-  return {
-    '--measurement-point-count': String(Math.max(stats.points.length, 1)),
-  }
-}
-
-function getRatingChartStyle(stats: RatingStats): Record<string, string> {
-  return {
-    '--measurement-point-count': String(Math.max(stats.points.length, 1)),
-  }
-}
-
 function getDeltaText(delta: number): string {
   if (delta > 0) {
     return `比${previousPeriodText.value} +${delta}`
@@ -349,6 +393,10 @@ function formatLatestDate(dateTime?: string): string {
 }
 
 function getBarHeight(count: number, stats: CountCategoryStats): string {
+  if (count === 0) {
+    return '0'
+  }
+
   const maxCount = Math.max(...stats.buckets.map((bucket) => bucket.count), 1)
   const ratio = count / maxCount
 
@@ -368,6 +416,10 @@ function getSumBarsStyle(stats: SumDailyStats): Record<string, string> {
 }
 
 function getSumBarHeight(total: number, stats: SumDailyStats): string {
+  if (total === 0) {
+    return '0'
+  }
+
   const maxTotal = Math.max(...stats.buckets.map((bucket) => bucket.total), 1)
   const ratio = total / maxTotal
 
@@ -399,6 +451,84 @@ function shouldShowChartLabel(index: number, pointCount: number): boolean {
   return index === 0 || index === pointCount - 1 || index % labelStep === 0
 }
 
+function getAxisLabel(label: string): string {
+  return label.split(/[–-]/, 1)[0]?.trim() ?? label
+}
+
+function getChartTooltipStyle(): Record<string, string> {
+  return {
+    left: `${activeChartTooltip.value?.x ?? 50}%`,
+  }
+}
+
+function showChartTooltip(
+  key: string,
+  label: string,
+  value: string,
+  index: number,
+  pointCount: number,
+): void {
+  const rawX = pointCount <= 1 ? 50 : ((index + 0.5) / pointCount) * 100
+
+  activeChartTooltip.value = {
+    key,
+    label,
+    value,
+    x: Math.max(12, Math.min(rawX, 88)),
+  }
+}
+
+function showTrendTooltip(
+  key: string,
+  label: string,
+  value: string,
+  point: MeasurementPoint,
+): void {
+  const rawX = getTrendPointX(point)
+
+  activeChartTooltip.value = {
+    key,
+    label,
+    value,
+    x: Math.max(12, Math.min(rawX, 88)),
+  }
+}
+
+function toggleChartTooltip(
+  key: string,
+  label: string,
+  value: string,
+  index: number,
+  pointCount: number,
+): void {
+  if (activeChartTooltip.value?.key === key) {
+    activeChartTooltip.value = undefined
+    return
+  }
+
+  showChartTooltip(key, label, value, index, pointCount)
+}
+
+function toggleTrendTooltip(
+  key: string,
+  label: string,
+  value: string,
+  point: MeasurementPoint,
+): void {
+  if (activeChartTooltip.value?.key === key) {
+    activeChartTooltip.value = undefined
+    return
+  }
+
+  showTrendTooltip(key, label, value, point)
+}
+
+function hideChartTooltip(key: string): void {
+  if (activeChartTooltip.value?.key === key) {
+    activeChartTooltip.value = undefined
+  }
+}
+
 function getMeasurementText(value: number, stats: MeasurementStats): string {
   return `${formatAmount(value)}${stats.category.valueUnit ? ` ${stats.category.valueUnit}` : ''}`
 }
@@ -409,14 +539,13 @@ function getRatingText(value: number, stats: RatingStats): string {
 
 function getMeasurementLinePoints(stats: MeasurementStats): string {
   return stats.points
-    .map((point, index) => {
+    .map((point) => {
       if (typeof point.value !== 'number') {
         return ''
       }
 
       const position = getTrendPointPosition(
-        index,
-        stats.points.length,
+        point,
         point.value,
         stats.minValue,
         stats.maxValue,
@@ -430,14 +559,13 @@ function getMeasurementLinePoints(stats: MeasurementStats): string {
 
 function getRatingLinePoints(stats: RatingStats): string {
   return stats.points
-    .map((point, index) => {
+    .map((point) => {
       if (typeof point.value !== 'number') {
         return ''
       }
 
       const position = getTrendPointPosition(
-        index,
-        stats.points.length,
+        point,
         point.value,
         0,
         stats.category.valueMax ?? 10,
@@ -450,21 +578,19 @@ function getRatingLinePoints(stats: RatingStats): string {
 }
 
 function getMeasurementPointPosition(
-  index: number,
-  pointCount: number,
+  point: MeasurementPoint,
   value: number,
   stats: MeasurementStats,
 ): { x: number; y: number } {
-  return getTrendPointPosition(index, pointCount, value, stats.minValue, stats.maxValue)
+  return getTrendPointPosition(point, value, stats.minValue, stats.maxValue)
 }
 
 function getMeasurementDotStyle(
-  index: number,
-  pointCount: number,
+  point: MeasurementPoint,
   value: number,
   stats: MeasurementStats,
 ): Record<string, string> {
-  const position = getMeasurementPointPosition(index, pointCount, value, stats)
+  const position = getMeasurementPointPosition(point, value, stats)
 
   return {
     left: `${position.x}%`,
@@ -473,21 +599,19 @@ function getMeasurementDotStyle(
 }
 
 function getRatingPointPosition(
-  index: number,
-  pointCount: number,
+  point: MeasurementPoint,
   value: number,
   stats: RatingStats,
 ): { x: number; y: number } {
-  return getTrendPointPosition(index, pointCount, value, 0, stats.category.valueMax ?? 10)
+  return getTrendPointPosition(point, value, 0, stats.category.valueMax ?? 10)
 }
 
 function getRatingDotStyle(
-  index: number,
-  pointCount: number,
+  point: MeasurementPoint,
   value: number,
   stats: RatingStats,
 ): Record<string, string> {
-  const position = getRatingPointPosition(index, pointCount, value, stats)
+  const position = getRatingPointPosition(point, value, stats)
 
   return {
     left: `${position.x}%`,
@@ -501,22 +625,13 @@ function isTodayInRange(start: Date, end: Date): boolean {
   return today >= startOfDay(start) && today < startOfDay(end)
 }
 
-function isPointOnToday(point: { key: string; occurredAt?: string }): boolean {
-  if (point.occurredAt) {
-    return formatDateInputValue(new Date(point.occurredAt)) === formatDateInputValue(new Date())
-  }
-
-  return point.key === formatDateInputValue(new Date())
-}
-
 function getTrendPointPosition(
-  index: number,
-  pointCount: number,
+  point: MeasurementPoint,
   value: number,
   minValue: number,
   maxValue: number,
 ): { x: number; y: number } {
-  const x = pointCount <= 1 ? 50 : 8 + (index / (pointCount - 1)) * 84
+  const x = getTrendPointX(point)
   const ratio = maxValue === minValue ? 0.5 : (value - minValue) / (maxValue - minValue)
   const y = 92 - Math.max(0, Math.min(ratio, 1)) * 84
 
@@ -524,6 +639,36 @@ function getTrendPointPosition(
     x: Number(x.toFixed(2)),
     y: Number(y.toFixed(2)),
   }
+}
+
+function getTrendPointX(point: MeasurementPoint): number {
+  const pointDate = getMeasurementPointDate(point)
+
+  if (!pointDate) {
+    return 50
+  }
+
+  const rangeStart = startOfDay(currentRange.value.start).getTime()
+  const rangeEnd =
+    rangeMode.value === 'day'
+      ? addDays(startOfDay(currentRange.value.end), 1).getTime()
+      : startOfDay(currentRange.value.end).getTime()
+  const ratio =
+    rangeEnd === rangeStart
+      ? 0.5
+      : (pointDate.getTime() - rangeStart) / (rangeEnd - rangeStart)
+
+  return Number((8 + Math.max(0, Math.min(ratio, 1)) * 84).toFixed(2))
+}
+
+function getMeasurementPointDate(point: MeasurementPoint): Date | null {
+  if (point.occurredAt) {
+    return new Date(point.occurredAt)
+  }
+
+  const date = parseStatsOverviewDateInput(point.key)
+
+  return date && !Number.isNaN(date.getTime()) ? date : null
 }
 
 function getValueTrendShift(interval: ValueTrendInterval): number {
@@ -647,6 +792,17 @@ function selectRangeMode(mode: StatsOverviewRangeMode): void {
   isRangePickerOpen.value = false
 }
 
+function selectReferenceDate(value: string): void {
+  const selectedDate = parseStatsOverviewDateInput(value)
+
+  if (!selectedDate || selectedDate > startOfDay(new Date())) {
+    return
+  }
+
+  statsReferenceDate.value = selectedDate
+  isRangePickerOpen.value = false
+}
+
 function showNextRange(): void {
   if (!canShowNextRange.value) {
     return
@@ -750,11 +906,46 @@ function formatDateInputValue(date: Date): string {
       <TodayButton @click="showTodayRange" />
     </header>
 
-    <section class="stats-section" aria-labelledby="stats-item-label">
-      <div class="stats-field__label-row">
-        <span id="stats-item-label">紀錄項目</span>
-        <small>僅顯示已加入統計頁的分類</small>
+    <section class="stats-section" aria-label="分類詳細統計">
+      <div class="stats-detail-range-tabs" role="tablist" aria-label="時間區間">
+        <button
+          v-for="option in STATS_OVERVIEW_RANGE_OPTIONS"
+          :key="option.value"
+          class="stats-detail-range-tab"
+          :class="{ 'stats-detail-range-tab--active': rangeMode === option.value }"
+          type="button"
+          role="tab"
+          :aria-selected="rangeMode === option.value"
+          @click="selectRangeMode(option.value)"
+        >
+          {{ option.label }}
+        </button>
       </div>
+
+      <div class="range-controls" aria-label="統計日期區間">
+        <button
+          class="ui-button ui-button--icon range-button"
+          type="button"
+          @click="showPreviousRange"
+        >
+          ‹
+        </button>
+        <StatsDatePicker
+          :title="rangeTitle"
+          :model-value="formatStatsOverviewDateInput(statsReferenceDate)"
+          :max-date="formatStatsOverviewDateInput(new Date())"
+          @update:model-value="selectReferenceDate"
+        />
+        <button
+          class="ui-button ui-button--icon range-button"
+          type="button"
+          :disabled="!canShowNextRange"
+          @click="showNextRange"
+        >
+          ›
+        </button>
+      </div>
+
       <div class="stats-controls">
         <div class="stats-field">
           <div ref="statsCategorySelectRef" class="stats-category-select">
@@ -782,7 +973,7 @@ function formatDateInputValue(date: Date): string {
               v-if="isStatsCategoryMenuOpen"
               class="stats-category-menu"
               role="listbox"
-              aria-labelledby="stats-item-label"
+              aria-label="選擇統計分類"
             >
               <section
                 v-for="group in groupedStatCategories"
@@ -819,237 +1010,6 @@ function formatDateInputValue(date: Date): string {
         </span>
       </div>
 
-      <div class="stats-detail-range-tabs" role="tablist" aria-label="時間區間">
-        <button
-          v-for="option in STATS_OVERVIEW_RANGE_OPTIONS"
-          :key="option.value"
-          class="stats-detail-range-tab"
-          :class="{ 'stats-detail-range-tab--active': rangeMode === option.value }"
-          type="button"
-          role="tab"
-          :aria-selected="rangeMode === option.value"
-          @click="selectRangeMode(option.value)"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-
-      <div class="range-controls" aria-label="統計日期區間">
-        <button
-          class="ui-button ui-button--icon range-button"
-          type="button"
-          @click="showPreviousRange"
-        >
-          ‹
-        </button>
-        <div ref="rangePickerRef" class="range-picker">
-          <button
-            class="range-title-button"
-            type="button"
-            :aria-expanded="isRangePickerOpen"
-            aria-haspopup="dialog"
-            @click="toggleRangePicker"
-          >
-            <span>{{ rangeTitle }}</span>
-            <span class="range-title-button__chevron" aria-hidden="true">▾</span>
-          </button>
-
-          <div
-            v-if="isRangePickerOpen"
-            class="range-picker-menu"
-            role="dialog"
-            aria-label="切換統計區間"
-          >
-            <div v-if="rangePickerMode !== 'week'" class="range-picker-menu__year">
-              <button
-                class="ui-button ui-button--icon range-picker-menu__year-button"
-                type="button"
-                aria-label="上一年"
-                @click="changeRangePickerYear(-1)"
-              >
-                ‹
-              </button>
-              <strong>{{ rangePickerYear }}年</strong>
-              <button
-                class="ui-button ui-button--icon range-picker-menu__year-button"
-                type="button"
-                aria-label="下一年"
-                @click="changeRangePickerYear(1)"
-              >
-                ›
-              </button>
-            </div>
-
-            <p v-if="shouldShowRangePickerHint" class="range-picker-menu__hint">
-              {{ rangePickerLabel }}
-            </p>
-
-            <div
-              v-if="rangePickerMode === 'day' || rangePickerMode === 'week'"
-              class="range-picker-menu__month-nav"
-            >
-              <button
-                class="ui-button ui-button--icon range-picker-menu__year-button"
-                type="button"
-                aria-label="上一個月"
-                @click="changeRangePickerMonth(-1)"
-              >
-                ‹
-              </button>
-              <strong>{{ rangePickerMonthLabel }}</strong>
-              <button
-                class="ui-button ui-button--icon range-picker-menu__year-button"
-                type="button"
-                aria-label="下一個月"
-                @click="changeRangePickerMonth(1)"
-              >
-                ›
-              </button>
-            </div>
-
-            <div
-              v-if="rangePickerMode === 'day'"
-              class="range-picker-menu__days"
-              aria-label="選擇日期"
-            >
-              <button
-                v-for="day in rangePickerDays"
-                :key="day.key"
-                class="range-picker-menu__day"
-                :class="{ 'range-picker-menu__month--selected': isReferenceDate(day.date) }"
-                :disabled="isFutureRange(day.date)"
-                type="button"
-                @click="selectRangeDay(day.date)"
-              >
-                <span
-                  v-if="hasRecordInRange(day.date, day.date)"
-                  class="range-picker-menu__record-dot"
-                  aria-hidden="true"
-                ></span>
-                {{ day.label }}
-              </button>
-            </div>
-
-            <div
-              v-else-if="rangePickerMode === 'week'"
-              class="range-picker-menu__weeks"
-              aria-label="選擇週區間"
-            >
-              <button
-                v-for="week in rangePickerWeeks"
-                :key="week.key"
-                class="range-picker-menu__week"
-                :class="{
-                  'range-picker-menu__month--selected': isReferenceInRange(week.start, week.end),
-                }"
-                :disabled="isFutureRange(week.start)"
-                type="button"
-                @click="selectRangeWeek(week.end)"
-              >
-                <span
-                  v-if="hasRecordInRange(week.start, week.end)"
-                  class="range-picker-menu__record-dot"
-                  aria-hidden="true"
-                ></span>
-                {{ week.label }}
-              </button>
-            </div>
-
-            <div
-              v-else-if="rangePickerMode === 'twoMonth'"
-              class="range-picker-menu__months"
-              aria-label="選擇雙月區間"
-            >
-              <button
-                v-for="period in twoMonthOptions"
-                :key="period.startMonth"
-                class="range-picker-menu__month"
-                :class="{
-                  'range-picker-menu__month--selected': isReferenceInRange(
-                    period.start,
-                    period.end,
-                  ),
-                }"
-                :disabled="isFutureRange(period.start)"
-                type="button"
-                @click="selectRangeTwoMonth(period.end)"
-              >
-                <span
-                  v-if="hasRecordInRange(period.start, period.end)"
-                  class="range-picker-menu__record-dot"
-                  aria-hidden="true"
-                ></span>
-                {{ period.label }}
-              </button>
-            </div>
-
-            <div
-              v-else-if="rangePickerMode === 'halfYear'"
-              class="range-picker-menu__months range-picker-menu__months--two"
-              aria-label="選擇半年區間"
-            >
-              <button
-                v-for="period in halfYearOptions"
-                :key="period.key"
-                class="range-picker-menu__month"
-                :class="{
-                  'range-picker-menu__month--selected': isReferenceInRange(
-                    period.start,
-                    period.end,
-                  ),
-                }"
-                :disabled="isFutureRange(period.start)"
-                type="button"
-                @click="selectRangeHalfYear(period.end)"
-              >
-                <span
-                  v-if="hasRecordInRange(period.start, period.end)"
-                  class="range-picker-menu__record-dot"
-                  aria-hidden="true"
-                ></span>
-                {{ period.label }}
-              </button>
-            </div>
-
-            <div v-else class="range-picker-menu__months" aria-label="選擇月份">
-              <button
-                v-for="month in monthOptions"
-                :key="month.index"
-                class="range-picker-menu__month"
-                :class="{
-                  'range-picker-menu__month--selected':
-                    rangePickerYear === statsReferenceDate.getFullYear() &&
-                    month.index === rangePickerMonthIndex,
-                }"
-                :disabled="isFutureRange(new Date(rangePickerYear, month.index, 1))"
-                type="button"
-                @click="selectRangeMonth(month.index)"
-              >
-                <span
-                  v-if="
-                    hasRecordInRange(
-                      new Date(rangePickerYear, month.index, 1),
-                      new Date(rangePickerYear, month.index + 1, 0),
-                    )
-                  "
-                  class="range-picker-menu__record-dot"
-                  aria-hidden="true"
-                ></span>
-                {{ month.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-        <button
-          class="ui-button ui-button--icon range-button"
-          type="button"
-          :disabled="!canShowNextRange"
-          @click="showNextRange"
-        >
-          ›
-        </button>
-      </div>
-
       <div v-if="statsMode === 'count' && selectedCountStats" class="count-stats-list">
         <article
           :key="selectedCountStats.category.id"
@@ -1067,33 +1027,74 @@ function formatDateInputValue(date: Date): string {
           </div>
 
           <div
+            ref="chartInteractionRef"
             class="count-bars"
             aria-label="近期趨勢"
             :style="getCountBarsStyle(selectedCountStats)"
           >
+            <div
+              v-if="activeChartTooltip"
+              class="chart-tooltip"
+              :style="getChartTooltipStyle()"
+              role="status"
+            >
+              <strong>{{ activeChartTooltip.label }}</strong>
+              <span>{{ activeChartTooltip.value }}</span>
+            </div>
             <div class="count-bars__plot">
-              <div
-                v-for="bucket in selectedCountStats.buckets"
+              <button
+                v-for="(bucket, index) in selectedCountStats.buckets"
                 :key="bucket.key"
                 class="count-bar"
+                type="button"
+                :aria-label="`${bucket.label}，${bucket.count} 次`"
+                @mouseenter="
+                  showChartTooltip(
+                    bucket.key,
+                    bucket.label,
+                    `${bucket.count} 次`,
+                    index,
+                    selectedCountStats.buckets.length,
+                  )
+                "
+                @mouseleave="hideChartTooltip(bucket.key)"
+                @focus="
+                  showChartTooltip(
+                    bucket.key,
+                    bucket.label,
+                    `${bucket.count} 次`,
+                    index,
+                    selectedCountStats.buckets.length,
+                  )
+                "
+                @blur="hideChartTooltip(bucket.key)"
+                @click.stop="
+                  toggleChartTooltip(
+                    bucket.key,
+                    bucket.label,
+                    `${bucket.count} 次`,
+                    index,
+                    selectedCountStats.buckets.length,
+                  )
+                "
               >
                 <span
                   class="count-bar__fill"
                   :style="{ height: getBarHeight(bucket.count, selectedCountStats) }"
-                  :title="`${bucket.label}: ${bucket.count} 次`"
                 ></span>
-                <small>{{ bucket.count }}</small>
-              </div>
+              </button>
             </div>
             <div class="count-bars__labels" aria-hidden="true">
               <em
                 v-for="(bucket, index) in selectedCountStats.buckets"
                 :key="bucket.key"
-                :class="{ 'count-bar-label--today': isTodayInRange(bucket.start, bucket.end) }"
+                :class="{
+                  'count-bar-label--today': isTodayInRange(bucket.start, bucket.end),
+                }"
               >
                 {{
                   shouldShowChartLabel(index, selectedCountStats.buckets.length)
-                    ? bucket.label
+                    ? getAxisLabel(bucket.label)
                     : ''
                 }}
               </em>
@@ -1116,16 +1117,36 @@ function formatDateInputValue(date: Date): string {
           <div class="count-card__summary">
             <div>
               <h3>{{ selectedSumStats.category.name }}</h3>
-              <p>每日平均 {{ getDailyAverageText(selectedSumStats) }}</p>
+              <p v-if="rangeMode === 'day'">
+                當日總量 {{ getAmountText(selectedSumStats.rangeTotal, selectedSumStats) }}
+              </p>
+              <p v-else>每日平均 {{ getDailyAverageText(selectedSumStats) }}</p>
             </div>
           </div>
 
-          <div class="stats-metrics">
+          <div v-if="rangeMode === 'day'" class="stats-metrics">
             <div>
-              <span>區間最後日</span>
+              <span>紀錄筆數</span>
+              <strong>{{ selectedSumStats.sampleCount ?? 0 }} 筆</strong>
+            </div>
+            <div>
+              <span>單筆最高</span>
               <strong>{{
-                getAmountText(selectedSumStats.currentDayTotal, selectedSumStats)
+                getAmountText(selectedSumStats.maxEntryValue ?? 0, selectedSumStats)
               }}</strong>
+            </div>
+            <div>
+              <span>單筆最低</span>
+              <strong>{{
+                getAmountText(selectedSumStats.minEntryValue ?? 0, selectedSumStats)
+              }}</strong>
+            </div>
+          </div>
+
+          <div v-else class="stats-metrics">
+            <div>
+              <span>有紀錄天數</span>
+              <strong>{{ selectedSumStats.recordedDays ?? 0 }} 天</strong>
             </div>
             <div>
               <span>最高單日</span>
@@ -1137,30 +1158,75 @@ function formatDateInputValue(date: Date): string {
             </div>
           </div>
 
-          <div class="count-bars" aria-label="每日總量" :style="getSumBarsStyle(selectedSumStats)">
+          <div
+            ref="chartInteractionRef"
+            class="count-bars"
+            aria-label="每日總量"
+            :style="getSumBarsStyle(selectedSumStats)"
+          >
+            <div
+              v-if="activeChartTooltip"
+              class="chart-tooltip"
+              :style="getChartTooltipStyle()"
+              role="status"
+            >
+              <strong>{{ activeChartTooltip.label }}</strong>
+              <span>{{ activeChartTooltip.value }}</span>
+            </div>
             <div class="count-bars__plot">
-              <div
-                v-for="bucket in selectedSumStats.buckets"
+              <button
+                v-for="(bucket, index) in selectedSumStats.buckets"
                 :key="bucket.key"
                 class="count-bar"
+                type="button"
+                :aria-label="`${bucket.label}，${getAmountText(bucket.total, selectedSumStats)}`"
+                @mouseenter="
+                  showChartTooltip(
+                    bucket.key,
+                    bucket.label,
+                    getAmountText(bucket.total, selectedSumStats),
+                    index,
+                    selectedSumStats.buckets.length,
+                  )
+                "
+                @mouseleave="hideChartTooltip(bucket.key)"
+                @focus="
+                  showChartTooltip(
+                    bucket.key,
+                    bucket.label,
+                    getAmountText(bucket.total, selectedSumStats),
+                    index,
+                    selectedSumStats.buckets.length,
+                  )
+                "
+                @blur="hideChartTooltip(bucket.key)"
+                @click.stop="
+                  toggleChartTooltip(
+                    bucket.key,
+                    bucket.label,
+                    getAmountText(bucket.total, selectedSumStats),
+                    index,
+                    selectedSumStats.buckets.length,
+                  )
+                "
               >
                 <span
                   class="count-bar__fill"
                   :style="{ height: getSumBarHeight(bucket.total, selectedSumStats) }"
-                  :title="`${bucket.label}: ${getAmountText(bucket.total, selectedSumStats)}`"
                 ></span>
-                <small>{{ formatAmount(bucket.total) }}</small>
-              </div>
+              </button>
             </div>
             <div class="count-bars__labels" aria-hidden="true">
               <em
                 v-for="(bucket, index) in selectedSumStats.buckets"
                 :key="bucket.key"
-                :class="{ 'count-bar-label--today': isTodayInRange(bucket.start, bucket.end) }"
+                :class="{
+                  'count-bar-label--today': isTodayInRange(bucket.start, bucket.end),
+                }"
               >
                 {{
                   shouldShowChartLabel(index, selectedSumStats.buckets.length)
-                    ? bucket.label
+                    ? getAxisLabel(bucket.label)
                     : ''
                 }}
               </em>
@@ -1214,11 +1280,20 @@ function formatDateInputValue(date: Date): string {
           </div>
 
           <div
+            ref="chartInteractionRef"
             class="measurement-chart"
             aria-label="量測趨勢"
-            :style="getMeasurementChartStyle(selectedMeasurementStats)"
           >
             <div class="trend-plot">
+              <div
+                v-if="activeChartTooltip"
+                class="chart-tooltip"
+                :style="getChartTooltipStyle()"
+                role="status"
+              >
+                <strong>{{ activeChartTooltip.label }}</strong>
+                <span>{{ activeChartTooltip.value }}</span>
+              </div>
               <svg
                 class="trend-chart"
                 viewBox="0 0 100 100"
@@ -1230,38 +1305,60 @@ function formatDateInputValue(date: Date): string {
                   :points="getMeasurementLinePoints(selectedMeasurementStats)"
                 />
               </svg>
-              <template v-for="(point, index) in selectedMeasurementStats.points" :key="point.key">
-                <span
+              <template v-for="point in selectedMeasurementStats.points" :key="point.key">
+                <button
                   v-if="typeof point.value === 'number'"
                   class="trend-chart__dot"
+                  type="button"
                   :style="
                     getMeasurementDotStyle(
-                      index,
-                      selectedMeasurementStats.points.length,
+                      point,
                       point.value,
                       selectedMeasurementStats,
                     )
                   "
-                  :title="`${point.label}: ${getMeasurementText(point.value, selectedMeasurementStats)}`"
-                ></span>
+                  :aria-label="`${point.label}，${getMeasurementText(point.value, selectedMeasurementStats)}`"
+                  @mouseenter="
+                    showTrendTooltip(
+                      point.key,
+                      point.label,
+                      getMeasurementText(point.value, selectedMeasurementStats),
+                      point,
+                    )
+                  "
+                  @mouseleave="hideChartTooltip(point.key)"
+                  @focus="
+                    showTrendTooltip(
+                      point.key,
+                      point.label,
+                      getMeasurementText(point.value, selectedMeasurementStats),
+                      point,
+                    )
+                  "
+                  @blur="hideChartTooltip(point.key)"
+                  @click.stop="
+                    toggleTrendTooltip(
+                      point.key,
+                      point.label,
+                      getMeasurementText(point.value, selectedMeasurementStats),
+                      point,
+                    )
+                  "
+                ></button>
               </template>
             </div>
 
             <div class="trend-labels">
               <div
-                v-for="(point, index) in selectedMeasurementStats.points"
-                :key="point.key"
+                v-for="tick in trendAxisTicks"
+                :key="tick.key"
                 class="trend-label"
-                :class="{ 'trend-label--today': isPointOnToday(point) }"
+                :class="{
+                  'trend-label--today': tick.key === formatDateInputValue(new Date()),
+                }"
+                :style="{ left: `${tick.x}%` }"
               >
-                <small>{{
-                  typeof point.value === 'number' ? formatAmount(point.value) : '-'
-                }}</small>
-                <em>{{
-                  shouldShowChartLabel(index, selectedMeasurementStats.points.length)
-                    ? point.label
-                    : ''
-                }}</em>
+                <em>{{ tick.label }}</em>
               </div>
             </div>
           </div>
@@ -1308,11 +1405,20 @@ function formatDateInputValue(date: Date): string {
           </div>
 
           <div
+            ref="chartInteractionRef"
             class="measurement-chart"
             aria-label="評分趨勢"
-            :style="getRatingChartStyle(selectedRatingStats)"
           >
             <div class="trend-plot">
+              <div
+                v-if="activeChartTooltip"
+                class="chart-tooltip"
+                :style="getChartTooltipStyle()"
+                role="status"
+              >
+                <strong>{{ activeChartTooltip.label }}</strong>
+                <span>{{ activeChartTooltip.value }}</span>
+              </div>
               <svg
                 class="trend-chart"
                 viewBox="0 0 100 100"
@@ -1324,38 +1430,60 @@ function formatDateInputValue(date: Date): string {
                   :points="getRatingLinePoints(selectedRatingStats)"
                 />
               </svg>
-              <template v-for="(point, index) in selectedRatingStats.points" :key="point.key">
-                <span
+              <template v-for="point in selectedRatingStats.points" :key="point.key">
+                <button
                   v-if="typeof point.value === 'number'"
                   class="trend-chart__dot"
+                  type="button"
                   :style="
                     getRatingDotStyle(
-                      index,
-                      selectedRatingStats.points.length,
+                      point,
                       point.value,
                       selectedRatingStats,
                     )
                   "
-                  :title="`${point.label}: ${getRatingText(point.value, selectedRatingStats)}`"
-                ></span>
+                  :aria-label="`${point.label}，${getRatingText(point.value, selectedRatingStats)}`"
+                  @mouseenter="
+                    showTrendTooltip(
+                      point.key,
+                      point.label,
+                      getRatingText(point.value, selectedRatingStats),
+                      point,
+                    )
+                  "
+                  @mouseleave="hideChartTooltip(point.key)"
+                  @focus="
+                    showTrendTooltip(
+                      point.key,
+                      point.label,
+                      getRatingText(point.value, selectedRatingStats),
+                      point,
+                    )
+                  "
+                  @blur="hideChartTooltip(point.key)"
+                  @click.stop="
+                    toggleTrendTooltip(
+                      point.key,
+                      point.label,
+                      getRatingText(point.value, selectedRatingStats),
+                      point,
+                    )
+                  "
+                ></button>
               </template>
             </div>
 
             <div class="trend-labels">
               <div
-                v-for="(point, index) in selectedRatingStats.points"
-                :key="point.key"
+                v-for="tick in trendAxisTicks"
+                :key="tick.key"
                 class="trend-label"
-                :class="{ 'trend-label--today': isPointOnToday(point) }"
+                :class="{
+                  'trend-label--today': tick.key === formatDateInputValue(new Date()),
+                }"
+                :style="{ left: `${tick.x}%` }"
               >
-                <small>{{
-                  typeof point.value === 'number' ? formatAmount(point.value) : '-'
-                }}</small>
-                <em>{{
-                  shouldShowChartLabel(index, selectedRatingStats.points.length)
-                    ? point.label
-                    : ''
-                }}</em>
+                <em>{{ tick.label }}</em>
               </div>
             </div>
           </div>
@@ -2003,6 +2131,7 @@ function formatDateInputValue(date: Date): string {
 }
 
 .count-bars {
+  position: relative;
   display: grid;
   gap: 4px;
 }
@@ -2017,14 +2146,21 @@ function formatDateInputValue(date: Date): string {
 .count-bars__plot {
   align-items: end;
   min-height: 76px;
+  padding-top: 42px;
 }
 
 .count-bar {
-  display: grid;
+  display: flex;
+  height: 100%;
   align-items: end;
-  gap: 4px;
+  justify-content: center;
   min-width: 0;
-  justify-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
 }
 
 .count-bar__fill {
@@ -2034,21 +2170,14 @@ function formatDateInputValue(date: Date): string {
   background: var(--category-color);
 }
 
-.count-bar small {
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
 .count-bars__labels em {
-  overflow: hidden;
+  overflow: visible;
   min-width: 0;
-  max-width: 100%;
   color: var(--color-muted);
   font-size: 0.6875rem;
   font-style: normal;
+  justify-self: center;
   text-align: center;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2058,6 +2187,7 @@ function formatDateInputValue(date: Date): string {
 }
 
 .measurement-chart {
+  position: relative;
   display: grid;
   gap: 8px;
   min-height: 140px;
@@ -2100,38 +2230,58 @@ function formatDateInputValue(date: Date): string {
   position: absolute;
   width: 12px;
   height: 12px;
+  z-index: 2;
   border: 2px solid var(--color-surface);
   border-radius: 999px;
+  padding: 0;
   background: var(--category-color);
+  cursor: pointer;
   transform: translate(-50%, -50%);
 }
 
-.trend-labels {
+.chart-tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 4;
   display: grid;
-  grid-template-columns: repeat(var(--measurement-point-count, 7), minmax(0, 1fr));
-  gap: 6px;
+  min-width: max-content;
+  max-width: min(220px, 76vw);
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--category-color) 45%, var(--color-border));
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px var(--shadow-color);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.chart-tooltip span {
+  color: var(--color-muted);
+}
+
+.trend-plot .chart-tooltip {
+  top: 6px;
+}
+
+.trend-labels {
+  position: relative;
+  height: 18px;
 }
 
 .trend-label {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  justify-items: center;
-}
-
-.trend-label small {
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-weight: 800;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
 }
 
 .trend-label em {
-  overflow: hidden;
-  max-width: 100%;
+  overflow: visible;
   color: var(--color-muted);
   font-size: 0.6875rem;
   font-style: normal;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

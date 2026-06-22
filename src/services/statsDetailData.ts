@@ -107,6 +107,7 @@ export function getSumDetailStats({
         : getDailyAverageInRange(dailyTotals, bucket),
   }))
   const totals = Array.from(dailyTotals.values())
+  const entryValues = numericEvents.map(({ value }) => value)
   const lastDayKey = formatDateKey(currentRange.end)
 
   return {
@@ -117,6 +118,9 @@ export function getSumDetailStats({
     maxDailyTotal: Math.max(...totals),
     minDailyTotal: Math.min(...totals),
     recordedDays: dailyTotals.size,
+    sampleCount: numericEvents.length,
+    maxEntryValue: Math.max(...entryValues),
+    minEntryValue: Math.min(...entryValues),
     buckets,
     latestOccurredAt: getLatestNumericEvent(numericEvents)?.event.occurredAt,
   }
@@ -300,7 +304,7 @@ function createDetailBuckets(
 
       return {
         key: `${formatDateKey(start)}-${index}`,
-        label: `${String(index * 4).padStart(2, '0')}:00`,
+        label: `${String(index * 4).padStart(2, '0')}:00–${String((index + 1) * 4).padStart(2, '0')}:00`,
         start,
         end,
       }
@@ -350,7 +354,7 @@ function createFixedWeekBuckets(range: StatsOverviewRange): DetailBucket[] {
 
     buckets.push({
       key: formatDateKey(start),
-      label: formatShortDate(start),
+      label: `${formatShortDate(start)}–${formatShortDate(addDays(end, -1))}`,
       start,
       end,
     })
@@ -370,7 +374,7 @@ function createCalendarMonthBuckets(range: StatsOverviewRange): DetailBucket[] {
 
     buckets.push({
       key: formatDateKey(start),
-      label: `${start.getMonth() + 1}月`,
+      label: `${start.getFullYear()}/${start.getMonth() + 1}`,
       start,
       end,
     })

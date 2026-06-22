@@ -34,6 +34,9 @@ export interface SumDailyStats {
   maxDailyTotal: number
   minDailyTotal: number
   recordedDays?: number
+  sampleCount?: number
+  maxEntryValue?: number
+  minEntryValue?: number
   buckets: SumDailyBucket[]
   latestOccurredAt?: string
 }
@@ -277,6 +280,18 @@ export function getSumDailyStats({
     maxDailyTotal: Math.max(...bucketTotals, 0),
     minDailyTotal: Math.min(...bucketTotals),
     recordedDays: buckets.filter((bucket) => bucket.total > 0).length,
+    sampleCount: scopedEvents.length,
+    maxEntryValue: Math.max(
+      ...scopedEvents
+        .map((event) => getNumericAmount(event.values))
+        .filter((value): value is number => typeof value === 'number'),
+      0,
+    ),
+    minEntryValue: Math.min(
+      ...scopedEvents
+        .map((event) => getNumericAmount(event.values))
+        .filter((value): value is number => typeof value === 'number'),
+    ),
     buckets,
     latestOccurredAt,
   }

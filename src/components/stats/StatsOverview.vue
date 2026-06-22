@@ -4,9 +4,9 @@ import { storeToRefs } from 'pinia'
 import CatSwitcher from '@/components/common/CatSwitcher.vue'
 import FixedModal from '@/components/common/FixedModal.vue'
 import TodayButton from '@/components/common/TodayButton.vue'
+import StatsDatePicker from '@/components/stats/StatsDatePicker.vue'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
-import { useClickOutside } from '@/composables/useClickOutside'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   loadStatsPreference,
@@ -17,7 +17,6 @@ import {
   formatStatsOverviewRangeTitle,
   getPreviousStatsOverviewRange,
   getStatsOverviewRange,
-  isSameStatsOverviewDate,
   parseStatsOverviewDateInput,
   shiftStatsOverviewReferenceDate,
   STATS_OVERVIEW_RANGE_OPTIONS,
@@ -79,9 +78,6 @@ const statsReferenceDate = ref(
     ? (parseStatsOverviewDateInput(props.initialReferenceDate) ?? new Date())
     : new Date(),
 )
-const draftReferenceDate = ref(formatStatsOverviewDateInput(statsReferenceDate.value))
-const isRangePickerOpen = ref(false)
-const rangePickerRef = ref<HTMLElement>()
 
 const preferenceScopeKey = computed(
   () => `${user.value?.id ?? 'guest'}:${activeNotebookId.value || 'local'}`,
@@ -141,7 +137,6 @@ const previousRange = computed(() =>
 const rangeTitle = computed(() =>
   formatStatsOverviewRangeTitle(rangeMode.value, currentRange.value),
 )
-const todayInputValue = computed(() => formatStatsOverviewDateInput(new Date()))
 const canShowNextRange = computed(() => {
   const nextReferenceDate = shiftStatsOverviewReferenceDate(
     rangeMode.value,
@@ -151,9 +146,6 @@ const canShowNextRange = computed(() => {
 
   return nextReferenceDate <= startOfLocalDay(new Date())
 })
-const isCurrentRange = computed(() =>
-  isSameStatsOverviewDate(statsReferenceDate.value, new Date()),
-)
 const countSummariesByCategoryId = computed(
   () =>
     new Map(
@@ -225,9 +217,6 @@ const ratingSummariesByCategoryId = computed(
 )
 
 useBodyScrollLock(computed(() => isManagerOpen.value || shouldShowSetup.value))
-useClickOutside(rangePickerRef, () => {
-  isRangePickerOpen.value = false
-})
 
 watch(
   preferenceScopeKey,
@@ -352,7 +341,6 @@ function clearDragState(): void {
 
 function selectRangeMode(mode: StatsOverviewRangeMode): void {
   rangeMode.value = mode
-  isRangePickerOpen.value = false
 }
 
 function showPreviousRange(): void {
@@ -361,7 +349,6 @@ function showPreviousRange(): void {
     statsReferenceDate.value,
     -1,
   )
-  isRangePickerOpen.value = false
 }
 
 function showNextRange(): void {
@@ -374,29 +361,20 @@ function showNextRange(): void {
     statsReferenceDate.value,
     1,
   )
-  isRangePickerOpen.value = false
 }
 
 function showTodayRange(): void {
   statsReferenceDate.value = new Date()
-  draftReferenceDate.value = formatStatsOverviewDateInput(statsReferenceDate.value)
-  isRangePickerOpen.value = false
 }
 
-function toggleRangePicker(): void {
-  draftReferenceDate.value = formatStatsOverviewDateInput(statsReferenceDate.value)
-  isRangePickerOpen.value = !isRangePickerOpen.value
-}
-
-function applyReferenceDate(): void {
-  const selectedDate = parseStatsOverviewDateInput(draftReferenceDate.value)
+function selectReferenceDate(value: string): void {
+  const selectedDate = parseStatsOverviewDateInput(value)
 
   if (!selectedDate || selectedDate > startOfLocalDay(new Date())) {
     return
   }
 
   statsReferenceDate.value = selectedDate
-  isRangePickerOpen.value = false
 }
 
 function startOfLocalDay(date: Date): Date {
@@ -419,7 +397,6 @@ function openCategory(categoryId: string): void {
       <CatSwitcher />
       <h1 id="stats-overview-title">統計</h1>
       <div class="stats-overview__header-actions">
-        <TodayButton v-if="!isCurrentRange" @click="showTodayRange" />
         <button
           class="ui-button ui-button--primary stats-overview__manage"
           type="button"
@@ -456,36 +433,12 @@ function openCategory(categoryId: string): void {
           ‹
         </button>
 
-        <div ref="rangePickerRef" class="stats-range-picker">
-          <button
-            class="stats-range-title"
-            type="button"
-            :aria-expanded="isRangePickerOpen"
-            aria-haspopup="dialog"
-            @click="toggleRangePicker"
-          >
-            <span>{{ rangeTitle }}</span>
-            <span aria-hidden="true">▾</span>
-          </button>
-
-          <div
-            v-if="isRangePickerOpen"
-            class="stats-range-picker__menu"
-            role="dialog"
-            aria-label="選擇統計區間結束日期"
-          >
-            <label>
-              <span>區間結束日期</span>
-              <input
-                v-model="draftReferenceDate"
-                type="date"
-                :max="todayInputValue"
-                @change="applyReferenceDate"
-                @keydown.enter.prevent="applyReferenceDate"
-              />
-            </label>
-          </div>
-        </div>
+        <StatsDatePicker
+          :title="rangeTitle"
+          :model-value="formatStatsOverviewDateInput(statsReferenceDate)"
+          :max-date="formatStatsOverviewDateInput(new Date())"
+          @update:model-value="selectReferenceDate"
+        />
 
         <button
           class="ui-button ui-button--icon stats-range-button"
@@ -498,9 +451,12 @@ function openCategory(categoryId: string): void {
         </button>
       </div>
 
-      <p class="stats-range-panel__comparison">
-        比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}
-      </p>
+      <div class="stats-range-panel__footer">
+        <p class="stats-range-panel__comparison">
+          比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}
+        </p>
+        <TodayButton @click="showTodayRange" />
+      </div>
     </section>
 
     <div v-if="selectedCategories.length > 0" class="stats-overview__cards">
@@ -943,6 +899,17 @@ function openCategory(categoryId: string): void {
   color: var(--color-muted);
   font-size: 0.8125rem;
   text-align: center;
+}
+
+.stats-range-panel__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-range-panel__footer .stats-range-panel__comparison {
+  padding-left: 42px;
 }
 
 .stats-overview__cards {
