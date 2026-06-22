@@ -549,6 +549,10 @@ function startOfLocalDay(date: Date): Date {
                 </b>
               </span>
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__record-days">
+                有紀錄 {{ getSumSummary(category.id)!.currentRecordedDays }} 天・共
+                {{ getSumSummary(category.id)!.currentCount }} 筆
+              </small>
               <small class="stats-overview-card__comparison">
                 <template v-if="typeof getSumSummary(category.id)!.previousValue === 'number'">
                   {{ getPreviousPeriodLabel(rangeMode) }}
@@ -563,9 +567,6 @@ function startOfLocalDay(date: Date): Date {
                   </template>
                 </template>
                 <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
-              </small>
-              <small v-if="rangeMode !== 'day'" class="stats-overview-card__record-days">
-                有紀錄 {{ getSumSummary(category.id)!.currentRecordedDays }} 天
               </small>
             </template>
             <template
@@ -602,6 +603,10 @@ function startOfLocalDay(date: Date): Date {
                 </span>
               </span>
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__record-days">
+                有紀錄 {{ getMeasurementSummary(category.id)!.currentRecordedDays }} 天・共
+                {{ getMeasurementSummary(category.id)!.currentCount }} 筆
+              </small>
               <small class="stats-overview-card__comparison">
                 <template
                   v-if="typeof getMeasurementSummary(category.id)!.previousValue === 'number'"
@@ -626,9 +631,6 @@ function startOfLocalDay(date: Date): Date {
                 </template>
                 <template v-else>{{ getPreviousMeasurementLabel(rangeMode) }}沒有紀錄</template>
               </small>
-              <small class="stats-overview-card__record-days">
-                區間內 {{ getMeasurementSummary(category.id)!.currentCount }} 筆
-              </small>
             </template>
             <template
               v-else-if="category.statisticsMode === 'rating' && getRatingSummary(category.id)"
@@ -648,6 +650,10 @@ function startOfLocalDay(date: Date): Date {
                 </b>
               </span>
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__record-days">
+                有紀錄 {{ getRatingSummary(category.id)!.currentRecordedDays }} 天・共
+                {{ getRatingSummary(category.id)!.currentCount }} 筆
+              </small>
               <small class="stats-overview-card__comparison">
                 <template
                   v-if="typeof getRatingSummary(category.id)!.previousAverage === 'number'"
@@ -664,15 +670,6 @@ function startOfLocalDay(date: Date): Date {
                   </template>
                 </template>
                 <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
-              </small>
-              <small class="stats-overview-card__record-days">
-                <template v-if="rangeMode === 'day'">
-                  當日共 {{ getRatingSummary(category.id)!.currentCount }} 筆
-                </template>
-                <template v-else>
-                  有紀錄 {{ getRatingSummary(category.id)!.currentRecordedDays }} 天・共
-                  {{ getRatingSummary(category.id)!.currentCount }} 筆
-                </template>
               </small>
             </template>
             <small v-else>統計摘要將在下一階段接上</small>
@@ -1029,7 +1026,9 @@ function startOfLocalDay(date: Date): Date {
 }
 
 .stats-overview-card__record-days {
+  color: var(--color-muted);
   font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 .stats-overview-card__delta--up {

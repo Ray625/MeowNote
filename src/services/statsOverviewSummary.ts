@@ -16,6 +16,7 @@ export interface SumOverviewSummary {
   previousValue?: number
   delta?: number
   currentRecordedDays: number
+  currentCount: number
   previousRecordedDays: number
 }
 
@@ -27,6 +28,7 @@ export interface MeasurementOverviewSummary {
   previousValue?: number
   previousOccurredAt?: string
   delta?: number
+  currentRecordedDays: number
   currentCount: number
 }
 
@@ -106,6 +108,7 @@ export function getSumOverviewSummary({
   const categoryEvents = events.filter(
     (event) => event.catId === catId && event.categoryId === category.id,
   )
+  const currentNumericEvents = getNumericEventsInRange(categoryEvents, currentRange)
   const currentDailyTotals = getDailyTotalsInRange(categoryEvents, currentRange)
   const previousDailyTotals = getDailyTotalsInRange(categoryEvents, previousRange)
   const currentValue = getSumPeriodValue(currentDailyTotals, rangeMode)
@@ -121,6 +124,7 @@ export function getSumOverviewSummary({
         ? currentValue - previousValue
         : undefined,
     currentRecordedDays: currentDailyTotals.size,
+    currentCount: currentNumericEvents.length,
     previousRecordedDays: previousDailyTotals.size,
   }
 }
@@ -141,6 +145,9 @@ export function getMeasurementOverviewSummary({
   const previousEvent = getLatestNumericEvent(previousEvents)
   const currentValue = currentEvent ? getNumericAmount(currentEvent.values) : undefined
   const previousValue = previousEvent ? getNumericAmount(previousEvent.values) : undefined
+  const currentRecordedDays = new Set(
+    currentEvents.map((event) => formatDateKey(new Date(event.occurredAt))),
+  ).size
 
   return {
     mode: 'measurement',
@@ -153,6 +160,7 @@ export function getMeasurementOverviewSummary({
       typeof currentValue === 'number' && typeof previousValue === 'number'
         ? currentValue - previousValue
         : undefined,
+    currentRecordedDays,
     currentCount: currentEvents.length,
   }
 }
@@ -267,7 +275,19 @@ export function getCurrentRatingLabel(mode: StatsOverviewRangeMode): string {
 }
 
 export function getPreviousMeasurementLabel(mode: StatsOverviewRangeMode): string {
-  return mode === 'day' ? '前日最後' : '前期最後'
+  if (mode === 'day') {
+    return '前日最後一筆'
+  }
+
+  if (mode === 'halfYear') {
+    return '前半年最後一筆'
+  }
+
+  if (mode === 'year') {
+    return '前 1 年最後一筆'
+  }
+
+  return `前 ${mode.replace('d', '')} 日最後一筆`
 }
 
 export function formatSummaryAmount(value: number, category: EventCategory): string {
@@ -312,10 +332,7 @@ function countEventsInRange(events: CatEvent[], range: StatsOverviewRange): numb
   }).length
 }
 
-function getDailyTotalsInRange(
-  events: CatEvent[],
-  range: StatsOverviewRange,
-): Map<string, number> {
+function getDailyTotalsInRange(events: CatEvent[], range: StatsOverviewRange): Map<string, number> {
   const startTime = startOfDay(range.start).getTime()
   const endTime = addDays(startOfDay(range.end), 1).getTime()
   const dailyTotals = new Map<string, number>()
@@ -364,10 +381,7 @@ function getDailyAveragesInRange(
   )
 }
 
-function getNumericEventsInRange(
-  events: CatEvent[],
-  range: StatsOverviewRange,
-): CatEvent[] {
+function getNumericEventsInRange(events: CatEvent[], range: StatsOverviewRange): CatEvent[] {
   const startTime = startOfDay(range.start).getTime()
   const endTime = addDays(startOfDay(range.end), 1).getTime()
 
