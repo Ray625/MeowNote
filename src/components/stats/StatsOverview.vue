@@ -392,11 +392,11 @@ function openCategory(categoryId: string): void {
 </script>
 
 <template>
-  <section class="stats-overview" aria-labelledby="stats-overview-title">
+  <section class="stats-overview" aria-label="統計">
     <header class="stats-overview__header">
       <CatSwitcher />
-      <h1 id="stats-overview-title">統計</h1>
       <div class="stats-overview__header-actions">
+        <TodayButton @click="showTodayRange" />
         <button
           class="ui-button ui-button--primary stats-overview__manage"
           type="button"
@@ -451,12 +451,9 @@ function openCategory(categoryId: string): void {
         </button>
       </div>
 
-      <div class="stats-range-panel__footer">
-        <p class="stats-range-panel__comparison">
-          比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}
-        </p>
-        <TodayButton @click="showTodayRange" />
-      </div>
+      <p class="stats-range-panel__comparison">
+        比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}
+      </p>
     </section>
 
     <div v-if="selectedCategories.length > 0" class="stats-overview__cards">
@@ -746,18 +743,13 @@ function openCategory(categoryId: string): void {
 
 .stats-overview__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 14px;
   background: var(--color-surface);
-}
-
-.stats-overview__header h1 {
-  margin: 0;
-  font-size: 1.25rem;
 }
 
 .stats-overview__manage {
@@ -899,17 +891,6 @@ function openCategory(categoryId: string): void {
   color: var(--color-muted);
   font-size: 0.8125rem;
   text-align: center;
-}
-
-.stats-range-panel__footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.stats-range-panel__footer .stats-range-panel__comparison {
-  padding-left: 42px;
 }
 
 .stats-overview__cards {
@@ -1108,24 +1089,12 @@ function openCategory(categoryId: string): void {
 }
 
 @media (max-width: 560px) {
-  .stats-overview__header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .stats-overview__header h1 {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    justify-self: center;
-  }
-
   .stats-overview__header :deep(.cat-switcher) {
     grid-column: 1;
-    grid-row: 1;
   }
 
   .stats-overview__header-actions {
     grid-column: 2;
-    grid-row: 1;
   }
 
   .stats-range-tabs {

@@ -34,7 +34,7 @@ import {
   getPreviousPeriodLabel,
 } from '@/services/statsOverviewSummary'
 import { useCatTrackerStore } from '@/stores/catTracker'
-import type { EventCategory } from '@/types'
+import type { CatEvent, EventCategory } from '@/types'
 
 const props = defineProps<{
   initialCategoryId?: string
@@ -304,6 +304,33 @@ const selectedRatingStats = computed(() =>
     currentRange: currentRange.value,
   }),
 )
+const latestSelectedCategoryRecord = computed(() => {
+  const category = selectedStatsCategory.value
+
+  if (!category) {
+    return undefined
+  }
+
+  const latest = events.value
+    .filter(
+      (event) =>
+        event.catId === selectedCatId.value &&
+        event.categoryId === category.id &&
+        (category.statisticsMode === 'count' ||
+          typeof getEventNumericAmount(event) === 'number'),
+    )
+    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0]
+
+  if (!latest) {
+    return undefined
+  }
+
+  return {
+    occurredAt: latest.occurredAt,
+    valueText: getLatestRecordValueText(latest, category),
+    dateTimeText: formatRecordDateTime(latest.occurredAt),
+  }
+})
 
 watch(
   statCategories,
@@ -367,6 +394,48 @@ function getCategoryOptionStyle(category?: EventCategory): Record<string, string
   return {
     '--category-color': getCategoryColorValue(category),
   }
+}
+
+function getEventNumericAmount(event: CatEvent): number | undefined {
+  const amount = event.values?.amount
+  const value =
+    typeof amount === 'number' ? amount : typeof amount === 'string' ? Number(amount) : undefined
+
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function getLatestRecordValueText(event: CatEvent, category: EventCategory): string {
+  if (category.statisticsMode === 'count') {
+    return ''
+  }
+
+  const value = getEventNumericAmount(event)
+
+  if (typeof value !== 'number') {
+    return ''
+  }
+
+  if (category.statisticsMode === 'rating') {
+    return `${formatAmount(value)} / ${category.valueMax ?? 10}`
+  }
+
+  return `${formatAmount(value)}${category.valueUnit ? ` ${category.valueUnit}` : ''}`
+}
+
+function formatRecordDateTime(value: string): string {
+  return new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(new Date(value))
+}
+
+function showLatestRecordRange(): void {
+  if (!latestSelectedCategoryRecord.value) {
+    return
+  }
+
+  statsReferenceDate.value = new Date(latestSelectedCategoryRecord.value.occurredAt)
 }
 
 function getDeltaText(delta: number): string {
@@ -1010,7 +1079,14 @@ function formatDateInputValue(date: Date): string {
         </span>
       </div>
 
-      <div v-if="statsMode === 'count' && selectedCountStats" class="count-stats-list">
+      <div
+        v-if="
+          statsMode === 'count' &&
+          selectedCountStats &&
+          selectedCountStats.recentTotal > 0
+        "
+        class="count-stats-list"
+      >
         <article
           :key="selectedCountStats.category.id"
           class="count-card"
@@ -1495,17 +1571,30 @@ function formatDateInputValue(date: Date): string {
         </article>
       </div>
 
-      <p v-else class="empty-state">
-        {{
-          statsMode === 'count'
-            ? '區間沒有可統計的次數紀錄。'
-            : statsMode === 'sum'
-              ? '區間沒有可統計的加總紀錄。'
-              : statsMode === 'measurement'
-                ? '區間沒有可統計的測量紀錄。'
-                : '區間沒有可統計的評分紀錄。'
-        }}
-      </p>
+      <div v-else class="empty-state">
+        <p>
+          {{
+            statsMode === 'count'
+              ? '區間沒有可統計的次數紀錄。'
+              : statsMode === 'sum'
+                ? '區間沒有可統計的加總紀錄。'
+                : statsMode === 'measurement'
+                  ? '區間沒有可統計的測量紀錄。'
+                  : '區間沒有可統計的評分紀錄。'
+          }}
+        </p>
+        <p v-if="latestSelectedCategoryRecord" class="empty-state__latest">
+          最後一次紀錄{{ latestSelectedCategoryRecord.valueText ? '為' : '於' }}
+          <button type="button" @click="showLatestRecordRange">
+            <template v-if="latestSelectedCategoryRecord.valueText">
+              {{ latestSelectedCategoryRecord.valueText }}（{{
+                latestSelectedCategoryRecord.dateTimeText
+              }}）
+            </template>
+            <template v-else>{{ latestSelectedCategoryRecord.dateTimeText }}</template>
+          </button>
+        </p>
+      </div>
     </section>
   </section>
 </template>
@@ -2298,8 +2387,31 @@ function formatDateInputValue(date: Date): string {
 }
 
 .empty-state {
+  display: grid;
+  gap: 8px;
   padding: 18px 0;
   text-align: center;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state__latest {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.empty-state__latest button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #3182ce;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 @media (hover: hover) and (pointer: fine) {
