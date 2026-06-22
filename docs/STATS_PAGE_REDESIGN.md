@@ -362,8 +362,9 @@ user_stat_preferences
 
 - Phase 1 已完成本機統計偏好、首次選擇、管理項目、拖曳排序與總覽骨架
 - Phase 2 已完成共用滾動區間、前後切換、結束日期選擇、今日與未來區間防護
+- Phase 3 已完成 `count` 總覽卡片的本期總次數、前期數值、差額與無資料狀態
 - 統計偏好目前先存於 `localStorage`，尚未同步 Supabase
-- 總覽卡片目前仍是骨架，尚未接上四種摘要計算
+- `sum`、`measurement`、`rating` 總覽卡片目前仍是骨架
 
 ### Phase 1：統計偏好與總覽骨架
 

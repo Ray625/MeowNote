@@ -23,6 +23,13 @@ import {
   STATS_OVERVIEW_RANGE_OPTIONS,
   type StatsOverviewRangeMode,
 } from '@/services/statsOverviewRange'
+import {
+  formatCountDelta,
+  getCountOverviewSummary,
+  getCurrentCountLabel,
+  getPreviousPeriodLabel,
+  type CountOverviewSummary,
+} from '@/services/statsOverviewSummary'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { EventCategory } from '@/types'
 
@@ -116,6 +123,23 @@ const canShowNextRange = computed(() => {
 const isCurrentRange = computed(() =>
   isSameStatsOverviewDate(statsReferenceDate.value, new Date()),
 )
+const countSummariesByCategoryId = computed(
+  () =>
+    new Map(
+      selectedCategories.value
+        .filter((category) => category.statisticsMode === 'count')
+        .map((category) => [
+          category.id,
+          getCountOverviewSummary({
+            category,
+            events: events.value,
+            catId: selectedCatId.value,
+            currentRange: currentRange.value,
+            previousRange: previousRange.value,
+          }),
+        ]),
+    ),
+)
 
 useBodyScrollLock(computed(() => isManagerOpen.value || shouldShowSetup.value))
 useClickOutside(rangePickerRef, () => {
@@ -151,6 +175,10 @@ function getCategoryStyle(category: EventCategory): Record<string, string> {
   return {
     '--category-color': getCategoryColorValue(category),
   }
+}
+
+function getCountSummary(categoryId: string): CountOverviewSummary | undefined {
+  return countSummariesByCategoryId.value.get(categoryId)
 }
 
 function openManager(): void {
@@ -403,9 +431,30 @@ function startOfLocalDay(date: Date): Date {
           @click="emit('openCategory', category.id)"
         >
           <span class="stats-overview-card__dot" aria-hidden="true"></span>
-          <span>
+          <span class="stats-overview-card__content">
             <strong>{{ category.name }}</strong>
-            <small>統計摘要將在下一階段接上</small>
+            <template v-if="category.statisticsMode === 'count' && getCountSummary(category.id)">
+              <span
+                v-if="getCountSummary(category.id)!.currentTotal > 0"
+                class="stats-overview-card__primary"
+              >
+                {{ getCurrentCountLabel(rangeMode) }}
+                <b>{{ getCountSummary(category.id)!.currentTotal }} 次</b>
+              </span>
+              <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
+              <small class="stats-overview-card__comparison">
+                {{ getPreviousPeriodLabel(rangeMode) }}
+                {{ getCountSummary(category.id)!.previousTotal }} 次｜
+                <span
+                  :class="{
+                    'stats-overview-card__delta--up': getCountSummary(category.id)!.delta > 0,
+                  }"
+                >
+                  {{ formatCountDelta(getCountSummary(category.id)!.delta) }}
+                </span>
+              </small>
+            </template>
+            <small v-else>統計摘要將在下一階段接上</small>
           </span>
           <span aria-hidden="true">›</span>
         </button>
@@ -719,19 +768,43 @@ function startOfLocalDay(date: Date): Date {
   text-align: left;
 }
 
-.stats-overview-card__main > span:nth-child(2) {
+.stats-overview-card__content {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.stats-overview-card__main strong {
+.stats-overview-card__content > strong {
   color: color-mix(in srgb, var(--category-color) 82%, var(--color-text));
 }
 
-.stats-overview-card__main small,
+.stats-overview-card__content > small,
 .stats-manager__hint {
   color: var(--color-muted);
+}
+
+.stats-overview-card__primary {
+  color: var(--color-text);
+  font-size: 0.9375rem;
+}
+
+.stats-overview-card__primary b {
+  margin-left: 4px;
+  font-size: 1.05rem;
+}
+
+.stats-overview-card__empty-period {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.stats-overview-card__comparison {
+  font-size: 0.8125rem;
+}
+
+.stats-overview-card__delta--up {
+  color: var(--color-danger);
+  font-weight: 900;
 }
 
 .stats-overview-card__dot {
