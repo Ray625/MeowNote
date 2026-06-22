@@ -37,6 +37,39 @@ Legacy fallback key:
 cat-log:v1
 ```
 
+## Statistics Preferences
+
+The first statistics overview implementation stores the selected category order locally:
+
+```ts
+interface StatsPreference {
+  categoryIds: string[]
+}
+```
+
+Current storage key:
+
+```txt
+meownote:stats-preferences:v1
+```
+
+Preferences are scoped by:
+
+```txt
+user-or-guest-id:notebook-or-local-id
+```
+
+`categoryIds` controls both visibility and card order.
+
+This is an interim persistence boundary. The planned remote model is documented in:
+
+```txt
+docs/STATS_PAGE_REDESIGN.md
+```
+
+Remote synchronization should be added after the overview interaction and calculation rules are
+stable.
+
 ## Cat
 
 ```ts
