@@ -985,7 +985,7 @@ function formatDateInputValue(date: Date): string {
       <button class="stats-back-button" type="button" @click="emit('back')">‹ 返回</button>
 
       <div class="stats-header__title">
-        <h1 id="stats-title">詳細分析</h1>
+        <h1 id="stats-title">統計圖</h1>
       </div>
 
       <TodayButton @click="showTodayRange" />
