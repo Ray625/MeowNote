@@ -29,10 +29,7 @@ import {
   STATS_OVERVIEW_RANGE_OPTIONS,
   type StatsOverviewRangeMode,
 } from '@/services/statsOverviewRange'
-import {
-  getCurrentCountLabel,
-  getPreviousPeriodLabel,
-} from '@/services/statsOverviewSummary'
+import { getCurrentCountLabel, getPreviousPeriodLabel } from '@/services/statsOverviewSummary'
 import { useCatTrackerStore } from '@/stores/catTracker'
 import type { CatEvent, EventCategory } from '@/types'
 
@@ -87,6 +84,7 @@ const chartInteractionRef = ref<HTMLElement>()
 const activeChartTooltip = ref<ChartTooltip>()
 const rangePickerYear = ref(statsReferenceDate.value.getFullYear())
 const rangePickerMonth = ref(statsReferenceDate.value.getMonth())
+const supportsChartHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
 const monthOptions = Array.from({ length: 12 }, (_, index) => ({
   index,
@@ -113,7 +111,9 @@ const selectedStatsCategory = computed(() =>
   statCategories.value.find((category) => category.id === selectedStatsCategoryId.value),
 )
 const statsMode = computed<StatsMode>(() => selectedStatsCategory.value?.statisticsMode ?? 'count')
-const currentRange = computed(() => getStatsOverviewRange(rangeMode.value, statsReferenceDate.value))
+const currentRange = computed(() =>
+  getStatsOverviewRange(rangeMode.value, statsReferenceDate.value),
+)
 const previousRange = computed(() =>
   getPreviousStatsOverviewRange(rangeMode.value, currentRange.value),
 )
@@ -156,9 +156,7 @@ const rangeTitle = computed(() =>
 const nextRangeReferenceDate = computed(() =>
   shiftStatsOverviewReferenceDate(rangeMode.value, statsReferenceDate.value, 1),
 )
-const canShowNextRange = computed(
-  () => nextRangeReferenceDate.value <= startOfDay(new Date()),
-)
+const canShowNextRange = computed(() => nextRangeReferenceDate.value <= startOfDay(new Date()))
 const rangePickerMonthIndex = computed(() => statsReferenceDate.value.getMonth())
 const rangePickerMode = computed<RangePickerMode>(() => 'day')
 const rangePickerLabel = computed(() => '選擇區間結束日期')
@@ -240,10 +238,7 @@ const recordedCategoryIds = computed(
 const statCategories = computed(() =>
   categories.value
     .filter((category) => recordedCategoryIds.value.has(category.id))
-    .filter(
-      (category) =>
-        !props.categoryIds?.length || props.categoryIds.includes(category.id),
-    )
+    .filter((category) => !props.categoryIds?.length || props.categoryIds.includes(category.id))
     .filter((category) =>
       ['count', 'sum', 'measurement', 'rating'].includes(category.statisticsMode),
     )
@@ -316,8 +311,7 @@ const latestSelectedCategoryRecord = computed(() => {
       (event) =>
         event.catId === selectedCatId.value &&
         event.categoryId === category.id &&
-        (category.statisticsMode === 'count' ||
-          typeof getEventNumericAmount(event) === 'number'),
+        (category.statisticsMode === 'count' || typeof getEventNumericAmount(event) === 'number'),
     )
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0]
 
@@ -352,15 +346,12 @@ watch(
   { immediate: true },
 )
 
-watch(
-  [rangeMode, statsReferenceDate],
-  ([nextRangeMode, nextReferenceDate]) => {
-    emit('rangeChange', {
-      rangeMode: nextRangeMode,
-      referenceDate: formatStatsOverviewDateInput(nextReferenceDate),
-    })
-  },
-)
+watch([rangeMode, statsReferenceDate], ([nextRangeMode, nextReferenceDate]) => {
+  emit('rangeChange', {
+    rangeMode: nextRangeMode,
+    referenceDate: formatStatsOverviewDateInput(nextReferenceDate),
+  })
+})
 
 watch([selectedStatsCategoryId, rangeMode, statsReferenceDate], () => {
   activeChartTooltip.value = undefined
@@ -440,11 +431,11 @@ function showLatestRecordRange(): void {
 
 function getDeltaText(delta: number): string {
   if (delta > 0) {
-    return `比${previousPeriodText.value} +${delta}`
+    return `比${previousPeriodText.value}增加 ${delta} 次`
   }
 
   if (delta < 0) {
-    return `比${previousPeriodText.value} ${delta}`
+    return `比${previousPeriodText.value}減少 ${Math.abs(delta)} 次`
   }
 
   return `與${previousPeriodText.value}相同`
@@ -570,6 +561,10 @@ function toggleChartTooltip(
   index: number,
   pointCount: number,
 ): void {
+  if (supportsChartHover) {
+    return
+  }
+
   if (activeChartTooltip.value?.key === key) {
     activeChartTooltip.value = undefined
     return
@@ -584,6 +579,10 @@ function toggleTrendTooltip(
   value: string,
   point: MeasurementPoint,
 ): void {
+  if (supportsChartHover) {
+    return
+  }
+
   if (activeChartTooltip.value?.key === key) {
     activeChartTooltip.value = undefined
     return
@@ -595,6 +594,35 @@ function toggleTrendTooltip(
 function hideChartTooltip(key: string): void {
   if (activeChartTooltip.value?.key === key) {
     activeChartTooltip.value = undefined
+  }
+}
+
+function showChartTooltipFromHover(
+  key: string,
+  label: string,
+  value: string,
+  index: number,
+  pointCount: number,
+): void {
+  if (supportsChartHover) {
+    showChartTooltip(key, label, value, index, pointCount)
+  }
+}
+
+function showTrendTooltipFromHover(
+  key: string,
+  label: string,
+  value: string,
+  point: MeasurementPoint,
+): void {
+  if (supportsChartHover) {
+    showTrendTooltip(key, label, value, point)
+  }
+}
+
+function hideChartTooltipFromHover(key: string): void {
+  if (supportsChartHover) {
+    hideChartTooltip(key)
   }
 }
 
@@ -613,12 +641,7 @@ function getMeasurementLinePoints(stats: MeasurementStats): string {
         return ''
       }
 
-      const position = getTrendPointPosition(
-        point,
-        point.value,
-        stats.minValue,
-        stats.maxValue,
-      )
+      const position = getTrendPointPosition(point, point.value, stats.minValue, stats.maxValue)
 
       return `${position.x},${position.y}`
     })
@@ -633,12 +656,7 @@ function getRatingLinePoints(stats: RatingStats): string {
         return ''
       }
 
-      const position = getTrendPointPosition(
-        point,
-        point.value,
-        0,
-        stats.category.valueMax ?? 10,
-      )
+      const position = getTrendPointPosition(point, point.value, 0, stats.category.valueMax ?? 10)
 
       return `${position.x},${position.y}`
     })
@@ -723,9 +741,7 @@ function getTrendPointX(point: MeasurementPoint): number {
       ? addDays(startOfDay(currentRange.value.end), 1).getTime()
       : startOfDay(currentRange.value.end).getTime()
   const ratio =
-    rangeEnd === rangeStart
-      ? 0.5
-      : (pointDate.getTime() - rangeStart) / (rangeEnd - rangeStart)
+    rangeEnd === rangeStart ? 0.5 : (pointDate.getTime() - rangeStart) / (rangeEnd - rangeStart)
 
   return Number((8 + Math.max(0, Math.min(ratio, 1)) * 84).toFixed(2))
 }
@@ -1074,17 +1090,11 @@ function formatDateInputValue(date: Date): string {
           </div>
         </div>
 
-        <span class="stats-granularity">
-          圖表：{{ getDetailGranularityLabel(rangeMode) }}
-        </span>
+        <span class="stats-granularity"> 圖表：{{ getDetailGranularityLabel(rangeMode) }} </span>
       </div>
 
       <div
-        v-if="
-          statsMode === 'count' &&
-          selectedCountStats &&
-          selectedCountStats.recentTotal > 0
-        "
+        v-if="statsMode === 'count' && selectedCountStats && selectedCountStats.recentTotal > 0"
         class="count-stats-list"
       >
         <article
@@ -1094,7 +1104,6 @@ function formatDateInputValue(date: Date): string {
         >
           <div class="count-card__summary">
             <div>
-              <h3>{{ selectedCountStats.category.name }}</h3>
               <p>{{ recentPeriodText }} {{ selectedCountStats.recentTotal }} 次</p>
             </div>
             <strong :class="{ 'count-card__delta--up': selectedCountStats.delta > 0 }">
@@ -1122,10 +1131,12 @@ function formatDateInputValue(date: Date): string {
                 v-for="(bucket, index) in selectedCountStats.buckets"
                 :key="bucket.key"
                 class="count-bar"
+                :class="{ 'count-bar--active': activeChartTooltip?.key === bucket.key }"
                 type="button"
+                :disabled="bucket.count === 0"
                 :aria-label="`${bucket.label}，${bucket.count} 次`"
                 @mouseenter="
-                  showChartTooltip(
+                  showChartTooltipFromHover(
                     bucket.key,
                     bucket.label,
                     `${bucket.count} 次`,
@@ -1133,9 +1144,9 @@ function formatDateInputValue(date: Date): string {
                     selectedCountStats.buckets.length,
                   )
                 "
-                @mouseleave="hideChartTooltip(bucket.key)"
+                @mouseleave="hideChartTooltipFromHover(bucket.key)"
                 @focus="
-                  showChartTooltip(
+                  showChartTooltipFromHover(
                     bucket.key,
                     bucket.label,
                     `${bucket.count} 次`,
@@ -1143,7 +1154,7 @@ function formatDateInputValue(date: Date): string {
                     selectedCountStats.buckets.length,
                   )
                 "
-                @blur="hideChartTooltip(bucket.key)"
+                @blur="hideChartTooltipFromHover(bucket.key)"
                 @click.stop="
                   toggleChartTooltip(
                     bucket.key,
@@ -1192,7 +1203,6 @@ function formatDateInputValue(date: Date): string {
         >
           <div class="count-card__summary">
             <div>
-              <h3>{{ selectedSumStats.category.name }}</h3>
               <p v-if="rangeMode === 'day'">
                 當日總量 {{ getAmountText(selectedSumStats.rangeTotal, selectedSumStats) }}
               </p>
@@ -1254,10 +1264,12 @@ function formatDateInputValue(date: Date): string {
                 v-for="(bucket, index) in selectedSumStats.buckets"
                 :key="bucket.key"
                 class="count-bar"
+                :class="{ 'count-bar--active': activeChartTooltip?.key === bucket.key }"
                 type="button"
+                :disabled="bucket.total === 0"
                 :aria-label="`${bucket.label}，${getAmountText(bucket.total, selectedSumStats)}`"
                 @mouseenter="
-                  showChartTooltip(
+                  showChartTooltipFromHover(
                     bucket.key,
                     bucket.label,
                     getAmountText(bucket.total, selectedSumStats),
@@ -1265,9 +1277,9 @@ function formatDateInputValue(date: Date): string {
                     selectedSumStats.buckets.length,
                   )
                 "
-                @mouseleave="hideChartTooltip(bucket.key)"
+                @mouseleave="hideChartTooltipFromHover(bucket.key)"
                 @focus="
-                  showChartTooltip(
+                  showChartTooltipFromHover(
                     bucket.key,
                     bucket.label,
                     getAmountText(bucket.total, selectedSumStats),
@@ -1275,7 +1287,7 @@ function formatDateInputValue(date: Date): string {
                     selectedSumStats.buckets.length,
                   )
                 "
-                @blur="hideChartTooltip(bucket.key)"
+                @blur="hideChartTooltipFromHover(bucket.key)"
                 @click.stop="
                   toggleChartTooltip(
                     bucket.key,
@@ -1326,7 +1338,6 @@ function formatDateInputValue(date: Date): string {
         >
           <div class="count-card__summary">
             <div>
-              <h3>{{ selectedMeasurementStats.category.name }}</h3>
               <p>
                 最近量測
                 {{
@@ -1355,11 +1366,7 @@ function formatDateInputValue(date: Date): string {
             </div>
           </div>
 
-          <div
-            ref="chartInteractionRef"
-            class="measurement-chart"
-            aria-label="量測趨勢"
-          >
+          <div ref="chartInteractionRef" class="measurement-chart" aria-label="量測趨勢">
             <div class="trend-plot">
               <div
                 v-if="activeChartTooltip"
@@ -1385,33 +1392,29 @@ function formatDateInputValue(date: Date): string {
                 <button
                   v-if="typeof point.value === 'number'"
                   class="trend-chart__dot"
+                  :class="{ 'trend-chart__dot--active': activeChartTooltip?.key === point.key }"
                   type="button"
-                  :style="
-                    getMeasurementDotStyle(
-                      point,
-                      point.value,
-                      selectedMeasurementStats,
-                    )
-                  "
+                  :disabled="point.value === 0"
+                  :style="getMeasurementDotStyle(point, point.value, selectedMeasurementStats)"
                   :aria-label="`${point.label}，${getMeasurementText(point.value, selectedMeasurementStats)}`"
                   @mouseenter="
-                    showTrendTooltip(
+                    showTrendTooltipFromHover(
                       point.key,
                       point.label,
                       getMeasurementText(point.value, selectedMeasurementStats),
                       point,
                     )
                   "
-                  @mouseleave="hideChartTooltip(point.key)"
+                  @mouseleave="hideChartTooltipFromHover(point.key)"
                   @focus="
-                    showTrendTooltip(
+                    showTrendTooltipFromHover(
                       point.key,
                       point.label,
                       getMeasurementText(point.value, selectedMeasurementStats),
                       point,
                     )
                   "
-                  @blur="hideChartTooltip(point.key)"
+                  @blur="hideChartTooltipFromHover(point.key)"
                   @click.stop="
                     toggleTrendTooltip(
                       point.key,
@@ -1454,7 +1457,6 @@ function formatDateInputValue(date: Date): string {
         >
           <div class="count-card__summary">
             <div>
-              <h3>{{ selectedRatingStats.category.name }}</h3>
               <p>
                 最近評分 {{ getRatingText(selectedRatingStats.latestValue, selectedRatingStats) }}
               </p>
@@ -1480,11 +1482,7 @@ function formatDateInputValue(date: Date): string {
             </div>
           </div>
 
-          <div
-            ref="chartInteractionRef"
-            class="measurement-chart"
-            aria-label="評分趨勢"
-          >
+          <div ref="chartInteractionRef" class="measurement-chart" aria-label="評分趨勢">
             <div class="trend-plot">
               <div
                 v-if="activeChartTooltip"
@@ -1510,33 +1508,29 @@ function formatDateInputValue(date: Date): string {
                 <button
                   v-if="typeof point.value === 'number'"
                   class="trend-chart__dot"
+                  :class="{ 'trend-chart__dot--active': activeChartTooltip?.key === point.key }"
                   type="button"
-                  :style="
-                    getRatingDotStyle(
-                      point,
-                      point.value,
-                      selectedRatingStats,
-                    )
-                  "
+                  :disabled="point.value === 0"
+                  :style="getRatingDotStyle(point, point.value, selectedRatingStats)"
                   :aria-label="`${point.label}，${getRatingText(point.value, selectedRatingStats)}`"
                   @mouseenter="
-                    showTrendTooltip(
+                    showTrendTooltipFromHover(
                       point.key,
                       point.label,
                       getRatingText(point.value, selectedRatingStats),
                       point,
                     )
                   "
-                  @mouseleave="hideChartTooltip(point.key)"
+                  @mouseleave="hideChartTooltipFromHover(point.key)"
                   @focus="
-                    showTrendTooltip(
+                    showTrendTooltipFromHover(
                       point.key,
                       point.label,
                       getRatingText(point.value, selectedRatingStats),
                       point,
                     )
                   "
-                  @blur="hideChartTooltip(point.key)"
+                  @blur="hideChartTooltipFromHover(point.key)"
                   @click.stop="
                     toggleTrendTooltip(
                       point.key,
@@ -1566,7 +1560,9 @@ function formatDateInputValue(date: Date): string {
 
           <div class="count-card__meta">
             <span>最近 {{ formatLatestDate(selectedRatingStats.latestOccurredAt) }}</span>
-            <span>{{ rangeMode === 'day' ? '單日多筆' : getDetailGranularityLabel(rangeMode) }}</span>
+            <span>{{
+              rangeMode === 'day' ? '單日多筆' : getDetailGranularityLabel(rangeMode)
+            }}</span>
           </div>
         </article>
       </div>
@@ -2164,13 +2160,8 @@ function formatDateInputValue(date: Date): string {
   gap: 12px;
 }
 
-.count-card__summary h3,
 .count-card__summary p {
   margin: 0;
-}
-
-.count-card__summary h3 {
-  font-size: 1rem;
 }
 
 .count-card__summary p,
@@ -2252,11 +2243,20 @@ function formatDateInputValue(date: Date): string {
   font: inherit;
 }
 
+.count-bar:disabled {
+  cursor: default;
+}
+
 .count-bar__fill {
   width: 100%;
   max-width: 18px;
   border-radius: 999px 999px 3px 3px;
   background: var(--category-color);
+  transition: opacity 120ms ease;
+}
+
+.count-bar--active .count-bar__fill {
+  opacity: 0.6;
 }
 
 .count-bars__labels em {
@@ -2326,6 +2326,15 @@ function formatDateInputValue(date: Date): string {
   background: var(--category-color);
   cursor: pointer;
   transform: translate(-50%, -50%);
+  transition: opacity 120ms ease;
+}
+
+.trend-chart__dot:disabled {
+  cursor: default;
+}
+
+.trend-chart__dot--active {
+  opacity: 0.6;
 }
 
 .chart-tooltip {
@@ -2415,6 +2424,13 @@ function formatDateInputValue(date: Date): string {
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .count-bar:not(:disabled):hover .count-bar__fill,
+  .count-bar:not(:disabled):focus-visible .count-bar__fill,
+  .trend-chart__dot:not(:disabled):hover,
+  .trend-chart__dot:not(:disabled):focus-visible {
+    opacity: 0.6;
+  }
+
   .mode-tab:hover,
   .interval-tab:hover,
   .stats-detail-range-tab:hover {

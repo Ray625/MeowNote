@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import CatSwitcher from '@/components/common/CatSwitcher.vue'
 import FixedModal from '@/components/common/FixedModal.vue'
@@ -7,6 +7,7 @@ import TodayButton from '@/components/common/TodayButton.vue'
 import StatsDatePicker from '@/components/stats/StatsDatePicker.vue'
 import { getCategoryColorValue } from '@/constants/defaultData'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   loadStatsPreference,
@@ -24,10 +25,7 @@ import {
   type StatsOverviewRangeMode,
 } from '@/services/statsOverviewRange'
 import {
-  formatCountDelta,
-  formatRatingDelta,
   formatRatingScore,
-  formatSumDelta,
   formatSummaryAmount,
   formatSummaryDate,
   getCountOverviewSummary,
@@ -73,6 +71,9 @@ const isManagerOpen = ref(false)
 const draggingCategoryId = ref<string>()
 const dragTargetCategoryId = ref<string>()
 const dragTargetPosition = ref<'before' | 'after'>('before')
+const comparisonHelpRef = ref<HTMLElement>()
+const isComparisonHelpOpen = ref(false)
+let activeDragPointerId: number | undefined
 const rangeMode = ref<StatsOverviewRangeMode>(props.initialRangeMode ?? '7d')
 const statsReferenceDate = ref(
   props.initialReferenceDate
@@ -219,6 +220,10 @@ const ratingSummariesByCategoryId = computed(
 
 useBodyScrollLock(computed(() => isManagerOpen.value || shouldShowSetup.value))
 
+useClickOutside(comparisonHelpRef, () => {
+  isComparisonHelpOpen.value = false
+})
+
 watch(
   preferenceScopeKey,
   async (scopeKey, _previousScopeKey, onCleanup) => {
@@ -324,6 +329,86 @@ function startDrag(categoryId: string, event: DragEvent): void {
   }
 }
 
+function startPointerDrag(categoryId: string, event: PointerEvent): void {
+  if (event.pointerType === 'mouse') {
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  activeDragPointerId = event.pointerId
+  draggingCategoryId.value = categoryId
+  dragTargetCategoryId.value = undefined
+  document.body.classList.add('stats-card-reordering')
+  window.addEventListener('pointermove', movePointerDrag, { passive: false })
+  window.addEventListener('pointerup', finishPointerDrag)
+  window.addEventListener('pointercancel', cancelPointerDrag)
+}
+
+function movePointerDrag(event: PointerEvent): void {
+  if (event.pointerId !== activeDragPointerId || !draggingCategoryId.value) {
+    return
+  }
+
+  event.preventDefault()
+
+  const target = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest<HTMLElement>('[data-stats-category-id]')
+  const targetCategoryId = target?.dataset.statsCategoryId
+
+  if (!target || !targetCategoryId || targetCategoryId === draggingCategoryId.value) {
+    dragTargetCategoryId.value = undefined
+  } else {
+    const bounds = target.getBoundingClientRect()
+
+    dragTargetCategoryId.value = targetCategoryId
+    dragTargetPosition.value =
+      event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+  }
+
+  const scrollEdge = 72
+
+  if (event.clientY < scrollEdge) {
+    window.scrollBy({ top: -12 })
+  } else if (event.clientY > window.innerHeight - scrollEdge) {
+    window.scrollBy({ top: 12 })
+  }
+}
+
+function finishPointerDrag(event: PointerEvent): void {
+  if (event.pointerId !== activeDragPointerId) {
+    return
+  }
+
+  const targetCategoryId = dragTargetCategoryId.value
+
+  if (targetCategoryId) {
+    dropCategory(targetCategoryId)
+  } else {
+    clearDragState()
+  }
+
+  cleanupPointerDrag()
+}
+
+function cancelPointerDrag(event: PointerEvent): void {
+  if (event.pointerId !== activeDragPointerId) {
+    return
+  }
+
+  clearDragState()
+  cleanupPointerDrag()
+}
+
+function cleanupPointerDrag(): void {
+  activeDragPointerId = undefined
+  document.body.classList.remove('stats-card-reordering')
+  window.removeEventListener('pointermove', movePointerDrag)
+  window.removeEventListener('pointerup', finishPointerDrag)
+  window.removeEventListener('pointercancel', cancelPointerDrag)
+}
+
 function dragOverCategory(targetCategoryId: string, event: DragEvent): void {
   if (!draggingCategoryId.value || draggingCategoryId.value === targetCategoryId) {
     dragTargetCategoryId.value = undefined
@@ -360,6 +445,8 @@ function clearDragState(): void {
   draggingCategoryId.value = undefined
   dragTargetCategoryId.value = undefined
 }
+
+onUnmounted(cleanupPointerDrag)
 
 function selectRangeMode(mode: StatsOverviewRangeMode): void {
   rangeMode.value = mode
@@ -473,15 +560,32 @@ function openCategory(categoryId: string): void {
         </button>
       </div>
 
-      <p class="stats-range-panel__comparison">
-        比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}
-      </p>
+      <div ref="comparisonHelpRef" class="stats-range-panel__comparison">
+        <span>比較區間：{{ formatStatsOverviewRangeTitle(rangeMode, previousRange) }}</span>
+        <button
+          class="stats-comparison-help__button"
+          type="button"
+          aria-label="查看比較區間說明"
+          :aria-expanded="isComparisonHelpOpen"
+          @click="isComparisonHelpOpen = !isComparisonHelpOpen"
+        >
+          ?
+        </button>
+        <span
+          class="stats-comparison-help__tooltip"
+          :class="{ 'stats-comparison-help__tooltip--open': isComparisonHelpOpen }"
+          role="tooltip"
+        >
+          與前一時段相比，觀察趨勢
+        </span>
+      </div>
     </section>
 
     <div v-if="selectedCategories.length > 0" class="stats-overview__cards">
       <article
         v-for="category in selectedCategories"
         :key="category.id"
+        :data-stats-category-id="category.id"
         class="stats-overview-card"
         :class="{
           'stats-overview-card--dragging': draggingCategoryId === category.id,
@@ -501,6 +605,7 @@ function openCategory(categoryId: string): void {
           aria-label="拖曳排序"
           title="拖曳排序"
           @dragstart="startDrag(category.id, $event)"
+          @pointerdown="startPointerDrag(category.id, $event)"
         >
           ⋮⋮
         </span>
@@ -509,7 +614,6 @@ function openCategory(categoryId: string): void {
           type="button"
           @click="openCategory(category.id)"
         >
-          <span class="stats-overview-card__dot" aria-hidden="true"></span>
           <span class="stats-overview-card__content">
             <strong>{{ category.name }}</strong>
             <template v-if="category.statisticsMode === 'count' && getCountSummary(category.id)">
@@ -523,14 +627,7 @@ function openCategory(categoryId: string): void {
               <span v-else class="stats-overview-card__empty-period">此區間沒有紀錄</span>
               <small class="stats-overview-card__comparison">
                 {{ getPreviousPeriodLabel(rangeMode) }}
-                {{ getCountSummary(category.id)!.previousTotal }} 次｜
-                <span
-                  :class="{
-                    'stats-overview-card__delta--up': getCountSummary(category.id)!.delta > 0,
-                  }"
-                >
-                  {{ formatCountDelta(getCountSummary(category.id)!.delta) }}
-                </span>
+                {{ getCountSummary(category.id)!.previousTotal }} 次
               </small>
             </template>
             <template v-else-if="category.statisticsMode === 'sum' && getSumSummary(category.id)">
@@ -565,9 +662,6 @@ function openCategory(categoryId: string): void {
                       category,
                     )
                   }}
-                  <template v-if="typeof getSumSummary(category.id)!.delta === 'number'">
-                    ｜{{ formatSumDelta(getSumSummary(category.id)!.delta!, category) }}
-                  </template>
                 </template>
                 <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
               </small>
@@ -624,18 +718,8 @@ function openCategory(categoryId: string): void {
                       category,
                     )
                   }}
-                  <template
-                    v-if="typeof getMeasurementSummary(category.id)!.delta === 'number'"
-                  >
-                    ｜{{
-                      formatSumDelta(
-                        getMeasurementSummary(category.id)!.delta!,
-                        category,
-                      )
-                    }}
-                  </template>
                 </template>
-                <template v-else>{{ getPreviousMeasurementLabel(rangeMode) }}沒有紀錄</template>
+                <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
               </small>
             </template>
             <template
@@ -674,9 +758,6 @@ function openCategory(categoryId: string): void {
                       category,
                     )
                   }}
-                  <template v-if="typeof getRatingSummary(category.id)!.delta === 'number'">
-                    ｜{{ formatRatingDelta(getRatingSummary(category.id)!.delta!) }}
-                  </template>
                 </template>
                 <template v-else>{{ getPreviousPeriodLabel(rangeMode) }}沒有紀錄</template>
               </small>
@@ -733,9 +814,6 @@ function openCategory(categoryId: string): void {
             >
               <span class="stats-overview-card__dot" aria-hidden="true"></span>
               <span>{{ category.name }}</span>
-              <span aria-hidden="true">
-                {{ draftCategoryIds.includes(category.id) ? '✓' : '' }}
-              </span>
             </button>
           </div>
         </section>
@@ -909,10 +987,70 @@ function openCategory(categoryId: string): void {
 }
 
 .stats-range-panel__comparison {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin: 0;
   color: var(--color-muted);
   font-size: 0.8125rem;
   text-align: center;
+}
+
+.stats-comparison-help__button {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0;
+  background: var(--color-background);
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.stats-comparison-help__button:hover,
+.stats-comparison-help__button:focus-visible,
+.stats-comparison-help__button[aria-expanded='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-text);
+}
+
+.stats-comparison-help__tooltip {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  z-index: 5;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 48px));
+  transform: translate(-50%, -4px);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.stats-comparison-help__button:hover + .stats-comparison-help__tooltip,
+.stats-comparison-help__button:focus-visible + .stats-comparison-help__tooltip,
+.stats-comparison-help__tooltip--open {
+  transform: translate(-50%, 0);
+  opacity: 1;
 }
 
 .stats-overview__cards {
@@ -968,16 +1106,24 @@ function openCategory(categoryId: string): void {
   cursor: grab;
   font-size: 0.875rem;
   letter-spacing: -0.18em;
+  touch-action: none;
   user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
 }
 
 .stats-overview-card__drag-handle:active {
   cursor: grabbing;
 }
 
+:global(body.stats-card-reordering) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .stats-overview-card__main {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -1035,11 +1181,6 @@ function openCategory(categoryId: string): void {
   font-weight: 500;
 }
 
-.stats-overview-card__delta--up {
-  color: var(--color-danger);
-  font-weight: 900;
-}
-
 .stats-overview-card__dot {
   width: 10px;
   height: 10px;
@@ -1087,7 +1228,7 @@ function openCategory(categoryId: string): void {
 
 .stats-manager__option {
   display: inline-grid;
-  grid-template-columns: auto auto 16px;
+  grid-template-columns: auto auto;
   align-items: center;
   gap: 7px;
   min-height: 38px;
@@ -1121,6 +1262,14 @@ function openCategory(categoryId: string): void {
 
   .stats-range-tabs {
     grid-template-columns: repeat(6, 72px);
+  }
+
+  .stats-overview-card {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .stats-overview-card__drag-handle {
+    font-size: 1rem;
   }
 }
 </style>
