@@ -34,27 +34,66 @@ It also mounts shared overlays, confirm dialog, event edit modal, and bottom nav
 
 ## State Management
 
-The main store is:
+Core tracker data remains owned by:
 
 ```txt
 src/stores/catTracker.ts
 ```
 
-It owns core app state:
+It owns:
 
 - cats
 - categories
 - events
 - selected cat
+- local persistence coordination
+- public CRUD actions
+- remote sync coordination
+- compatibility exports used by existing components
+
+Event editor state is separated into:
+
+```txt
+src/stores/eventEditor.ts
+```
+
+It owns:
+
+- editing event ID
+- unsaved event draft
+- delete confirmation event ID
+- editor open/close state transitions
+
+The current `catTracker` store re-exports the editor state and actions so components can migrate
+incrementally without a large behavioral rewrite.
+
+Calendar/search UI state currently remains in `catTracker`:
+
 - selected date
 - visible calendar month
 - calendar display mode
 - active tab
 - quick record state
-- edit/delete modal state
 - remote sync errors
 
-The store is also responsible for keeping local state and remote sync behavior coherent.
+Further separation should move calendar/search/filter state only after the current data and sync
+boundaries remain stable.
+
+## Domain Rules And Selectors
+
+Pure functions that do not depend on Vue, Pinia, or Supabase live in:
+
+```txt
+src/domain/catTracker/
+```
+
+- `date.ts`: local date arithmetic, formatting, and event ordering
+- `selectors.ts`: category sorting, usage counts, calendar cells, and event grouping
+- `permissions.ts`: owner/editor permission decisions
+- `eventDraft.ts`: new and duplicated event draft construction
+
+Keeping these rules pure makes them easier to test and prevents the main store from accumulating
+more presentation logic.
 
 ## Persistence Boundary
 

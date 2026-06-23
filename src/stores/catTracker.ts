@@ -1,7 +1,35 @@
 import { computed, ref, watch } from 'vue'
-import { defineStore } from 'pinia'
+import { defineStore, storeToRefs } from 'pinia'
 import { CATEGORY_GROUP_ORDER, DEFAULT_CATEGORY_STATISTICS_MODE } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
+import {
+  addMonths,
+  compareEventsForGroupedList,
+  isSameDate,
+  startOfDay,
+  startOfMonth,
+} from '@/domain/catTracker/date'
+import {
+  createEventDraft,
+  duplicateEventDraft,
+} from '@/domain/catTracker/eventDraft'
+import {
+  canManageNotebookData as canManageNotebookDataForContext,
+  canModifyEventForNotebook,
+} from '@/domain/catTracker/permissions'
+import {
+  createCalendarDays,
+  createEventCountByDate,
+  createEventListItems,
+  createUsageCounts,
+  getEventsInVisibleMonth,
+  groupEventsByDate,
+  groupEventsByMonth,
+  sortCategories,
+  type CalendarDay,
+  type EventListItem,
+  type MonthlyEventGroup,
+} from '@/domain/catTracker/selectors'
 import { catTrackerRepository, type CatTrackerState } from '@/repositories/catTrackerRepository'
 import { markSignedOutNotebookCacheDirty } from '@/services/localUnsyncedChanges'
 import {
@@ -19,6 +47,7 @@ import {
   deleteRemoteCategory,
   updateRemoteCategory,
 } from '@/services/syncRemoteCategories'
+import { useEventEditorStore } from '@/stores/eventEditor'
 import type {
   Cat,
   CatEvent,
@@ -38,125 +67,13 @@ import { createId } from '@/utils/id'
 type MainTab = 'notebook' | 'calendar' | 'stats' | 'settings'
 type CalendarDisplayMode = 'calendar' | 'list'
 
-export interface CalendarDay {
-  date: Date
-  key: string
-  dayNumber: number
-  eventCount: number
-  isCurrentMonth: boolean
-  isSelected: boolean
-  isToday: boolean
-}
-
-export interface EventListItem {
-  event: CatEvent
-  category?: EventCategory
-  dateText?: string
-  time: string
-}
-
-export interface MonthlyEventGroup {
-  key: string
-  title: string
-  items: EventListItem[]
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
-}
-
-function addMonths(date: Date, months: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1)
-}
-
-function isSameDate(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
-}
-
-function toDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
-function formatEventTime(dateTime: string): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(dateTime))
-}
-
-function formatMonthEventGroupTitle(date: Date): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  }).format(date)
-}
-
-function formatSearchEventGroupTitle(date: Date): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatSearchEventDate(date: Date): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    month: 'numeric',
-    day: 'numeric',
-    weekday: 'short',
-  }).format(date)
-}
-
-function compareEventsForGroupedList(a: CatEvent, b: CatEvent): number {
-  const dateOrder = toDateKey(new Date(b.occurredAt)).localeCompare(
-    toDateKey(new Date(a.occurredAt)),
-  )
-
-  if (dateOrder !== 0) {
-    return dateOrder
-  }
-
-  return a.occurredAt.localeCompare(b.occurredAt)
-}
-
-function sortCategories(categories: EventCategory[]): EventCategory[] {
-  return [...categories].sort((a, b) => {
-    const archivedOrder = Number(a.isArchived) - Number(b.isArchived)
-
-    if (archivedOrder !== 0) {
-      return archivedOrder
-    }
-
-    const sortOrder = a.sortOrder - b.sortOrder
-
-    if (sortOrder !== 0) {
-      return sortOrder
-    }
-
-    return a.createdAt.localeCompare(b.createdAt)
-  })
-}
+export type { CalendarDay, EventListItem, MonthlyEventGroup }
 
 export const useCatTrackerStore = defineStore('catTracker', () => {
   const initialState = catTrackerRepository.loadState()
   const remoteAuth = useRemoteAuth()
+  const eventEditorStore = useEventEditorStore()
+  const { deleteConfirmEventId, draftEvent, editingEventId } = storeToRefs(eventEditorStore)
   const today = new Date()
 
   const cats = ref<Cat[]>(initialState.cats)
@@ -172,9 +89,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const selectedDate = ref(startOfDay(today))
   const visibleMonth = ref(startOfMonth(today))
   const isQuickRecordOpen = ref(false)
-  const editingEventId = ref<string>()
-  const draftEvent = ref<CatEvent>()
-  const deleteConfirmEventId = ref<string>()
   const remoteEventSyncError = ref('')
   const remoteEventSyncErrorKey = ref(0)
   const remoteCatSyncError = ref('')
@@ -203,24 +117,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const archivedCategories = computed(() =>
     categories.value.filter((category) => category.isArchived),
   )
-  const categoryUsageCounts = computed(() => {
-    const usageCounts = new Map<string, number>()
-
-    for (const event of events.value) {
-      usageCounts.set(event.categoryId, (usageCounts.get(event.categoryId) ?? 0) + 1)
-    }
-
-    return usageCounts
-  })
-  const catUsageCounts = computed(() => {
-    const usageCounts = new Map<string, number>()
-
-    for (const event of events.value) {
-      usageCounts.set(event.catId, (usageCounts.get(event.catId) ?? 0) + 1)
-    }
-
-    return usageCounts
-  })
+  const categoryUsageCounts = computed(() =>
+    createUsageCounts(events.value, (event) => event.categoryId),
+  )
+  const catUsageCounts = computed(() => createUsageCounts(events.value, (event) => event.catId))
 
   const todayEvents = computed(() =>
     filteredSelectedCatEvents.value
@@ -280,35 +180,15 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       weekday: 'short',
     }).format(selectedDate.value),
   )
-  const eventCountByDate = computed(() => {
-    const counts = new Map<string, number>()
-
-    for (const event of filteredSelectedCatEvents.value) {
-      const key = toDateKey(new Date(event.occurredAt))
-      counts.set(key, (counts.get(key) ?? 0) + 1)
-    }
-
-    return counts
-  })
-  const calendarDays = computed<CalendarDay[]>(() => {
-    const firstDay = startOfMonth(visibleMonth.value)
-    const calendarStart = addDays(firstDay, -firstDay.getDay())
-
-    return Array.from({ length: 42 }, (_, index) => {
-      const date = addDays(calendarStart, index)
-      const key = toDateKey(date)
-
-      return {
-        date,
-        key,
-        dayNumber: date.getDate(),
-        eventCount: eventCountByDate.value.get(key) ?? 0,
-        isCurrentMonth: date.getMonth() === visibleMonth.value.getMonth(),
-        isSelected: isSameDate(date, selectedDate.value),
-        isToday: isSameDate(date, today),
-      }
-    })
-  })
+  const eventCountByDate = computed(() => createEventCountByDate(filteredSelectedCatEvents.value))
+  const calendarDays = computed<CalendarDay[]>(() =>
+    createCalendarDays({
+      visibleMonth: visibleMonth.value,
+      selectedDate: selectedDate.value,
+      today,
+      eventCountByDate: eventCountByDate.value,
+    }),
+  )
   const selectedDateEvents = computed(() =>
     filteredSelectedCatEvents.value
       .filter((event) => isSameDate(new Date(event.occurredAt), selectedDate.value))
@@ -323,27 +203,17 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       }),
   )
   const selectedDateEventListItems = computed<EventListItem[]>(() =>
-    selectedDateEvents.value.map((event) => ({
-      event,
-      category: categoriesById.value.get(event.categoryId),
-      time: formatEventTime(event.occurredAt),
-    })),
+    createEventListItems(selectedDateEvents.value, categoriesById.value),
   )
   const trimmedEventSearchQuery = computed(() => eventSearchQuery.value.trim().toLocaleLowerCase())
   const isEventSearchActive = computed(() => trimmedEventSearchQuery.value.length > 0)
   const visibleMonthEventGroups = computed<MonthlyEventGroup[]>(() => {
-    const groups = new Map<string, MonthlyEventGroup>()
-    const monthStart = startOfMonth(visibleMonth.value)
-    const nextMonthStart = addMonths(monthStart, 1)
-    const monthEvents = filteredSelectedCatEvents.value
-      .filter((event) => {
-        const occurredAt = new Date(event.occurredAt)
+    const monthEvents = getEventsInVisibleMonth(
+      filteredSelectedCatEvents.value,
+      visibleMonth.value,
+    ).sort(compareEventsForGroupedList)
 
-        return occurredAt >= monthStart && occurredAt < nextMonthStart
-      })
-      .sort(compareEventsForGroupedList)
-
-    return groupEventsByDate(monthEvents)
+    return groupEventsByDate(monthEvents, categoriesById.value)
   })
   const searchedEventGroups = computed<MonthlyEventGroup[]>(() => {
     if (!isEventSearchActive.value) {
@@ -368,55 +238,8 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       })
       .sort(compareEventsForGroupedList)
 
-    return groupEventsByMonth(matchedEvents)
+    return groupEventsByMonth(matchedEvents, categoriesById.value)
   })
-
-  function groupEventsByDate(groupedEvents: CatEvent[]): MonthlyEventGroup[] {
-    const groups = new Map<string, MonthlyEventGroup>()
-
-    for (const event of groupedEvents) {
-      const occurredAt = new Date(event.occurredAt)
-      const key = toDateKey(occurredAt)
-      const group = groups.get(key) ?? {
-        key,
-        title: formatMonthEventGroupTitle(occurredAt),
-        items: [],
-      }
-
-      group.items.push({
-        event,
-        category: categoriesById.value.get(event.categoryId),
-        time: formatEventTime(event.occurredAt),
-      })
-      groups.set(key, group)
-    }
-
-    return [...groups.values()]
-  }
-
-  function groupEventsByMonth(groupedEvents: CatEvent[]): MonthlyEventGroup[] {
-    const groups = new Map<string, MonthlyEventGroup>()
-
-    for (const event of groupedEvents) {
-      const occurredAt = new Date(event.occurredAt)
-      const key = `${occurredAt.getFullYear()}-${String(occurredAt.getMonth() + 1).padStart(2, '0')}`
-      const group = groups.get(key) ?? {
-        key,
-        title: formatSearchEventGroupTitle(occurredAt),
-        items: [],
-      }
-
-      group.items.push({
-        event,
-        category: categoriesById.value.get(event.categoryId),
-        dateText: formatSearchEventDate(occurredAt),
-        time: formatEventTime(event.occurredAt),
-      })
-      groups.set(key, group)
-    }
-
-    return [...groups.values()]
-  }
   const editingEvent = computed(
     () =>
       draftEvent.value ??
@@ -452,8 +275,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     selectedCatId.value = catId
     isQuickRecordOpen.value = false
-    editingEventId.value = undefined
-    deleteConfirmEventId.value = undefined
+    eventEditorStore.close()
   }
 
   function selectCalendarDate(date: Date): void {
@@ -562,20 +384,15 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    const now = getIsoNow()
-
-    draftEvent.value = {
-      id: createId('event-draft'),
+    const event = createEventDraft({
       catId: selectedCat.value.id,
       categoryId,
-      occurredAt: occurredAt ?? now,
+      occurredAt,
       createdBy: remoteAuth.user.value?.id,
-      createdAt: now,
-      updatedAt: now,
-    }
-    editingEventId.value = undefined
+    })
 
-    return draftEvent.value
+    eventEditorStore.openDraft(event)
+    return event
   }
 
   function duplicateEventAsDraft(eventId: string): CatEvent | undefined {
@@ -587,25 +404,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    const now = getIsoNow()
-
     // Future media/attachments should not be copied; they describe the original moment.
-    draftEvent.value = {
-      id: createId('event-draft'),
-      catId: sourceEvent.catId,
-      categoryId: sourceEvent.categoryId,
-      occurredAt: now,
-      title: sourceEvent.title,
-      severity: sourceEvent.severity,
-      note: sourceEvent.note,
-      values: sourceEvent.values ? { ...sourceEvent.values } : undefined,
-      createdBy: remoteAuth.user.value?.id,
-      createdAt: now,
-      updatedAt: now,
-    }
-    editingEventId.value = undefined
+    const event = duplicateEventDraft(sourceEvent, remoteAuth.user.value?.id)
 
-    return draftEvent.value
+    eventEditorStore.openDraft(event)
+    return event
   }
 
   function openEditEvent(eventId: string): void {
@@ -615,14 +418,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    draftEvent.value = undefined
-    editingEventId.value = eventId
+    eventEditorStore.openExisting(eventId)
   }
 
   function closeEditEvent(): void {
-    draftEvent.value = undefined
-    editingEventId.value = undefined
-    deleteConfirmEventId.value = undefined
+    eventEditorStore.close()
   }
 
   function openDeleteConfirm(eventId: string): void {
@@ -632,11 +432,11 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    deleteConfirmEventId.value = eventId
+    eventEditorStore.requestDelete(eventId)
   }
 
   function cancelDeleteEvent(): void {
-    deleteConfirmEventId.value = undefined
+    eventEditorStore.cancelDelete()
   }
 
   async function confirmDeleteEvent(): Promise<void> {
@@ -648,13 +448,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     try {
       await deleteEvent(deletedEventId)
-      deleteConfirmEventId.value = undefined
+      eventEditorStore.cancelDelete()
 
       if (editingEventId.value === deletedEventId) {
         closeEditEvent()
       }
     } catch {
-      deleteConfirmEventId.value = undefined
+      eventEditorStore.cancelDelete()
     }
   }
 
@@ -775,9 +575,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     if (selectedCatId.value) {
       isQuickRecordOpen.value = false
-      draftEvent.value = undefined
-      editingEventId.value = undefined
-      deleteConfirmEventId.value = undefined
+      eventEditorStore.close()
     }
   }
 
@@ -1128,30 +926,19 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   }
 
   function canModifyEvent(event: CatEvent): boolean {
-    const notebookId = getRemoteNotebookId()
-    const currentUserId = remoteAuth.user.value?.id
-    const notebookRole = remoteAuth.activeNotebookRole.value
-
-    if (!notebookId || !currentUserId) {
-      return true
-    }
-
-    if (notebookRole === 'owner') {
-      return true
-    }
-
-    return event.createdBy === currentUserId
+    return canModifyEventForNotebook(event, {
+      notebookId: getRemoteNotebookId(),
+      userId: remoteAuth.user.value?.id,
+      role: remoteAuth.activeNotebookRole.value,
+    })
   }
 
   function canManageNotebookData(): boolean {
-    const notebookId = getRemoteNotebookId()
-    const currentUserId = remoteAuth.user.value?.id
-
-    if (!notebookId || !currentUserId) {
-      return true
-    }
-
-    return !remoteAuth.activeNotebookRole.value || remoteAuth.activeNotebookRole.value === 'owner'
+    return canManageNotebookDataForContext({
+      notebookId: getRemoteNotebookId(),
+      userId: remoteAuth.user.value?.id,
+      role: remoteAuth.activeNotebookRole.value,
+    })
   }
 
   function getFallbackSelectedCatId(excludedCatId?: string): string {
@@ -1336,13 +1123,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
         events.value[eventIndex] = remoteEvent
 
-        if (editingEventId.value === localEventId) {
-          editingEventId.value = remoteEvent.id
-        }
-
-        if (deleteConfirmEventId.value === localEventId) {
-          deleteConfirmEventId.value = remoteEvent.id
-        }
+        eventEditorStore.replaceEventId(localEventId, remoteEvent.id)
 
         remoteEventSyncError.value = ''
       })

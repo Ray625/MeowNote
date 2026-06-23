@@ -61,14 +61,14 @@ user-or-guest-id:notebook-or-local-id
 
 `categoryIds` controls both visibility and card order.
 
-This is an interim persistence boundary. The planned remote model is documented in:
+When signed in, this preference is also synchronized to:
 
 ```txt
-docs/STATS_PAGE_REDESIGN.md
+public.user_stat_preferences
 ```
 
-Remote synchronization should be added after the overview interaction and calculation rules are
-stable.
+The remote row is scoped by `(user_id, notebook_id)`, while localStorage remains the guest
+persistence and signed-in cache.
 
 ## Cat
 
