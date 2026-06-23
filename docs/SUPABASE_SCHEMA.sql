@@ -37,6 +37,15 @@ create table if not exists public.notebook_members (
   unique (notebook_id, user_id)
 );
 
+create table if not exists public.user_stat_preferences (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  notebook_id uuid not null references public.notebooks(id) on delete cascade,
+  category_ids text[] not null default array[]::text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, notebook_id)
+);
+
 create table if not exists public.cats (
   id uuid primary key default gen_random_uuid(),
   notebook_id uuid not null references public.notebooks(id) on delete cascade,
@@ -152,6 +161,7 @@ create index if not exists idx_cat_events_cat_occurred_at
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 drop trigger if exists set_notebooks_updated_at on public.notebooks;
+drop trigger if exists set_user_stat_preferences_updated_at on public.user_stat_preferences;
 drop trigger if exists set_cats_updated_at on public.cats;
 drop trigger if exists set_event_categories_updated_at on public.event_categories;
 drop trigger if exists set_cat_events_updated_at on public.cat_events;
@@ -163,6 +173,10 @@ for each row execute function public.set_updated_at();
 
 create trigger set_notebooks_updated_at
 before update on public.notebooks
+for each row execute function public.set_updated_at();
+
+create trigger set_user_stat_preferences_updated_at
+before update on public.user_stat_preferences
 for each row execute function public.set_updated_at();
 
 create trigger set_cats_updated_at
@@ -530,6 +544,7 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.notebooks enable row level security;
 alter table public.notebook_members enable row level security;
+alter table public.user_stat_preferences enable row level security;
 alter table public.cats enable row level security;
 alter table public.event_categories enable row level security;
 alter table public.cat_events enable row level security;
@@ -538,6 +553,7 @@ grant usage on schema public to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.notebooks to authenticated;
 grant select, insert, update, delete on public.notebook_members to authenticated;
+grant select, insert, update, delete on public.user_stat_preferences to authenticated;
 grant select, insert, update, delete on public.cats to authenticated;
 grant select, insert, update, delete on public.event_categories to authenticated;
 grant select, insert, update, delete on public.cat_events to authenticated;
@@ -554,6 +570,10 @@ drop policy if exists "Users can add themselves as notebook owner" on public.not
 drop policy if exists "Owners can add notebook members" on public.notebook_members;
 drop policy if exists "Owners can update notebook members" on public.notebook_members;
 drop policy if exists "Owners can delete notebook members" on public.notebook_members;
+drop policy if exists "Users can read their stat preferences" on public.user_stat_preferences;
+drop policy if exists "Users can insert their stat preferences" on public.user_stat_preferences;
+drop policy if exists "Users can update their stat preferences" on public.user_stat_preferences;
+drop policy if exists "Users can delete their stat preferences" on public.user_stat_preferences;
 drop policy if exists "Members can read cats" on public.cats;
 drop policy if exists "Owners and editors can insert cats" on public.cats;
 drop policy if exists "Owners and editors can update cats" on public.cats;
@@ -640,6 +660,42 @@ create policy "Owners can delete notebook members"
 on public.notebook_members for delete
 to authenticated
 using (public.is_notebook_owner(notebook_id));
+
+create policy "Users can read their stat preferences"
+on public.user_stat_preferences for select
+to authenticated
+using (
+  user_id = auth.uid()
+  and public.is_notebook_member(notebook_id)
+);
+
+create policy "Users can insert their stat preferences"
+on public.user_stat_preferences for insert
+to authenticated
+with check (
+  user_id = auth.uid()
+  and public.is_notebook_member(notebook_id)
+);
+
+create policy "Users can update their stat preferences"
+on public.user_stat_preferences for update
+to authenticated
+using (
+  user_id = auth.uid()
+  and public.is_notebook_member(notebook_id)
+)
+with check (
+  user_id = auth.uid()
+  and public.is_notebook_member(notebook_id)
+);
+
+create policy "Users can delete their stat preferences"
+on public.user_stat_preferences for delete
+to authenticated
+using (
+  user_id = auth.uid()
+  and public.is_notebook_member(notebook_id)
+);
 
 create policy "Members can read cats"
 on public.cats for select

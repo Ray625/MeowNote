@@ -10,7 +10,8 @@ import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   loadStatsPreference,
-  saveStatsPreference,
+  loadSyncedStatsPreference,
+  saveSyncedStatsPreference,
 } from '@/repositories/statsPreferenceRepository'
 import {
   formatStatsOverviewDateInput,
@@ -114,7 +115,7 @@ const selectedCategories = computed(() =>
     .filter((category): category is EventCategory => Boolean(category)),
 )
 const shouldShowSetup = computed(
-  () => selectedCategoryIds.value.length === 0 && availableCategories.value.length > 0,
+  () => selectedCategories.value.length === 0 && availableCategories.value.length > 0,
 )
 const groupedAvailableCategories = computed(() => {
   const groups = new Map<string, EventCategory[]>()
@@ -220,8 +221,29 @@ useBodyScrollLock(computed(() => isManagerOpen.value || shouldShowSetup.value))
 
 watch(
   preferenceScopeKey,
-  (scopeKey) => {
+  async (scopeKey, _previousScopeKey, onCleanup) => {
+    let isCancelled = false
+
+    onCleanup(() => {
+      isCancelled = true
+    })
+
     selectedCategoryIds.value = loadStatsPreference(scopeKey).categoryIds
+
+    try {
+      const preference = await loadSyncedStatsPreference({
+        scopeKey,
+        userId: user.value?.id,
+        notebookId: activeNotebookId.value || undefined,
+      })
+
+      if (!isCancelled) {
+        selectedCategoryIds.value = preference.categoryIds
+        draftCategoryIds.value = shouldShowSetup.value ? [] : [...preference.categoryIds]
+      }
+    } catch (error) {
+      console.error('同步統計頁偏好失敗', error)
+    }
   },
   { immediate: true },
 )
@@ -229,15 +251,6 @@ watch(
 watch(
   availableCategoryIdSet,
   () => {
-    const normalizedIds = selectedCategoryIds.value.filter((categoryId) =>
-      categories.value.some((category) => category.id === categoryId),
-    )
-
-    if (normalizedIds.length !== selectedCategoryIds.value.length) {
-      selectedCategoryIds.value = normalizedIds
-      persistPreference()
-    }
-
     draftCategoryIds.value = shouldShowSetup.value ? [] : [...selectedCategoryIds.value]
   },
   { immediate: true },
@@ -281,14 +294,23 @@ function toggleDraftCategory(categoryId: string): void {
 }
 
 function saveManagedCategories(): void {
-  selectedCategoryIds.value = [...draftCategoryIds.value]
+  selectedCategoryIds.value = draftCategoryIds.value.filter((categoryId) =>
+    categories.value.some((category) => category.id === categoryId),
+  )
   persistPreference()
   closeManager()
 }
 
 function persistPreference(): void {
-  saveStatsPreference(preferenceScopeKey.value, {
-    categoryIds: selectedCategoryIds.value,
+  void saveSyncedStatsPreference({
+    scopeKey: preferenceScopeKey.value,
+    userId: user.value?.id,
+    notebookId: activeNotebookId.value || undefined,
+    preference: {
+      categoryIds: selectedCategoryIds.value,
+    },
+  }).catch((error: unknown) => {
+    console.error('儲存統計頁偏好失敗', error)
   })
 }
 

@@ -334,27 +334,35 @@
 - 不影響其他共享成員
 - 換裝置後仍能保留
 
-建議遠端資料模型：
+遠端資料模型：
 
 ```text
 user_stat_preferences
 - user_id
 - notebook_id
-- category_id
-- sort_order
+- category_ids
 - created_at
 - updated_at
 ```
 
-建議唯一鍵：
+主鍵：
 
 ```text
-(user_id, notebook_id, category_id)
+(user_id, notebook_id)
 ```
 
-未登入使用者可先存於 `localStorage`。
+`category_ids` 依陣列順序同時保存啟用項目與卡片排序。
 
-實作前需要再確認登入後是否自動將本機統計偏好同步至遠端。
+- 未登入使用者存於 `localStorage`
+- 登入後以 Supabase 偏好為準
+- 雲端尚無偏好時，首次將同一使用者與筆記簿範圍的本機偏好上傳
+- 每位共享成員保存自己的偏好，不影響其他成員
+
+既有 Supabase 專案可執行：
+
+```text
+docs/ADD_USER_STAT_PREFERENCES.sql
+```
 
 ## 實作順序
 
@@ -370,7 +378,7 @@ user_stat_preferences
 - Phase 4 已將詳細圖表對齊單日、7 日、30 日、90 日、半年與 1 年區間
 - 圖表顆粒度目前為：單日每 4 小時、7/30 日每日、90 日每週、半年/1 年每月
 - 30 日與高密度量測圖保留完整資料點，只稀疏顯示日期標籤
-- 統計偏好目前先存於 `localStorage`，尚未同步 Supabase
+- 統計偏好已支援 `localStorage` 快取與 Supabase 跨裝置同步
 - 四種統計模式的總覽卡片已完成，分類詳細分析已開始整合
 
 ### Phase 1：統計偏好與總覽骨架
