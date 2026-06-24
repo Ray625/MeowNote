@@ -1,0 +1,120 @@
+import { describe, expect, it } from 'vitest'
+import {
+  archiveCategory,
+  createCategoryUpdatePatch,
+  getNextCategorySortOrder,
+  getReorderedCategories,
+  restoreCategoryRecord,
+} from './category'
+import type { EventCategory } from '@/types'
+
+const NOW = '2026-06-24T10:00:00.000Z'
+
+function createCategory(input: Partial<EventCategory> & Pick<EventCategory, 'id'>): EventCategory {
+  return {
+    id: input.id,
+    name: input.name ?? input.id,
+    group: input.group ?? '健康',
+    colorId: input.colorId ?? 'teal',
+    isDefault: false,
+    isQuickAction: input.isQuickAction ?? true,
+    isArchived: input.isArchived ?? false,
+    sortOrder: input.sortOrder ?? 0,
+    statisticsMode: input.statisticsMode ?? 'count',
+    valueLabel: input.valueLabel,
+    valueMax: input.valueMax,
+    valueUnit: input.valueUnit,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+}
+
+describe('category domain rules', () => {
+  it('calculates next sort order within a group', () => {
+    expect(
+      getNextCategorySortOrder(
+        [
+          createCategory({ id: 'a', group: '健康', sortOrder: 0 }),
+          createCategory({ id: 'b', group: '健康', sortOrder: 3 }),
+          createCategory({ id: 'c', group: '飲食', sortOrder: 9 }),
+        ],
+        '健康',
+      ),
+    ).toBe(4)
+  })
+
+  it('clears numeric metadata when changing to count mode', () => {
+    const category = createCategory({
+      id: 'water',
+      statisticsMode: 'sum',
+      valueLabel: '飲水量',
+      valueUnit: 'ml',
+    })
+    const patch = createCategoryUpdatePatch(category, { statisticsMode: 'count' }, NOW)
+
+    expect(patch).toMatchObject({
+      statisticsMode: 'count',
+      valueLabel: undefined,
+      valueMax: undefined,
+      valueUnit: undefined,
+    })
+  })
+
+  it('sets rating max default and clears unit for rating mode', () => {
+    const category = createCategory({
+      id: 'energy',
+      statisticsMode: 'count',
+    })
+    const patch = createCategoryUpdatePatch(
+      category,
+      {
+        statisticsMode: 'rating',
+        valueLabel: '評分',
+        valueUnit: 'kg',
+      },
+      NOW,
+    )
+
+    expect(patch).toMatchObject({
+      statisticsMode: 'rating',
+      valueLabel: '評分',
+      valueMax: 10,
+      valueUnit: undefined,
+    })
+  })
+
+  it('archives categories with usage by hiding quick action', () => {
+    const category = createCategory({ id: 'vomit', isQuickAction: true })
+
+    archiveCategory(category, '2026-06-25T00:00:00.000Z')
+
+    expect(category.isArchived).toBe(true)
+    expect(category.isQuickAction).toBe(false)
+    expect(category.updatedAt).toBe('2026-06-25T00:00:00.000Z')
+  })
+
+  it('restores categories as active quick actions', () => {
+    const category = createCategory({ id: 'vomit', isArchived: true, isQuickAction: false })
+
+    restoreCategoryRecord(category, '2026-06-25T00:00:00.000Z')
+
+    expect(category.isArchived).toBe(false)
+    expect(category.isQuickAction).toBe(true)
+    expect(category.updatedAt).toBe('2026-06-25T00:00:00.000Z')
+  })
+
+  it('reorders active categories inside the same group', () => {
+    const reordered = getReorderedCategories(
+      [
+        createCategory({ id: 'a', group: '健康', sortOrder: 0 }),
+        createCategory({ id: 'b', group: '健康', sortOrder: 1 }),
+        createCategory({ id: 'c', group: '健康', sortOrder: 2 }),
+      ],
+      'c',
+      'a',
+      'before',
+    )
+
+    expect(reordered.map((category) => category.id)).toEqual(['c', 'a', 'b'])
+  })
+})

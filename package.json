@@ -8,6 +8,7 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
+    "test:unit": "vitest run",
     "type-check": "vue-tsc --build",
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
@@ -38,6 +39,7 @@
     "vite": "^8.0.8",
     "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-vue-devtools": "^8.1.1",
+    "vitest": "^4.1.9",
     "vue-tsc": "^3.2.6"
   },
   "engines": {
