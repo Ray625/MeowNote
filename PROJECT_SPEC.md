@@ -71,16 +71,17 @@ Default selected templates should stay minimal. Current default direction is 飲
 Quick record is optimized for the fastest common path:
 
 ```txt
-tap + -> choose category -> event created
+tap + -> choose category -> edit draft -> save
 ```
 
 Behavior:
 
 - use the selected cat
 - use the currently selected calendar date and current time
-- create an event immediately for count categories
-- open the edit modal after creation for numeric categories where a value is expected
-- close the quick record panel after creation
+- open the event edit modal as an unsaved draft
+- create the event only after the user saves
+- canceling the modal should discard the draft and should not create an event
+- close the quick record panel after choosing a category
 
 Quick categories come from enabled, non-archived categories where `isQuickAction` is true.
 

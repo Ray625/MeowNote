@@ -37,6 +37,10 @@ Legacy fallback key:
 cat-log:v1
 ```
 
+Unsaved UI drafts are not part of persisted tracker state. Event creation drafts live in
+`src/stores/eventEditor.ts` until the user saves. Canceling a draft should not write to localStorage
+or Supabase.
+
 ## Statistics Preferences
 
 The first statistics overview implementation stores the selected category order locally:

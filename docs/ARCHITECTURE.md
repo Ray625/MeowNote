@@ -34,7 +34,7 @@ It also mounts shared overlays, confirm dialog, event edit modal, and bottom nav
 
 ## State Management
 
-Core tracker data remains owned by:
+Core notebook data remains owned by:
 
 ```txt
 src/stores/catTracker.ts
@@ -50,6 +50,9 @@ It owns:
 - public CRUD actions
 - remote sync coordination
 - compatibility exports used by existing components
+
+It should not accumulate new UI-only state or low-level construction rules. New feature work should
+prefer adding focused stores, domain helpers, or services first.
 
 Event editor state is separated into:
 
@@ -67,17 +70,24 @@ It owns:
 The current `catTracker` store re-exports the editor state and actions so components can migrate
 incrementally without a large behavioral rewrite.
 
-Calendar/search UI state currently remains in `catTracker`:
+Calendar, search, filter, and main tab UI state is separated into:
+
+```txt
+src/stores/calendarView.ts
+```
+
+It owns:
 
 - selected date
 - visible calendar month
 - calendar display mode
 - active tab
 - quick record state
-- remote sync errors
+- event search state
+- event category filter state
 
-Further separation should move calendar/search/filter state only after the current data and sync
-boundaries remain stable.
+The current `catTracker` store re-exports these refs and actions for compatibility. Components can
+gradually migrate to `calendarView` directly when convenient.
 
 ## Domain Rules And Selectors
 
@@ -88,12 +98,30 @@ src/domain/catTracker/
 ```
 
 - `date.ts`: local date arithmetic, formatting, and event ordering
-- `selectors.ts`: category sorting, usage counts, calendar cells, and event grouping
+- `cat.ts`: cat record construction, updates, archive/restore rules, and fallback selection
+- `category.ts`: category construction, statistics-mode value cleanup, archive/restore, and reordering
+- `event.ts`: event record construction, update patching, cloning, deletion, and rollback helpers
+- `eventDraft.ts`: new and duplicated unsaved event draft construction
 - `permissions.ts`: owner/editor permission decisions
-- `eventDraft.ts`: new and duplicated event draft construction
+- `selectors.ts`: category sorting, usage counts, calendar cells, event grouping, and list view items
 
 Keeping these rules pure makes them easier to test and prevents the main store from accumulating
 more presentation logic.
+
+## Store Split Principles
+
+Use these boundaries when extending the app:
+
+- Vue components own local visual state only when it is not shared.
+- Focused Pinia stores own shared UI state, such as calendar/search/editor state.
+- `catTracker` owns the loaded notebook data and coordinates persistence/sync.
+- Domain helpers in `src/domain/catTracker/` own pure data rules and should not import Vue, Pinia, Supabase, or browser storage.
+- Sync services own remote API calls and Supabase-specific details.
+- Repositories own local/remote mapping and persistence boundaries.
+
+When adding a new rule, prefer a pure domain helper first. When adding a new remote operation,
+prefer a service function first. Only add logic to `catTracker` when it must coordinate state,
+permissions, persistence, and sync together.
 
 ## Persistence Boundary
 
