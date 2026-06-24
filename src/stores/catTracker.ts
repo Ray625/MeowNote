@@ -2,13 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import { CATEGORY_GROUP_ORDER, DEFAULT_CATEGORY_STATISTICS_MODE } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
-import {
-  addMonths,
-  compareEventsForGroupedList,
-  isSameDate,
-  startOfDay,
-  startOfMonth,
-} from '@/domain/catTracker/date'
+import { compareEventsForGroupedList, isSameDate } from '@/domain/catTracker/date'
 import {
   createEventDraft,
   duplicateEventDraft,
@@ -47,6 +41,7 @@ import {
   deleteRemoteCategory,
   updateRemoteCategory,
 } from '@/services/syncRemoteCategories'
+import { useCalendarViewStore } from '@/stores/calendarView'
 import { useEventEditorStore } from '@/stores/eventEditor'
 import type {
   Cat,
@@ -64,31 +59,31 @@ import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { getEventValueText } from '@/utils/eventValues'
 import { createId } from '@/utils/id'
 
-type MainTab = 'notebook' | 'calendar' | 'stats' | 'settings'
-type CalendarDisplayMode = 'calendar' | 'list'
-
 export type { CalendarDay, EventListItem, MonthlyEventGroup }
 
 export const useCatTrackerStore = defineStore('catTracker', () => {
   const initialState = catTrackerRepository.loadState()
   const remoteAuth = useRemoteAuth()
+  const calendarViewStore = useCalendarViewStore()
   const eventEditorStore = useEventEditorStore()
   const { deleteConfirmEventId, draftEvent, editingEventId } = storeToRefs(eventEditorStore)
+  const {
+    activeTab,
+    calendarDisplayMode,
+    eventFilterCategoryIds,
+    eventSearchQuery,
+    isEventFilterOpen,
+    isEventSearchOpen,
+    isQuickRecordOpen,
+    selectedDate,
+    visibleMonth,
+  } = storeToRefs(calendarViewStore)
   const today = new Date()
 
   const cats = ref<Cat[]>(initialState.cats)
   const categories = ref<EventCategory[]>(initialState.categories)
   const events = ref<CatEvent[]>(initialState.events)
   const selectedCatId = ref(initialState.selectedCatId)
-  const activeTab = ref<MainTab>('calendar')
-  const calendarDisplayMode = ref<CalendarDisplayMode>('calendar')
-  const isEventSearchOpen = ref(false)
-  const eventSearchQuery = ref('')
-  const isEventFilterOpen = ref(false)
-  const eventFilterCategoryIds = ref<string[]>([])
-  const selectedDate = ref(startOfDay(today))
-  const visibleMonth = ref(startOfMonth(today))
-  const isQuickRecordOpen = ref(false)
   const remoteEventSyncError = ref('')
   const remoteEventSyncErrorKey = ref(0)
   const remoteCatSyncError = ref('')
@@ -274,87 +269,70 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     selectedCatId.value = catId
-    isQuickRecordOpen.value = false
+    calendarViewStore.closeQuickRecord()
     eventEditorStore.close()
   }
 
   function selectCalendarDate(date: Date): void {
-    selectedDate.value = startOfDay(date)
-
-    if (date.getMonth() !== visibleMonth.value.getMonth()) {
-      visibleMonth.value = startOfMonth(date)
-    }
+    calendarViewStore.selectDate(date)
   }
 
   function showPreviousMonth(): void {
-    visibleMonth.value = addMonths(visibleMonth.value, -1)
+    calendarViewStore.showPreviousMonth()
   }
 
   function showNextMonth(): void {
-    visibleMonth.value = addMonths(visibleMonth.value, 1)
+    calendarViewStore.showNextMonth()
   }
 
   function setVisibleMonth(year: number, monthIndex: number): void {
-    visibleMonth.value = startOfMonth(new Date(year, monthIndex, 1))
+    calendarViewStore.setVisibleMonth(year, monthIndex)
   }
 
   function toggleQuickRecord(): void {
-    isQuickRecordOpen.value = !isQuickRecordOpen.value
+    calendarViewStore.toggleQuickRecord()
   }
 
   function closeQuickRecord(): void {
-    isQuickRecordOpen.value = false
+    calendarViewStore.closeQuickRecord()
   }
 
-  function setActiveTab(tab: MainTab): void {
-    activeTab.value = tab
-    isQuickRecordOpen.value = false
+  function setActiveTab(tab: Parameters<typeof calendarViewStore.setActiveTab>[0]): void {
+    calendarViewStore.setActiveTab(tab)
   }
 
-  function setCalendarDisplayMode(mode: CalendarDisplayMode): void {
-    calendarDisplayMode.value = mode
-    isQuickRecordOpen.value = false
+  function setCalendarDisplayMode(
+    mode: Parameters<typeof calendarViewStore.setCalendarDisplayMode>[0],
+  ): void {
+    calendarViewStore.setCalendarDisplayMode(mode)
   }
 
   function toggleEventSearch(): void {
-    isEventSearchOpen.value = !isEventSearchOpen.value
-
-    if (isEventSearchOpen.value) {
-      isEventFilterOpen.value = false
-    }
-
-    if (!isEventSearchOpen.value) {
-      eventSearchQuery.value = ''
-    }
+    calendarViewStore.toggleEventSearch()
   }
 
   function closeEventSearch(): void {
-    isEventSearchOpen.value = false
-    isEventFilterOpen.value = false
-    eventSearchQuery.value = ''
+    calendarViewStore.closeEventSearch()
   }
 
   function openEventSearch(): void {
-    isEventSearchOpen.value = true
-    isEventFilterOpen.value = false
+    calendarViewStore.openEventSearch()
   }
 
   function toggleEventFilter(): void {
-    isEventFilterOpen.value = !isEventFilterOpen.value
+    calendarViewStore.toggleEventFilter()
   }
 
   function closeEventFilter(): void {
-    isEventFilterOpen.value = false
+    calendarViewStore.closeEventFilter()
   }
 
   function toggleEventFilterCategory(categoryId: string): void {
-    eventFilterCategoryIds.value = eventFilterCategoryIdSet.value.has(categoryId)
-      ? eventFilterCategoryIds.value.filter((id) => id !== categoryId)
-      : [...eventFilterCategoryIds.value, categoryId]
+    calendarViewStore.toggleEventFilterCategory(categoryId)
   }
 
   function clearEventCategoryFilter(): void {
-    eventFilterCategoryIds.value = []
+    calendarViewStore.clearEventCategoryFilter()
   }
 
   function getQuickRecordOccurredAt(): string {
@@ -373,7 +351,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    isQuickRecordOpen.value = false
+    calendarViewStore.closeQuickRecord()
     return event
   }
 
@@ -574,7 +552,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       : (state.cats.find((cat) => !cat.isArchived)?.id ?? '')
 
     if (selectedCatId.value) {
-      isQuickRecordOpen.value = false
+      calendarViewStore.closeQuickRecord()
       eventEditorStore.close()
     }
   }
