@@ -41,8 +41,8 @@ export function createCategoryRecord(
     statisticsMode: input.statisticsMode ?? DEFAULT_CATEGORY_STATISTICS_MODE,
     templateId: input.templateId,
     valueLabel: input.valueLabel,
-    valueMax: input.valueMax,
-    valueUnit: input.valueUnit,
+    valueMax: input.statisticsMode === 'rating' ? 10 : input.valueMax,
+    valueUnit: input.statisticsMode === 'rating' ? undefined : input.valueUnit,
     createdAt: now,
     updatedAt: now,
   }
@@ -69,7 +69,9 @@ export function createCategoryUpdatePatch(
       nextStatisticsMode === 'count' ? undefined : (nextInput.valueLabel ?? category.valueLabel),
     valueMax:
       nextStatisticsMode === 'rating'
-        ? (nextInput.valueMax ?? category.valueMax ?? 10)
+        ? category.statisticsMode === 'rating'
+          ? (category.valueMax ?? 10)
+          : 10
         : undefined,
     valueUnit:
       nextStatisticsMode === 'count' || nextStatisticsMode === 'rating'

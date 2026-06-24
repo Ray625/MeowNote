@@ -261,7 +261,8 @@ Rules:
 
 - score must be an integer
 - minimum is 1
-- `valueMax` is required for rating categories and defaults to 10
+- new rating categories always use a fixed maximum of 10
+- legacy rating categories may keep an older `valueMax` for display compatibility, but the UI no longer lets users customize it
 - when a category is changed to `rating`, numeric input should be enabled automatically
 - default `valueLabel` is 評分
 

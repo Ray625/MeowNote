@@ -49,7 +49,6 @@ const categoryGroup = ref<EventCategoryGroup>('飲食')
 const categoryColorId = ref<CategoryColorId>(DEFAULT_CATEGORY_COLOR_ID)
 const categoryStatisticsMode = ref<CategoryStatisticsMode>('count')
 const categoryValueLabel = ref('')
-const categoryValueMax = ref<string | number>(10)
 const categoryValueUnit = ref('')
 const isQuickAction = ref(true)
 const isCategoryModalOpen = ref(false)
@@ -174,7 +173,6 @@ useBodyScrollLock(isSettingsModalOpen)
 watch(categoryStatisticsMode, (statisticsMode) => {
   if (statisticsMode === 'rating') {
     categoryValueLabel.value = categoryValueLabel.value.trim() || '評分'
-    categoryValueMax.value = categoryValueMax.value || 10
     categoryValueUnit.value = ''
   }
 })
@@ -190,7 +188,6 @@ function startCreateCategory(): void {
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   categoryStatisticsMode.value = 'count'
   categoryValueLabel.value = ''
-  categoryValueMax.value = 10
   categoryValueUnit.value = ''
   isQuickAction.value = true
   isCategoryModalOpen.value = true
@@ -207,7 +204,6 @@ function startEditCategory(category: EventCategory): void {
   categoryColorId.value = getCategoryColorId(category.colorId)
   categoryStatisticsMode.value = category.statisticsMode
   categoryValueLabel.value = category.valueLabel ?? ''
-  categoryValueMax.value = category.valueMax ?? 10
   categoryValueUnit.value = category.valueUnit ?? ''
   isQuickAction.value = category.isQuickAction
   isCategoryModalOpen.value = true
@@ -221,7 +217,6 @@ function closeCategoryModal(): void {
   categoryColorId.value = DEFAULT_CATEGORY_COLOR_ID
   categoryStatisticsMode.value = 'count'
   categoryValueLabel.value = ''
-  categoryValueMax.value = 10
   categoryValueUnit.value = ''
   isQuickAction.value = true
   isStatisticsHelpOpen.value = false
@@ -238,15 +233,6 @@ function saveCategory(): void {
     return
   }
 
-  const ratingMax = Number(categoryValueMax.value)
-
-  if (
-    categoryStatisticsMode.value === 'rating' &&
-    (!Number.isInteger(ratingMax) || ratingMax < 2)
-  ) {
-    return
-  }
-
   if (editingCategoryId.value) {
     catTrackerStore.updateCategory(editingCategoryId.value, {
       name: trimmedName,
@@ -260,7 +246,6 @@ function saveCategory(): void {
           : categoryStatisticsMode.value === 'rating'
             ? categoryValueLabel.value.trim() || '評分'
             : categoryValueLabel.value.trim() || undefined,
-      valueMax: categoryStatisticsMode.value === 'rating' ? ratingMax : undefined,
       valueUnit:
         categoryStatisticsMode.value === 'count' || categoryStatisticsMode.value === 'rating'
           ? undefined
@@ -280,7 +265,7 @@ function saveCategory(): void {
           : categoryStatisticsMode.value === 'rating'
             ? categoryValueLabel.value.trim() || '評分'
             : categoryValueLabel.value.trim() || undefined,
-      valueMax: categoryStatisticsMode.value === 'rating' ? ratingMax : undefined,
+      valueMax: categoryStatisticsMode.value === 'rating' ? 10 : undefined,
       valueUnit:
         categoryStatisticsMode.value === 'count' || categoryStatisticsMode.value === 'rating'
           ? undefined
@@ -1099,19 +1084,6 @@ function getActiveCategories(group: EventCategoryGroup): EventCategory[] {
               :placeholder="
                 categoryStatisticsMode === 'rating' ? '評分' : '例如：飲水量、體重、劑量'
               "
-            />
-          </label>
-
-          <label v-if="categoryStatisticsMode === 'rating'" class="field">
-            <span class="field__label">評分最大值</span>
-            <input
-              v-model="categoryValueMax"
-              class="field__control"
-              type="number"
-              inputmode="numeric"
-              min="2"
-              step="1"
-              required
             />
           </label>
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   archiveCategory,
+  createCategoryRecord,
   createCategoryUpdatePatch,
   getNextCategorySortOrder,
   getReorderedCategories,
@@ -79,6 +80,43 @@ describe('category domain rules', () => {
       statisticsMode: 'rating',
       valueLabel: '評分',
       valueMax: 10,
+      valueUnit: undefined,
+    })
+  })
+
+  it('forces newly created rating categories to 10 points', () => {
+    const category = createCategoryRecord(
+      {
+        name: '精神狀態',
+        statisticsMode: 'rating',
+        valueLabel: '評分',
+        valueMax: 5,
+        valueUnit: '分',
+      },
+      NOW,
+      0,
+    )
+
+    expect(category).toMatchObject({
+      statisticsMode: 'rating',
+      valueLabel: '評分',
+      valueMax: 10,
+      valueUnit: undefined,
+    })
+  })
+
+  it('preserves legacy rating max when editing an existing rating category', () => {
+    const category = createCategory({
+      id: 'legacy-rating',
+      statisticsMode: 'rating',
+      valueLabel: '評分',
+      valueMax: 5,
+    })
+    const patch = createCategoryUpdatePatch(category, { name: '舊評分' }, NOW)
+
+    expect(patch).toMatchObject({
+      statisticsMode: 'rating',
+      valueMax: 5,
       valueUnit: undefined,
     })
   })

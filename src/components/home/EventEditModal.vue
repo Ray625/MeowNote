@@ -62,6 +62,13 @@ const ratingDisplayValue = computed(() => {
     ? value
     : getDefaultRatingValue(ratingMax.value)
 })
+const ratingProgressPercent = computed(() => {
+  if (ratingMax.value <= 1) {
+    return '0%'
+  }
+
+  return `${((ratingDisplayValue.value - 1) / (ratingMax.value - 1)) * 100}%`
+})
 const isCategoryChangeConfirmOpen = computed(() => Boolean(pendingCategoryId.value))
 const groupedActiveCategories = computed(() =>
   CATEGORY_GROUP_ORDER.map((group) => ({
@@ -794,7 +801,11 @@ function formatTimeLabel(value: string): string {
             {{ modalCategory?.valueLabel || '數值' }}
             <template v-if="modalCategory?.valueUnit">({{ modalCategory.valueUnit }})</template>
           </span>
-          <div v-if="isRatingValue" class="rating-control">
+          <div
+            v-if="isRatingValue"
+            class="rating-control"
+            :style="{ '--rating-progress': ratingProgressPercent }"
+          >
             <input
               v-model.number="editingNumericValue"
               class="rating-slider"
@@ -1359,22 +1370,76 @@ function formatTimeLabel(value: string): string {
 
 .rating-slider {
   width: 100%;
+  height: var(--rating-thumb-size);
   margin: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
   accent-color: var(--category-color);
+  cursor: pointer;
+}
+
+.rating-slider:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.rating-slider::-webkit-slider-runnable-track {
+  height: var(--rating-track-height);
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--category-color) 0%,
+    var(--category-color) var(--rating-progress),
+    var(--color-border-strong) var(--rating-progress),
+    var(--color-border-strong) 100%
+  );
+}
+
+.rating-slider::-webkit-slider-thumb {
+  width: var(--rating-thumb-size);
+  height: var(--rating-thumb-size);
+  margin-top: calc((var(--rating-track-height) - var(--rating-thumb-size)) / 2);
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--category-color);
+}
+
+.rating-slider::-moz-range-track {
+  height: var(--rating-track-height);
+  border-radius: 999px;
+  background: var(--color-border-strong);
+}
+
+.rating-slider::-moz-range-progress {
+  height: var(--rating-track-height);
+  border-radius: 999px;
+  background: var(--category-color);
+}
+
+.rating-slider::-moz-range-thumb {
+  width: var(--rating-thumb-size);
+  height: var(--rating-thumb-size);
+  border: 0;
+  border-radius: 999px;
+  background: var(--category-color);
 }
 
 .rating-control {
-  --rating-thumb-size: 30px;
+  --rating-thumb-size: 20px;
+  --rating-track-height: 6px;
 
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .rating-ticks {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 calc(var(--rating-thumb-size) / 2);
+  padding: 0;
 }
 
 .rating-ticks span {
@@ -1387,7 +1452,7 @@ function formatTimeLabel(value: string): string {
 .rating-scale {
   display: flex;
   justify-content: space-between;
-  padding: 0 calc(var(--rating-thumb-size) / 2);
+  padding: 0;
   color: var(--color-muted);
   font-size: 0.8125rem;
   font-weight: 800;
