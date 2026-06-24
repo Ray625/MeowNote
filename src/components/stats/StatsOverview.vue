@@ -73,7 +73,9 @@ const dragTargetCategoryId = ref<string>()
 const dragTargetPosition = ref<'before' | 'after'>('before')
 const comparisonHelpRef = ref<HTMLElement>()
 const isComparisonHelpOpen = ref(false)
+const shouldSuppressCardClick = ref(false)
 let activeDragPointerId: number | undefined
+let cardClickSuppressTimer: ReturnType<typeof window.setTimeout> | undefined
 const rangeMode = ref<StatsOverviewRangeMode>(props.initialRangeMode ?? '7d')
 const statsReferenceDate = ref(
   props.initialReferenceDate
@@ -381,6 +383,10 @@ function finishPointerDrag(event: PointerEvent): void {
     return
   }
 
+  event.preventDefault()
+  event.stopPropagation()
+  suppressNextCardClick()
+
   const targetCategoryId = dragTargetCategoryId.value
 
   if (targetCategoryId) {
@@ -397,8 +403,24 @@ function cancelPointerDrag(event: PointerEvent): void {
     return
   }
 
+  event.preventDefault()
+  event.stopPropagation()
+  suppressNextCardClick()
   clearDragState()
   cleanupPointerDrag()
+}
+
+function suppressNextCardClick(): void {
+  shouldSuppressCardClick.value = true
+
+  if (cardClickSuppressTimer) {
+    window.clearTimeout(cardClickSuppressTimer)
+  }
+
+  cardClickSuppressTimer = window.setTimeout(() => {
+    shouldSuppressCardClick.value = false
+    cardClickSuppressTimer = undefined
+  }, 300)
 }
 
 function cleanupPointerDrag(): void {
@@ -446,7 +468,13 @@ function clearDragState(): void {
   dragTargetCategoryId.value = undefined
 }
 
-onUnmounted(cleanupPointerDrag)
+onUnmounted(() => {
+  cleanupPointerDrag()
+
+  if (cardClickSuppressTimer) {
+    window.clearTimeout(cardClickSuppressTimer)
+  }
+})
 
 function selectRangeMode(mode: StatsOverviewRangeMode): void {
   rangeMode.value = mode
@@ -497,6 +525,16 @@ function openCategory(categoryId: string): void {
     rangeMode: rangeMode.value,
     referenceDate: formatStatsOverviewDateInput(statsReferenceDate.value),
   })
+}
+
+function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
+  if (shouldSuppressCardClick.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+
+  openCategory(categoryId)
 }
 </script>
 
@@ -612,7 +650,7 @@ function openCategory(categoryId: string): void {
         <button
           class="stats-overview-card__main"
           type="button"
-          @click="openCategory(category.id)"
+          @click="openCategoryFromClick(category.id, $event)"
         >
           <span class="stats-overview-card__content">
             <strong>{{ category.name }}</strong>
