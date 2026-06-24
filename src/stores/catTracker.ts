@@ -1,7 +1,22 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
-import { CATEGORY_GROUP_ORDER, DEFAULT_CATEGORY_STATISTICS_MODE } from '@/constants/defaultData'
+import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
+import {
+  applyCatUpdate,
+  archiveCat,
+  createCatRecord,
+  getFallbackSelectedCatId,
+  restoreCatRecord,
+} from '@/domain/catTracker/cat'
+import {
+  archiveCategory,
+  createCategoryRecord,
+  createCategoryUpdatePatch,
+  getNextCategorySortOrder,
+  getReorderedCategories,
+  restoreCategoryRecord,
+} from '@/domain/catTracker/category'
 import { compareEventsForGroupedList, isSameDate } from '@/domain/catTracker/date'
 import {
   createEventDraft,
@@ -50,7 +65,6 @@ import type {
   CreateCatInput,
   CreateCategoryInput,
   EventCategory,
-  EventCategoryGroup,
   UpdateCatInput,
   UpdateCategoryInput,
   UpdateCatEventInput,
@@ -441,20 +455,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       throw new Error('只有 Notebook 擁有者可以新增寵物')
     }
 
-    const now = getIsoNow()
-    const cat: Cat = {
-      id: createId('cat'),
-      name: input.name,
-      avatarId: input.avatarId,
-      birthday: input.birthday,
-      sex: input.sex,
-      weightKg: input.weightKg,
-      isNeutered: input.isNeutered,
-      note: input.note,
-      isArchived: input.isArchived ?? false,
-      createdAt: now,
-      updatedAt: now,
-    }
+    const cat = createCatRecord(input, getIsoNow())
 
     cats.value.push(cat)
     selectedCatId.value = cat.id
@@ -475,10 +476,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    Object.assign(cat, {
-      ...input,
-      updatedAt: getIsoNow(),
-    })
+    applyCatUpdate(cat, input, getIsoNow())
     markLocalChangeIfSignedOut()
     syncUpdatedCat(cat.id)
 
@@ -497,10 +495,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     if (getCatUsageCount(catId) > 0) {
-      Object.assign(cat, {
-        isArchived: true,
-        updatedAt: getIsoNow(),
-      })
+      archiveCat(cat, getIsoNow())
 
       markLocalChangeIfSignedOut()
       syncUpdatedCat(cat.id)
@@ -510,7 +505,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     cats.value = cats.value.filter((item) => item.id !== catId)
 
     if (selectedCatId.value === catId) {
-      selectedCatId.value = getFallbackSelectedCatId(catId)
+      selectedCatId.value = getFallbackSelectedCatId(cats.value, catId)
     }
 
     markLocalChangeIfSignedOut()
@@ -528,10 +523,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    Object.assign(cat, {
-      isArchived: false,
-      updatedAt: getIsoNow(),
-    })
+    restoreCatRecord(cat, getIsoNow())
 
     if (!selectedCatId.value) {
       selectedCatId.value = cat.id
@@ -562,26 +554,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       throw new Error('只有 Notebook 擁有者可以新增分類')
     }
 
-    const now = getIsoNow()
     const group = input.group ?? '飲食'
-    const category: EventCategory = {
-      id: createId('category'),
-      name: input.name,
-      group,
-      colorId: input.colorId,
-      icon: input.icon,
-      isDefault: false,
-      isQuickAction: input.isQuickAction ?? false,
-      isArchived: input.isArchived ?? false,
-      sortOrder: input.sortOrder ?? getNextCategorySortOrder(group),
-      statisticsMode: input.statisticsMode ?? DEFAULT_CATEGORY_STATISTICS_MODE,
-      templateId: input.templateId,
-      valueLabel: input.valueLabel,
-      valueMax: input.valueMax,
-      valueUnit: input.valueUnit,
-      createdAt: now,
-      updatedAt: now,
-    }
+    const category = createCategoryRecord(
+      input,
+      getIsoNow(),
+      getNextCategorySortOrder(categories.value, group),
+    )
 
     categories.value.push(category)
     markLocalChangeIfSignedOut()
@@ -604,31 +582,15 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    const nextInput = {
-      ...input,
-    }
-
-    if (input.group && input.group !== category.group && typeof input.sortOrder !== 'number') {
-      nextInput.sortOrder = getNextCategorySortOrder(input.group)
-    }
-
-    const nextStatisticsMode = nextInput.statisticsMode ?? category.statisticsMode
-
-    Object.assign(category, {
-      ...nextInput,
-      statisticsMode: nextStatisticsMode,
-      valueLabel:
-        nextStatisticsMode === 'count' ? undefined : (nextInput.valueLabel ?? category.valueLabel),
-      valueMax:
-        nextStatisticsMode === 'rating'
-          ? (nextInput.valueMax ?? category.valueMax ?? 10)
-          : undefined,
-      valueUnit:
-        nextStatisticsMode === 'count' || nextStatisticsMode === 'rating'
-          ? undefined
-          : (nextInput.valueUnit ?? category.valueUnit),
-      updatedAt: getIsoNow(),
-    })
+    Object.assign(
+      category,
+      createCategoryUpdatePatch(
+        category,
+        input,
+        getIsoNow(),
+        input.group ? getNextCategorySortOrder(categories.value, input.group) : undefined,
+      ),
+    )
 
     markLocalChangeIfSignedOut()
     syncUpdatedCategory(category.id)
@@ -780,11 +742,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }
 
     if (getCategoryUsageCount(categoryId) > 0) {
-      Object.assign(category, {
-        isArchived: true,
-        isQuickAction: false,
-        updatedAt: getIsoNow(),
-      })
+      archiveCategory(category, getIsoNow())
 
       markLocalChangeIfSignedOut()
       syncUpdatedCategory(category.id)
@@ -808,11 +766,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    Object.assign(category, {
-      isArchived: false,
-      isQuickAction: true,
-      updatedAt: getIsoNow(),
-    })
+    restoreCategoryRecord(category, getIsoNow())
 
     syncUpdatedCategory(category.id)
     markLocalChangeIfSignedOut()
@@ -833,43 +787,16 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    const category = categoriesById.value.get(categoryId)
-    const targetCategory = categoriesById.value.get(targetCategoryId)
-
-    if (
-      !category ||
-      !targetCategory ||
-      category.isArchived ||
-      targetCategory.isArchived ||
-      category.group !== targetCategory.group
-    ) {
-      return
-    }
-
-    const group = category.group
-    const groupCategories = sortCategories(
-      categories.value.filter((item) => item.group === group && !item.isArchived),
+    const groupCategories = getReorderedCategories(
+      categories.value,
+      categoryId,
+      targetCategoryId,
+      position,
     )
-    const fromIndex = groupCategories.findIndex((item) => item.id === categoryId)
-    const toIndex = groupCategories.findIndex((item) => item.id === targetCategoryId)
 
-    if (fromIndex < 0 || toIndex < 0) {
+    if (groupCategories.length === 0) {
       return
     }
-
-    const [movedCategory] = groupCategories.splice(fromIndex, 1)
-
-    if (!movedCategory) {
-      return
-    }
-
-    const targetIndex = groupCategories.findIndex((item) => item.id === targetCategoryId)
-
-    if (targetIndex < 0) {
-      return
-    }
-
-    groupCategories.splice(position === 'after' ? targetIndex + 1 : targetIndex, 0, movedCategory)
 
     const now = getIsoNow()
     groupCategories.forEach((item, index) => {
@@ -879,16 +806,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       })
       syncUpdatedCategory(item.id)
     })
-  }
-
-  function getNextCategorySortOrder(group: EventCategoryGroup): number {
-    const groupCategories = categories.value.filter((category) => category.group === group)
-
-    if (groupCategories.length === 0) {
-      return 0
-    }
-
-    return Math.max(...groupCategories.map((category) => category.sortOrder)) + 1
   }
 
   function getRemoteNotebookId(): string {
@@ -917,10 +834,6 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       userId: remoteAuth.user.value?.id,
       role: remoteAuth.activeNotebookRole.value,
     })
-  }
-
-  function getFallbackSelectedCatId(excludedCatId?: string): string {
-    return cats.value.find((cat) => !cat.isArchived && cat.id !== excludedCatId)?.id ?? ''
   }
 
   function syncCreatedCat(localCatId: string): void {
