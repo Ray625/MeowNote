@@ -23,6 +23,13 @@ import {
   duplicateEventDraft,
 } from '@/domain/catTracker/eventDraft'
 import {
+  applyEventUpdate,
+  cloneEventRecord,
+  createEventRecord,
+  removeEventById,
+  restoreDeletedEvent,
+} from '@/domain/catTracker/event'
+import {
   canManageNotebookData as canManageNotebookDataForContext,
   canModifyEventForNotebook,
 } from '@/domain/catTracker/permissions'
@@ -71,7 +78,6 @@ import type {
 } from '@/types'
 import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
 import { getEventValueText } from '@/utils/eventValues'
-import { createId } from '@/utils/id'
 
 export type { CalendarDay, EventListItem, MonthlyEventGroup }
 
@@ -608,20 +614,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
   function createEvent(input: CreateCatEventInput): CatEvent {
     const now = getIsoNow()
-    const event: CatEvent = {
-      id: input.id ?? createId('event'),
-      catId: input.catId,
-      categoryId: input.categoryId,
-      occurredAt: input.occurredAt ?? now,
-      title: input.title,
-      severity: input.severity,
-      note: input.note,
-      values: input.values,
-      photos: input.photos ?? [],
-      createdBy: remoteAuth.user.value?.id,
-      createdAt: now,
-      updatedAt: now,
-    }
+    const event = createEventRecord(input, now, remoteAuth.user.value?.id)
 
     events.value.push(event)
     markLocalChangeIfSignedOut()
@@ -654,17 +647,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    const previousEvent: CatEvent = {
-      ...event,
-      values: event.values ? { ...event.values } : undefined,
-      photos: event.photos ? [...event.photos] : [],
-    }
+    const previousEvent = cloneEventRecord(event)
     const expectedUpdatedAt = event.updatedAt
 
-    Object.assign(event, {
-      ...input,
-      updatedAt: getIsoNow(),
-    })
+    applyEventUpdate(event, input, getIsoNow())
     markLocalChangeIfSignedOut()
 
     try {
@@ -690,15 +676,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     const shouldDeleteRemote = shouldSyncRemoteEventId(eventId)
     const expectedUpdatedAt = event?.updatedAt
     const deletedEventIndex = events.value.findIndex((item) => item.id === eventId)
-    const deletedEvent = event
-      ? {
-          ...event,
-          values: event.values ? { ...event.values } : undefined,
-          photos: event.photos ? [...event.photos] : [],
-        }
-      : undefined
+    const deletedEvent = event ? cloneEventRecord(event) : undefined
 
-    events.value = events.value.filter((event) => event.id !== eventId)
+    events.value = removeEventById(events.value, eventId)
     markLocalChangeIfSignedOut({
       deletedEvent: {
         id: eventId,
@@ -715,14 +695,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         )
       } catch (error) {
         if (deletedEvent) {
-          const nextEvents = [...events.value]
-          const insertIndex =
-            deletedEventIndex >= 0
-              ? Math.min(deletedEventIndex, nextEvents.length)
-              : nextEvents.length
-
-          nextEvents.splice(insertIndex, 0, deletedEvent)
-          events.value = nextEvents
+          events.value = restoreDeletedEvent(events.value, deletedEvent, deletedEventIndex)
         }
 
         throw error
