@@ -17,7 +17,6 @@ import {
   getReorderedCategories,
   restoreCategoryRecord,
 } from '@/domain/catTracker/category'
-import { compareEventsForGroupedList, isSameDate } from '@/domain/catTracker/date'
 import {
   createEventDraft,
   duplicateEventDraft,
@@ -37,10 +36,12 @@ import {
   createCalendarDays,
   createEventCountByDate,
   createEventListItems,
+  createSearchedEventGroups,
   createUsageCounts,
-  getEventsInVisibleMonth,
-  groupEventsByDate,
-  groupEventsByMonth,
+  createVisibleMonthEventGroups,
+  getCategoriesWithEventsForCat,
+  getEventsForDate,
+  getFilteredEventsForCat,
   sortCategories,
   type CalendarDay,
   type EventListItem,
@@ -77,7 +78,6 @@ import type {
   UpdateCatEventInput,
 } from '@/types'
 import { getIsoNow, isSameLocalDate } from '@/utils/datetime'
-import { getEventValueText } from '@/utils/eventValues'
 
 export type { CalendarDay, EventListItem, MonthlyEventGroup }
 
@@ -157,25 +157,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     () => new Map(categories.value.map((category) => [category.id, category])),
   )
   const catsById = computed(() => new Map(cats.value.map((cat) => [cat.id, cat])))
-  const eventFilterCategoryIdSet = computed(() => new Set(eventFilterCategoryIds.value))
   const hasEventCategoryFilter = computed(() => eventFilterCategoryIds.value.length > 0)
   const filteredSelectedCatEvents = computed(() =>
-    events.value
-      .filter((event) => event.catId === selectedCatId.value)
-      .filter(
-        (event) =>
-          !hasEventCategoryFilter.value || eventFilterCategoryIdSet.value.has(event.categoryId),
-      ),
+    getFilteredEventsForCat(events.value, selectedCatId.value, eventFilterCategoryIds.value),
   )
-  const eventFilterCategories = computed(() => {
-    const categoryIds = new Set(
-      events.value
-        .filter((event) => event.catId === selectedCatId.value)
-        .map((event) => event.categoryId),
-    )
-
-    return sortCategories(categories.value.filter((category) => categoryIds.has(category.id)))
-  })
+  const eventFilterCategories = computed(() =>
+    getCategoriesWithEventsForCat(events.value, categories.value, selectedCatId.value),
+  )
   const groupedEventFilterCategories = computed(() =>
     CATEGORY_GROUP_ORDER.map((group) => ({
       group,
@@ -205,17 +193,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     }),
   )
   const selectedDateEvents = computed(() =>
-    filteredSelectedCatEvents.value
-      .filter((event) => isSameDate(new Date(event.occurredAt), selectedDate.value))
-      .sort((a, b) => {
-        const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
-
-        if (occurredAtOrder !== 0) {
-          return occurredAtOrder
-        }
-
-        return a.createdAt.localeCompare(b.createdAt)
-      }),
+    getEventsForDate(filteredSelectedCatEvents.value, selectedDate.value),
   )
   const selectedDateEventListItems = computed<EventListItem[]>(() =>
     createEventListItems(selectedDateEvents.value, categoriesById.value),
@@ -223,37 +201,18 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const trimmedEventSearchQuery = computed(() => eventSearchQuery.value.trim().toLocaleLowerCase())
   const isEventSearchActive = computed(() => trimmedEventSearchQuery.value.length > 0)
   const visibleMonthEventGroups = computed<MonthlyEventGroup[]>(() => {
-    const monthEvents = getEventsInVisibleMonth(
+    return createVisibleMonthEventGroups(
       filteredSelectedCatEvents.value,
       visibleMonth.value,
-    ).sort(compareEventsForGroupedList)
-
-    return groupEventsByDate(monthEvents, categoriesById.value)
+      categoriesById.value,
+    )
   })
   const searchedEventGroups = computed<MonthlyEventGroup[]>(() => {
-    if (!isEventSearchActive.value) {
-      return []
-    }
-
-    const query = trimmedEventSearchQuery.value
-    const matchedEvents = filteredSelectedCatEvents.value
-      .filter((event) => {
-        const category = categoriesById.value.get(event.categoryId)
-        const categoryName = category?.name.toLocaleLowerCase() ?? ''
-        const valueText = getEventValueText(event, category).toLocaleLowerCase()
-        const title = event.title?.toLocaleLowerCase() ?? ''
-        const note = event.note?.toLocaleLowerCase() ?? ''
-
-        return (
-          categoryName.includes(query) ||
-          valueText.includes(query) ||
-          title.includes(query) ||
-          note.includes(query)
-        )
-      })
-      .sort(compareEventsForGroupedList)
-
-    return groupEventsByMonth(matchedEvents, categoriesById.value)
+    return createSearchedEventGroups({
+      events: filteredSelectedCatEvents.value,
+      categoriesById: categoriesById.value,
+      query: trimmedEventSearchQuery.value,
+    })
   })
   const editingEvent = computed(
     () =>

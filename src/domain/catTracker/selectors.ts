@@ -1,6 +1,7 @@
 import {
   addDays,
   addMonths,
+  compareEventsForGroupedList,
   formatEventTime,
   formatMonthEventGroupTitle,
   formatSearchEventDate,
@@ -10,6 +11,7 @@ import {
   toDateKey,
 } from '@/domain/catTracker/date'
 import type { CatEvent, EventCategory } from '@/types'
+import { getEventValueText } from '@/utils/eventValues'
 
 export interface CalendarDay {
   date: Date
@@ -120,6 +122,73 @@ export function createEventListItems(
   }))
 }
 
+export function getEventsForCat(events: CatEvent[], catId: string): CatEvent[] {
+  return events.filter((event) => event.catId === catId)
+}
+
+export function getFilteredEventsForCat(
+  events: CatEvent[],
+  catId: string,
+  categoryIds: string[] = [],
+): CatEvent[] {
+  const categoryIdSet = new Set(categoryIds)
+
+  return getEventsForCat(events, catId).filter(
+    (event) => categoryIdSet.size === 0 || categoryIdSet.has(event.categoryId),
+  )
+}
+
+export function getCategoriesWithEventsForCat(
+  events: CatEvent[],
+  categories: EventCategory[],
+  catId: string,
+): EventCategory[] {
+  const categoryIds = new Set(
+    events.filter((event) => event.catId === catId).map((event) => event.categoryId),
+  )
+
+  return sortCategories(categories.filter((category) => categoryIds.has(category.id)))
+}
+
+export function getEventsForDate(events: CatEvent[], date: Date): CatEvent[] {
+  return events
+    .filter((event) => isSameDate(new Date(event.occurredAt), date))
+    .sort(sortEventsByOccurredAtThenCreatedAt)
+}
+
+export function createVisibleMonthEventGroups(
+  events: CatEvent[],
+  visibleMonth: Date,
+  categoriesById: Map<string, EventCategory>,
+): MonthlyEventGroup[] {
+  return groupEventsByDate(
+    getEventsInVisibleMonth(events, visibleMonth).sort(compareEventsForGroupedList),
+    categoriesById,
+  )
+}
+
+export function createSearchedEventGroups({
+  events,
+  categoriesById,
+  query,
+}: {
+  events: CatEvent[]
+  categoriesById: Map<string, EventCategory>
+  query: string
+}): MonthlyEventGroup[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+
+  if (!normalizedQuery) {
+    return []
+  }
+
+  const matchedEvents = events
+    .filter((event) => doesEventMatchSearchQuery(event, categoriesById, normalizedQuery))
+    .sort(compareEventsForGroupedList)
+
+  return groupEventsByMonth(matchedEvents, categoriesById)
+}
+
 export function groupEventsByDate(
   events: CatEvent[],
   categoriesById: Map<string, EventCategory>,
@@ -182,4 +251,33 @@ export function getEventsInVisibleMonth(events: CatEvent[], visibleMonth: Date):
 
     return occurredAt >= monthStart && occurredAt < nextMonthStart
   })
+}
+
+function sortEventsByOccurredAtThenCreatedAt(left: CatEvent, right: CatEvent): number {
+  const occurredAtOrder = left.occurredAt.localeCompare(right.occurredAt)
+
+  if (occurredAtOrder !== 0) {
+    return occurredAtOrder
+  }
+
+  return left.createdAt.localeCompare(right.createdAt)
+}
+
+function doesEventMatchSearchQuery(
+  event: CatEvent,
+  categoriesById: Map<string, EventCategory>,
+  query: string,
+): boolean {
+  const category = categoriesById.get(event.categoryId)
+  const categoryName = category?.name.toLocaleLowerCase() ?? ''
+  const valueText = getEventValueText(event, category).toLocaleLowerCase()
+  const title = event.title?.toLocaleLowerCase() ?? ''
+  const note = event.note?.toLocaleLowerCase() ?? ''
+
+  return (
+    categoryName.includes(query) ||
+    valueText.includes(query) ||
+    title.includes(query) ||
+    note.includes(query)
+  )
 }
