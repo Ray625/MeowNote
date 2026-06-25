@@ -1,6 +1,11 @@
 import type { Cat, CreateCatInput, UpdateCatInput } from '@/types'
 import { createId } from '@/utils/id'
 
+export type DeleteCatRecordResult =
+  | { status: 'missing' }
+  | { status: 'archived'; cat: Cat }
+  | { status: 'deleted'; cats: Cat[]; fallbackSelectedCatId: string }
+
 export function createCatRecord(input: CreateCatInput, now: string): Cat {
   return {
     id: createId('cat'),
@@ -40,4 +45,28 @@ export function restoreCatRecord(cat: Cat, now: string): void {
 
 export function getFallbackSelectedCatId(cats: Cat[], excludedCatId?: string): string {
   return cats.find((cat) => !cat.isArchived && cat.id !== excludedCatId)?.id ?? ''
+}
+
+export function deleteCatRecord(
+  cats: Cat[],
+  catId: string,
+  usageCount: number,
+  now: string,
+): DeleteCatRecordResult {
+  const cat = cats.find((item) => item.id === catId)
+
+  if (!cat) {
+    return { status: 'missing' }
+  }
+
+  if (usageCount > 0) {
+    archiveCat(cat, now)
+    return { status: 'archived', cat }
+  }
+
+  return {
+    status: 'deleted',
+    cats: cats.filter((item) => item.id !== catId),
+    fallbackSelectedCatId: getFallbackSelectedCatId(cats, catId),
+  }
 }

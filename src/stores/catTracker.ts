@@ -4,8 +4,8 @@ import { CATEGORY_GROUP_ORDER } from '@/constants/defaultData'
 import { useRemoteAuth } from '@/composables/useRemoteAuth'
 import {
   applyCatUpdate,
-  archiveCat,
   createCatRecord,
+  deleteCatRecord,
   getFallbackSelectedCatId,
   restoreCatRecord,
 } from '@/domain/catTracker/cat'
@@ -453,24 +453,22 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    const cat = catsById.value.get(catId)
+    const result = deleteCatRecord(cats.value, catId, getCatUsageCount(catId), getIsoNow())
 
-    if (!cat) {
+    if (result.status === 'missing') {
       return
     }
 
-    if (getCatUsageCount(catId) > 0) {
-      archiveCat(cat, getIsoNow())
-
+    if (result.status === 'archived') {
       markLocalChangeIfSignedOut()
-      syncUpdatedCat(cat.id)
+      syncUpdatedCat(result.cat.id)
       return
     }
 
-    cats.value = cats.value.filter((item) => item.id !== catId)
+    cats.value = result.cats
 
     if (selectedCatId.value === catId) {
-      selectedCatId.value = getFallbackSelectedCatId(cats.value, catId)
+      selectedCatId.value = result.fallbackSelectedCatId
     }
 
     markLocalChangeIfSignedOut()
