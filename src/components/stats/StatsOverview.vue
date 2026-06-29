@@ -20,6 +20,7 @@ import {
   getPreviousStatsOverviewRange,
   getStatsOverviewRange,
   parseStatsOverviewDateInput,
+  shiftStatsOverviewCustomRange,
   shiftStatsOverviewReferenceDate,
   STATS_OVERVIEW_RANGE_OPTIONS,
   type StatsOverviewRangeMode,
@@ -49,6 +50,8 @@ import type { EventCategory } from '@/types'
 const props = defineProps<{
   initialRangeMode?: StatsOverviewRangeMode
   initialReferenceDate?: string
+  initialCustomStartDate?: string
+  initialCustomEndDate?: string
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +61,8 @@ const emit = defineEmits<{
       categoryIds: string[]
       rangeMode: StatsOverviewRangeMode
       referenceDate: string
+      customStartDate?: string
+      customEndDate?: string
     },
   ]
 }>()
@@ -80,6 +85,16 @@ const rangeMode = ref<StatsOverviewRangeMode>(props.initialRangeMode ?? '7d')
 const statsReferenceDate = ref(
   props.initialReferenceDate
     ? (parseStatsOverviewDateInput(props.initialReferenceDate) ?? new Date())
+    : new Date(),
+)
+const customStartDate = ref(
+  props.initialCustomStartDate
+    ? (parseStatsOverviewDateInput(props.initialCustomStartDate) ?? addLocalDays(new Date(), -6))
+    : addLocalDays(new Date(), -6),
+)
+const customEndDate = ref(
+  props.initialCustomEndDate
+    ? (parseStatsOverviewDateInput(props.initialCustomEndDate) ?? new Date())
     : new Date(),
 )
 
@@ -134,7 +149,12 @@ const groupedAvailableCategories = computed(() => {
     categories: groupCategories,
   }))
 })
-const currentRange = computed(() => getStatsOverviewRange(rangeMode.value, statsReferenceDate.value))
+const currentRange = computed(() =>
+  getStatsOverviewRange(rangeMode.value, statsReferenceDate.value, {
+    startDate: customStartDate.value,
+    endDate: customEndDate.value,
+  }),
+)
 const previousRange = computed(() =>
   getPreviousStatsOverviewRange(rangeMode.value, currentRange.value),
 )
@@ -142,6 +162,12 @@ const rangeTitle = computed(() =>
   formatStatsOverviewRangeTitle(rangeMode.value, currentRange.value),
 )
 const canShowNextRange = computed(() => {
+  if (rangeMode.value === 'custom') {
+    const nextRange = shiftStatsOverviewCustomRange(currentRange.value, 1)
+
+    return nextRange.end <= startOfLocalDay(new Date())
+  }
+
   const nextReferenceDate = shiftStatsOverviewReferenceDate(
     rangeMode.value,
     statsReferenceDate.value,
@@ -481,6 +507,15 @@ function selectRangeMode(mode: StatsOverviewRangeMode): void {
 }
 
 function showPreviousRange(): void {
+  if (rangeMode.value === 'custom') {
+    const previousRange = shiftStatsOverviewCustomRange(currentRange.value, -1)
+
+    customStartDate.value = previousRange.start
+    customEndDate.value = previousRange.end
+    statsReferenceDate.value = previousRange.end
+    return
+  }
+
   statsReferenceDate.value = shiftStatsOverviewReferenceDate(
     rangeMode.value,
     statsReferenceDate.value,
@@ -493,6 +528,15 @@ function showNextRange(): void {
     return
   }
 
+  if (rangeMode.value === 'custom') {
+    const nextRange = shiftStatsOverviewCustomRange(currentRange.value, 1)
+
+    customStartDate.value = nextRange.start
+    customEndDate.value = nextRange.end
+    statsReferenceDate.value = nextRange.end
+    return
+  }
+
   statsReferenceDate.value = shiftStatsOverviewReferenceDate(
     rangeMode.value,
     statsReferenceDate.value,
@@ -502,6 +546,18 @@ function showNextRange(): void {
 
 function showTodayRange(): void {
   statsReferenceDate.value = new Date()
+
+  if (rangeMode.value === 'custom') {
+    const dayCount =
+      Math.round(
+        (startOfLocalDay(customEndDate.value).getTime() -
+          startOfLocalDay(customStartDate.value).getTime()) /
+          86_400_000,
+      ) + 1
+
+    customEndDate.value = new Date()
+    customStartDate.value = addLocalDays(customEndDate.value, -Math.max(dayCount - 1, 0))
+  }
 }
 
 function selectReferenceDate(value: string): void {
@@ -514,8 +570,44 @@ function selectReferenceDate(value: string): void {
   statsReferenceDate.value = selectedDate
 }
 
+function selectCustomStartDate(value: string): void {
+  const selectedDate = parseStatsOverviewDateInput(value)
+
+  if (!selectedDate || selectedDate > startOfLocalDay(new Date())) {
+    return
+  }
+
+  customStartDate.value = selectedDate
+
+  if (customEndDate.value < selectedDate) {
+    customEndDate.value = selectedDate
+  }
+
+  statsReferenceDate.value = customEndDate.value
+}
+
+function selectCustomEndDate(value: string): void {
+  const selectedDate = parseStatsOverviewDateInput(value)
+
+  if (!selectedDate || selectedDate > startOfLocalDay(new Date())) {
+    return
+  }
+
+  customEndDate.value = selectedDate
+
+  if (customStartDate.value > selectedDate) {
+    customStartDate.value = selectedDate
+  }
+
+  statsReferenceDate.value = selectedDate
+}
+
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
 }
 
 function openCategory(categoryId: string): void {
@@ -524,6 +616,8 @@ function openCategory(categoryId: string): void {
     categoryIds: [...selectedCategoryIds.value],
     rangeMode: rangeMode.value,
     referenceDate: formatStatsOverviewDateInput(statsReferenceDate.value),
+    customStartDate: formatStatsOverviewDateInput(currentRange.value.start),
+    customEndDate: formatStatsOverviewDateInput(currentRange.value.end),
   })
 }
 
@@ -580,7 +674,29 @@ function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
           ‹
         </button>
 
+        <div v-if="rangeMode === 'custom'" class="stats-custom-range">
+          <label>
+            <span>開始</span>
+            <input
+              type="date"
+              :value="formatStatsOverviewDateInput(currentRange.start)"
+              :max="formatStatsOverviewDateInput(new Date())"
+              @change="selectCustomStartDate(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label>
+            <span>結束</span>
+            <input
+              type="date"
+              :value="formatStatsOverviewDateInput(currentRange.end)"
+              :max="formatStatsOverviewDateInput(new Date())"
+              @change="selectCustomEndDate(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+        </div>
+
         <StatsDatePicker
+          v-else
           :title="rangeTitle"
           :model-value="formatStatsOverviewDateInput(statsReferenceDate)"
           :max-date="formatStatsOverviewDateInput(new Date())"
@@ -909,7 +1025,7 @@ function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
 
 .stats-range-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  grid-template-columns: repeat(5, minmax(64px, 1fr));
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -954,6 +1070,36 @@ function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
   width: 42px;
   height: 42px;
   font-size: 1.5rem;
+}
+
+.stats-custom-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.stats-custom-range label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.stats-custom-range input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 42px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 800;
 }
 
 .stats-range-picker {

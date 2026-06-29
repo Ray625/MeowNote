@@ -150,20 +150,13 @@ export function getMeasurementDetailStats({
 
   const values = numericEvents.map(({ value }) => value)
   const latest = numericEvents.at(-1)!
-  const points = numericEvents.map(({ event, value }) => ({
-    key: event.id,
-    label:
-      rangeMode === 'day'
-        ? formatTimeLabel(new Date(event.occurredAt))
-        : formatShortDate(new Date(event.occurredAt)),
-    occurredAt: event.occurredAt,
-    value,
-  }))
+  const points = createMeasurementPoints(numericEvents, rangeMode, currentRange)
 
   return {
     category,
     mode: 'measurement',
-    interval: rangeMode === 'day' ? 'day' : rangeMode === '7d' ? 'week' : 'month',
+    interval:
+      getStatsDetailBucketGranularityLabel(rangeMode, currentRange) === '每月' ? 'month' : 'week',
     latestValue: latest.value,
     maxValue: Math.max(...values),
     minValue: Math.min(...values),
@@ -210,7 +203,12 @@ export function getRatingDetailStats({
   return {
     category,
     mode: 'rating',
-    interval: rangeMode === 'day' ? 'day' : rangeMode === '7d' ? 'week' : 'month',
+    interval:
+      rangeMode === 'day'
+        ? 'day'
+        : getStatsDetailBucketGranularityLabel(rangeMode, currentRange) === '每月'
+          ? 'month'
+          : 'week',
     latestValue: latest.value,
     maxValue: Math.max(...values),
     minValue: Math.min(...values),
@@ -220,7 +218,10 @@ export function getRatingDetailStats({
   }
 }
 
-export function getDetailGranularityLabel(mode: StatsOverviewRangeMode): string {
+export function getStatsDetailBucketGranularityLabel(
+  mode: StatsOverviewRangeMode,
+  range: StatsOverviewRange | undefined,
+): string {
   if (mode === 'day') {
     return '每 4 小時'
   }
@@ -229,11 +230,57 @@ export function getDetailGranularityLabel(mode: StatsOverviewRangeMode): string 
     return '每日'
   }
 
-  if (mode === '90d') {
-    return '每週'
+  if (mode === 'custom' && range) {
+    const dayCount = getRangeDayCount(range)
+
+    if (dayCount === 1) {
+      return '每 4 小時'
+    }
+
+    if (dayCount <= 30) {
+      return '每日'
+    }
+
+    if (dayCount <= 120) {
+      return '每週'
+    }
   }
 
   return '每月'
+}
+
+function createMeasurementPoints(
+  events: NumericEvent[],
+  mode: StatsOverviewRangeMode,
+  range: StatsOverviewRange,
+): MeasurementPoint[] {
+  if (mode === 'day') {
+    return events.map(({ event, value }) => ({
+      key: event.id,
+      label: formatTimeLabel(new Date(event.occurredAt)),
+      occurredAt: event.occurredAt,
+      value,
+    }))
+  }
+
+  return createDetailBuckets(mode, range).flatMap((bucket) => {
+    const latest = events
+      .filter(({ event }) => isDateInRange(new Date(event.occurredAt), bucket))
+      .at(-1)
+
+    if (!latest) {
+      return []
+    }
+
+    return [
+      {
+        key: bucket.key,
+        label: bucket.label,
+        occurredAt: latest.event.occurredAt,
+        value: latest.value,
+      },
+    ]
+  })
 }
 
 function createRatingPoints(
@@ -287,7 +334,9 @@ function createDetailBuckets(
   mode: StatsOverviewRangeMode,
   range: StatsOverviewRange,
 ): DetailBucket[] {
-  if (mode === 'day') {
+  const granularity = getStatsDetailBucketGranularityLabel(mode, range)
+
+  if (granularity === '每 4 小時') {
     return Array.from({ length: 6 }, (_, index) => {
       const start = new Date(
         range.start.getFullYear(),
@@ -311,15 +360,22 @@ function createDetailBuckets(
     })
   }
 
-  if (mode === '7d' || mode === '30d') {
+  if (granularity === '每日') {
     return createFixedDayBuckets(range)
   }
 
-  if (mode === '90d') {
+  if (granularity === '每週') {
     return createFixedWeekBuckets(range)
   }
 
   return createCalendarMonthBuckets(range)
+}
+
+function getRangeDayCount(range: StatsOverviewRange): number {
+  return (
+    Math.round((startOfDay(range.end).getTime() - startOfDay(range.start).getTime()) / 86_400_000) +
+    1
+  )
 }
 
 function createFixedDayBuckets(range: StatsOverviewRange): DetailBucket[] {

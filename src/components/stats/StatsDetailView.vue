@@ -14,7 +14,7 @@ import {
 } from '@/services/catTrackerStats'
 import {
   getCountDetailStats,
-  getDetailGranularityLabel,
+  getStatsDetailBucketGranularityLabel,
   getMeasurementDetailStats,
   getRatingDetailStats,
   getSumDetailStats,
@@ -25,6 +25,7 @@ import {
   getPreviousStatsOverviewRange,
   getStatsOverviewRange,
   parseStatsOverviewDateInput,
+  shiftStatsOverviewCustomRange,
   shiftStatsOverviewReferenceDate,
   STATS_OVERVIEW_RANGE_OPTIONS,
   type StatsOverviewRangeMode,
@@ -38,6 +39,8 @@ const props = defineProps<{
   categoryIds?: string[]
   initialRangeMode?: StatsOverviewRangeMode
   initialReferenceDate?: string
+  initialCustomStartDate?: string
+  initialCustomEndDate?: string
 }>()
 
 const emit = defineEmits<{
@@ -46,6 +49,8 @@ const emit = defineEmits<{
     selection: {
       rangeMode: StatsOverviewRangeMode
       referenceDate: string
+      customStartDate?: string
+      customEndDate?: string
     },
   ]
 }>()
@@ -74,6 +79,16 @@ const selectedStatsCategoryId = ref('')
 const statsReferenceDate = ref(
   props.initialReferenceDate
     ? (parseStatsOverviewDateInput(props.initialReferenceDate) ?? new Date())
+    : new Date(),
+)
+const customStartDate = ref(
+  props.initialCustomStartDate
+    ? (parseStatsOverviewDateInput(props.initialCustomStartDate) ?? addDays(new Date(), -6))
+    : addDays(new Date(), -6),
+)
+const customEndDate = ref(
+  props.initialCustomEndDate
+    ? (parseStatsOverviewDateInput(props.initialCustomEndDate) ?? new Date())
     : new Date(),
 )
 const isRangePickerOpen = ref(false)
@@ -112,7 +127,10 @@ const selectedStatsCategory = computed(() =>
 )
 const statsMode = computed<StatsMode>(() => selectedStatsCategory.value?.statisticsMode ?? 'count')
 const currentRange = computed(() =>
-  getStatsOverviewRange(rangeMode.value, statsReferenceDate.value),
+  getStatsOverviewRange(rangeMode.value, statsReferenceDate.value, {
+    startDate: customStartDate.value,
+    endDate: customEndDate.value,
+  }),
 )
 const previousRange = computed(() =>
   getPreviousStatsOverviewRange(rangeMode.value, currentRange.value),
@@ -143,7 +161,7 @@ const trendAxisTicks = computed<TrendAxisTick[]>(() => {
     return {
       key: formatDateInputValue(date),
       label:
-        rangeMode.value === 'year' || rangeMode.value === 'halfYear'
+        getStatsDetailBucketGranularityLabel(rangeMode.value, currentRange.value) === '每月'
           ? `${date.getFullYear()}/${date.getMonth() + 1}`
           : `${date.getMonth() + 1}/${date.getDate()}`,
       x: 8 + (index / (tickCount - 1)) * 84,
@@ -156,7 +174,15 @@ const rangeTitle = computed(() =>
 const nextRangeReferenceDate = computed(() =>
   shiftStatsOverviewReferenceDate(rangeMode.value, statsReferenceDate.value, 1),
 )
-const canShowNextRange = computed(() => nextRangeReferenceDate.value <= startOfDay(new Date()))
+const canShowNextRange = computed(() => {
+  if (rangeMode.value === 'custom') {
+    const nextRange = shiftStatsOverviewCustomRange(currentRange.value, 1)
+
+    return nextRange.end <= startOfDay(new Date())
+  }
+
+  return nextRangeReferenceDate.value <= startOfDay(new Date())
+})
 const rangePickerMonthIndex = computed(() => statsReferenceDate.value.getMonth())
 const rangePickerMode = computed<RangePickerMode>(() => 'day')
 const rangePickerLabel = computed(() => '選擇區間結束日期')
@@ -346,14 +372,19 @@ watch(
   { immediate: true },
 )
 
-watch([rangeMode, statsReferenceDate], ([nextRangeMode, nextReferenceDate]) => {
+watch(
+  [rangeMode, statsReferenceDate, customStartDate, customEndDate],
+  ([nextRangeMode, nextReferenceDate]) => {
   emit('rangeChange', {
     rangeMode: nextRangeMode,
     referenceDate: formatStatsOverviewDateInput(nextReferenceDate),
+    customStartDate: formatStatsOverviewDateInput(currentRange.value.start),
+    customEndDate: formatStatsOverviewDateInput(currentRange.value.end),
   })
-})
+  },
+)
 
-watch([selectedStatsCategoryId, rangeMode, statsReferenceDate], () => {
+watch([selectedStatsCategoryId, rangeMode, statsReferenceDate, customStartDate, customEndDate], () => {
   activeChartTooltip.value = undefined
 })
 
@@ -865,6 +896,15 @@ function hasRecordInRange(start: Date, end: Date): boolean {
 }
 
 function showPreviousRange(): void {
+  if (rangeMode.value === 'custom') {
+    const previousRange = shiftStatsOverviewCustomRange(currentRange.value, -1)
+
+    customStartDate.value = previousRange.start
+    customEndDate.value = previousRange.end
+    statsReferenceDate.value = previousRange.end
+    return
+  }
+
   statsReferenceDate.value = shiftStatsOverviewReferenceDate(
     rangeMode.value,
     statsReferenceDate.value,
@@ -875,6 +915,38 @@ function showPreviousRange(): void {
 function selectRangeMode(mode: StatsOverviewRangeMode): void {
   rangeMode.value = mode
   isRangePickerOpen.value = false
+}
+
+function selectCustomStartDate(value: string): void {
+  const selectedDate = parseStatsOverviewDateInput(value)
+
+  if (!selectedDate || selectedDate > startOfDay(new Date())) {
+    return
+  }
+
+  customStartDate.value = selectedDate
+
+  if (customEndDate.value < selectedDate) {
+    customEndDate.value = selectedDate
+  }
+
+  statsReferenceDate.value = customEndDate.value
+}
+
+function selectCustomEndDate(value: string): void {
+  const selectedDate = parseStatsOverviewDateInput(value)
+
+  if (!selectedDate || selectedDate > startOfDay(new Date())) {
+    return
+  }
+
+  customEndDate.value = selectedDate
+
+  if (customStartDate.value > selectedDate) {
+    customStartDate.value = selectedDate
+  }
+
+  statsReferenceDate.value = selectedDate
 }
 
 function selectReferenceDate(value: string): void {
@@ -893,6 +965,15 @@ function showNextRange(): void {
     return
   }
 
+  if (rangeMode.value === 'custom') {
+    const nextRange = shiftStatsOverviewCustomRange(currentRange.value, 1)
+
+    customStartDate.value = nextRange.start
+    customEndDate.value = nextRange.end
+    statsReferenceDate.value = nextRange.end
+    return
+  }
+
   statsReferenceDate.value = nextRangeReferenceDate.value
 }
 
@@ -902,11 +983,26 @@ function getNextRangeReferenceDate(): Date {
 
 function showTodayRange(): void {
   statsReferenceDate.value = new Date()
+
+  if (rangeMode.value === 'custom') {
+    const dayCount =
+      Math.round(
+        (startOfDay(customEndDate.value).getTime() - startOfDay(customStartDate.value).getTime()) /
+          86_400_000,
+      ) + 1
+
+    customEndDate.value = new Date()
+    customStartDate.value = addDays(customEndDate.value, -Math.max(dayCount - 1, 0))
+  }
+
   isRangePickerOpen.value = false
 }
 
 function getStatsRangeStart(referenceDate: Date): Date {
-  return getStatsOverviewRange(rangeMode.value, referenceDate).start
+  return getStatsOverviewRange(rangeMode.value, referenceDate, {
+    startDate: customStartDate.value,
+    endDate: customEndDate.value,
+  }).start
 }
 
 function getStatsRange(referenceDate: Date, interval: CountInterval, periods: number) {
@@ -1015,7 +1111,29 @@ function formatDateInputValue(date: Date): string {
         >
           ‹
         </button>
+        <div v-if="rangeMode === 'custom'" class="stats-custom-range">
+          <label>
+            <span>開始</span>
+            <input
+              type="date"
+              :value="formatStatsOverviewDateInput(currentRange.start)"
+              :max="formatStatsOverviewDateInput(new Date())"
+              @change="selectCustomStartDate(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label>
+            <span>結束</span>
+            <input
+              type="date"
+              :value="formatStatsOverviewDateInput(currentRange.end)"
+              :max="formatStatsOverviewDateInput(new Date())"
+              @change="selectCustomEndDate(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+        </div>
+
         <StatsDatePicker
+          v-else
           :title="rangeTitle"
           :model-value="formatStatsOverviewDateInput(statsReferenceDate)"
           :max-date="formatStatsOverviewDateInput(new Date())"
@@ -1090,7 +1208,9 @@ function formatDateInputValue(date: Date): string {
           </div>
         </div>
 
-        <span class="stats-granularity"> 圖表：{{ getDetailGranularityLabel(rangeMode) }} </span>
+        <span class="stats-granularity">
+          圖表：{{ getStatsDetailBucketGranularityLabel(rangeMode, currentRange) }}
+        </span>
       </div>
 
       <div
@@ -1561,7 +1681,9 @@ function formatDateInputValue(date: Date): string {
           <div class="count-card__meta">
             <span>最近 {{ formatLatestDate(selectedRatingStats.latestOccurredAt) }}</span>
             <span>{{
-              rangeMode === 'day' ? '單日多筆' : getDetailGranularityLabel(rangeMode)
+              rangeMode === 'day'
+                ? '單日多筆'
+                : getStatsDetailBucketGranularityLabel(rangeMode, currentRange)
             }}</span>
           </div>
         </article>
@@ -1673,7 +1795,7 @@ function formatDateInputValue(date: Date): string {
 
 .stats-detail-range-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  grid-template-columns: repeat(5, minmax(64px, 1fr));
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -1736,6 +1858,37 @@ function formatDateInputValue(date: Date): string {
   grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;
   gap: 8px;
+}
+
+.stats-custom-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.stats-custom-range label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.stats-custom-range input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 800;
 }
 
 .range-controls > strong {

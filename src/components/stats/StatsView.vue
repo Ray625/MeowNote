@@ -8,25 +8,35 @@ const selectedDetailCategoryId = ref('')
 const selectedStatsCategoryIds = ref<string[]>([])
 const selectedRangeMode = ref<StatsOverviewRangeMode>('7d')
 const selectedReferenceDate = ref('')
+const selectedCustomStartDate = ref('')
+const selectedCustomEndDate = ref('')
 
 function openCategory(selection: {
   categoryId: string
   categoryIds: string[]
   rangeMode: StatsOverviewRangeMode
   referenceDate: string
+  customStartDate?: string
+  customEndDate?: string
 }): void {
   selectedDetailCategoryId.value = selection.categoryId
   selectedStatsCategoryIds.value = [...selection.categoryIds]
   selectedRangeMode.value = selection.rangeMode
   selectedReferenceDate.value = selection.referenceDate
+  selectedCustomStartDate.value = selection.customStartDate ?? ''
+  selectedCustomEndDate.value = selection.customEndDate ?? ''
 }
 
 function updateRange(selection: {
   rangeMode: StatsOverviewRangeMode
   referenceDate: string
+  customStartDate?: string
+  customEndDate?: string
 }): void {
   selectedRangeMode.value = selection.rangeMode
   selectedReferenceDate.value = selection.referenceDate
+  selectedCustomStartDate.value = selection.customStartDate ?? ''
+  selectedCustomEndDate.value = selection.customEndDate ?? ''
 }
 
 function closeDetail(): void {
@@ -41,6 +51,8 @@ function closeDetail(): void {
     :category-ids="selectedStatsCategoryIds"
     :initial-range-mode="selectedRangeMode"
     :initial-reference-date="selectedReferenceDate"
+    :initial-custom-start-date="selectedCustomStartDate"
+    :initial-custom-end-date="selectedCustomEndDate"
     @back="closeDetail"
     @range-change="updateRange"
   />
@@ -48,6 +60,8 @@ function closeDetail(): void {
     v-else
     :initial-range-mode="selectedRangeMode"
     :initial-reference-date="selectedReferenceDate"
+    :initial-custom-start-date="selectedCustomStartDate"
+    :initial-custom-end-date="selectedCustomEndDate"
     @open-category="openCategory"
   />
 </template>

@@ -199,12 +199,12 @@ export function getCurrentCountLabel(mode: StatsOverviewRangeMode): string {
     return '當日總次數'
   }
 
-  if (mode === 'halfYear') {
-    return '近半年總次數'
-  }
-
   if (mode === 'year') {
     return '近 1 年總次數'
+  }
+
+  if (mode === 'custom') {
+    return '此區間總次數'
   }
 
   return `近 ${mode.replace('d', '')} 日總次數`
@@ -215,12 +215,12 @@ export function getPreviousPeriodLabel(mode: StatsOverviewRangeMode): string {
     return '前日'
   }
 
-  if (mode === 'halfYear') {
-    return '前半年'
-  }
-
   if (mode === 'year') {
     return '前 1 年'
+  }
+
+  if (mode === 'custom') {
+    return '前一區間'
   }
 
   return `前 ${mode.replace('d', '')} 日`
@@ -243,12 +243,12 @@ export function getCurrentSumLabel(mode: StatsOverviewRangeMode): string {
     return '當日總量'
   }
 
-  if (mode === 'halfYear') {
-    return '近半年每日平均'
-  }
-
   if (mode === 'year') {
     return '近 1 年每日平均'
+  }
+
+  if (mode === 'custom') {
+    return '此區間每日平均'
   }
 
   return `近 ${mode.replace('d', '')} 日每日平均`
@@ -263,12 +263,12 @@ export function getCurrentRatingLabel(mode: StatsOverviewRangeMode): string {
     return '當日平均'
   }
 
-  if (mode === 'halfYear') {
-    return '近半年平均'
-  }
-
   if (mode === 'year') {
     return '近 1 年平均'
+  }
+
+  if (mode === 'custom') {
+    return '此區間平均'
   }
 
   return `近 ${mode.replace('d', '')} 日平均`
@@ -279,12 +279,12 @@ export function getPreviousMeasurementLabel(mode: StatsOverviewRangeMode): strin
     return '前日最後一筆'
   }
 
-  if (mode === 'halfYear') {
-    return '前半年最後一筆'
-  }
-
   if (mode === 'year') {
     return '前 1 年最後一筆'
+  }
+
+  if (mode === 'custom') {
+    return '前一區間最後一筆'
   }
 
   return `前 ${mode.replace('d', '')} 日最後一筆`

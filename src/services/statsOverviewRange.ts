@@ -1,8 +1,13 @@
-export type StatsOverviewRangeMode = 'day' | '7d' | '30d' | '90d' | 'halfYear' | 'year'
+export type StatsOverviewRangeMode = 'day' | '7d' | '30d' | 'year' | 'custom'
 
 export interface StatsOverviewRange {
   start: Date
   end: Date
+}
+
+export interface StatsOverviewCustomRange {
+  startDate?: Date
+  endDate?: Date
 }
 
 export const STATS_OVERVIEW_RANGE_OPTIONS: ReadonlyArray<{
@@ -10,25 +15,29 @@ export const STATS_OVERVIEW_RANGE_OPTIONS: ReadonlyArray<{
   label: string
 }> = [
   { value: 'day', label: '單日' },
-  { value: '7d', label: '7 日' },
-  { value: '30d', label: '30 日' },
-  { value: '90d', label: '90 日' },
-  { value: 'halfYear', label: '半年' },
+  { value: '7d', label: '7日' },
+  { value: '30d', label: '30日' },
   { value: 'year', label: '1 年' },
+  { value: 'custom', label: '自訂' },
 ]
 
 export function getStatsOverviewRange(
   mode: StatsOverviewRangeMode,
   referenceDate: Date,
+  customRange?: StatsOverviewCustomRange,
 ): StatsOverviewRange {
   const end = startOfDay(referenceDate)
+
+  if (mode === 'custom') {
+    return normalizeCustomRange(customRange, end)
+  }
 
   if (mode === 'day') {
     return { start: end, end }
   }
 
-  if (mode === '7d' || mode === '30d' || mode === '90d') {
-    const days = mode === '7d' ? 7 : mode === '30d' ? 30 : 90
+  if (mode === '7d' || mode === '30d') {
+    const days = mode === '7d' ? 7 : 30
 
     return {
       start: addDays(end, -(days - 1)),
@@ -36,10 +45,8 @@ export function getStatsOverviewRange(
     }
   }
 
-  const months = mode === 'halfYear' ? 6 : 12
-
   return {
-    start: addDays(addMonthsClamped(end, -months), 1),
+    start: addDays(addMonthsClamped(end, -12), 1),
     end,
   }
 }
@@ -48,7 +55,13 @@ export function getPreviousStatsOverviewRange(
   mode: StatsOverviewRangeMode,
   currentRange: StatsOverviewRange,
 ): StatsOverviewRange {
-  return getStatsOverviewRange(mode, addDays(currentRange.start, -1))
+  const days = getStatsOverviewRangeDayCount(currentRange)
+  const end = addDays(currentRange.start, -1)
+
+  return {
+    start: addDays(end, -(days - 1)),
+    end,
+  }
 }
 
 export function shiftStatsOverviewReferenceDate(
@@ -56,17 +69,40 @@ export function shiftStatsOverviewReferenceDate(
   referenceDate: Date,
   direction: -1 | 1,
 ): Date {
+  if (mode === 'custom') {
+    return referenceDate
+  }
+
   if (mode === 'day') {
     return addDays(referenceDate, direction)
   }
 
-  if (mode === '7d' || mode === '30d' || mode === '90d') {
-    const days = mode === '7d' ? 7 : mode === '30d' ? 30 : 90
+  if (mode === '7d' || mode === '30d') {
+    const days = mode === '7d' ? 7 : 30
 
     return addDays(referenceDate, direction * days)
   }
 
-  return addMonthsClamped(referenceDate, direction * (mode === 'halfYear' ? 6 : 12))
+  return addMonthsClamped(referenceDate, direction * 12)
+}
+
+export function shiftStatsOverviewCustomRange(
+  range: StatsOverviewRange,
+  direction: -1 | 1,
+): StatsOverviewRange {
+  const days = getStatsOverviewRangeDayCount(range)
+
+  return {
+    start: addDays(range.start, direction * days),
+    end: addDays(range.end, direction * days),
+  }
+}
+
+export function getStatsOverviewRangeDayCount(range: StatsOverviewRange): number {
+  return (
+    Math.round((startOfDay(range.end).getTime() - startOfDay(range.start).getTime()) / 86_400_000) +
+    1
+  )
 }
 
 export function formatStatsOverviewRangeTitle(
@@ -102,6 +138,21 @@ export function parseStatsOverviewDateInput(value: string): Date | null {
 
 export function isSameStatsOverviewDate(left: Date, right: Date): boolean {
   return formatStatsOverviewDateInput(left) === formatStatsOverviewDateInput(right)
+}
+
+function normalizeCustomRange(
+  customRange: StatsOverviewCustomRange | undefined,
+  fallbackEnd: Date,
+): StatsOverviewRange {
+  const rawStart = startOfDay(customRange?.startDate ?? fallbackEnd)
+  const rawEnd = startOfDay(customRange?.endDate ?? fallbackEnd)
+  const today = startOfDay(new Date())
+  const cappedStart = rawStart > today ? today : rawStart
+  const cappedEnd = rawEnd > today ? today : rawEnd
+
+  return cappedStart <= cappedEnd
+    ? { start: cappedStart, end: cappedEnd }
+    : { start: cappedEnd, end: cappedStart }
 }
 
 function startOfDay(date: Date): Date {
