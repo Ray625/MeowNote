@@ -11,11 +11,10 @@ import {
 } from '@/domain/catTracker/cat'
 import {
   applyCategoryReorder,
-  createCategoryRecord,
-  createCategoryUpdatePatch,
+  createCategoryMutation,
   deleteCategoryRecord,
-  getNextCategorySortOrder,
   restoreCategoryRecord,
+  updateCategoryMutation,
 } from '@/domain/catTracker/category'
 import {
   createEventDraft,
@@ -517,12 +516,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       throw new Error('只有 Notebook 擁有者可以新增分類')
     }
 
-    const group = input.group ?? '飲食'
-    const category = createCategoryRecord(
-      input,
-      getIsoNow(),
-      getNextCategorySortOrder(categories.value, group),
-    )
+    const category = createCategoryMutation(categories.value, input, getIsoNow())
 
     categories.value.push(category)
     markLocalChangeIfSignedOut()
@@ -539,26 +533,16 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    const category = categoriesById.value.get(categoryId)
+    const result = updateCategoryMutation(categories.value, categoryId, input, getIsoNow())
 
-    if (!category) {
+    if (result.status === 'missing') {
       return undefined
     }
 
-    Object.assign(
-      category,
-      createCategoryUpdatePatch(
-        category,
-        input,
-        getIsoNow(),
-        input.group ? getNextCategorySortOrder(categories.value, input.group) : undefined,
-      ),
-    )
-
     markLocalChangeIfSignedOut()
-    syncUpdatedCategory(category.id)
+    syncUpdatedCategory(result.category.id)
 
-    return category
+    return result.category
   }
 
   function getCategoryUsageCount(categoryId: string): number {

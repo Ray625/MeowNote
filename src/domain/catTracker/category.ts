@@ -13,6 +13,10 @@ export type DeleteCategoryRecordResult =
   | { status: 'archived'; category: EventCategory }
   | { status: 'deleted'; categories: EventCategory[] }
 
+export type UpdateCategoryMutationResult =
+  | { status: 'missing' }
+  | { status: 'updated'; category: EventCategory }
+
 export function getNextCategorySortOrder(
   categories: EventCategory[],
   group: EventCategoryGroup,
@@ -53,6 +57,16 @@ export function createCategoryRecord(
   }
 }
 
+export function createCategoryMutation(
+  categories: EventCategory[],
+  input: CreateCategoryInput,
+  now: string,
+): EventCategory {
+  const group = input.group ?? '飲食'
+
+  return createCategoryRecord(input, now, getNextCategorySortOrder(categories, group))
+}
+
 export function createCategoryUpdatePatch(
   category: EventCategory,
   input: UpdateCategoryInput,
@@ -84,6 +98,31 @@ export function createCategoryUpdatePatch(
         : (nextInput.valueUnit ?? category.valueUnit),
     updatedAt: now,
   }
+}
+
+export function updateCategoryMutation(
+  categories: EventCategory[],
+  categoryId: string,
+  input: UpdateCategoryInput,
+  now: string,
+): UpdateCategoryMutationResult {
+  const category = categories.find((item) => item.id === categoryId)
+
+  if (!category) {
+    return { status: 'missing' }
+  }
+
+  Object.assign(
+    category,
+    createCategoryUpdatePatch(
+      category,
+      input,
+      now,
+      input.group ? getNextCategorySortOrder(categories, input.group) : undefined,
+    ),
+  )
+
+  return { status: 'updated', category }
 }
 
 export function archiveCategory(category: EventCategory, now: string): void {

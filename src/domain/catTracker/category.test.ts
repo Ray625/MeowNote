@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   applyCategoryReorder,
   archiveCategory,
+  createCategoryMutation,
   createCategoryRecord,
   createCategoryUpdatePatch,
   deleteCategoryRecord,
   getNextCategorySortOrder,
   getReorderedCategories,
   restoreCategoryRecord,
+  updateCategoryMutation,
 } from './category'
 import type { EventCategory } from '@/types'
 
@@ -104,6 +106,66 @@ describe('category domain rules', () => {
       valueLabel: '評分',
       valueMax: 10,
       valueUnit: undefined,
+    })
+  })
+
+  it('creates categories with the next sort order in their group', () => {
+    const category = createCategoryMutation(
+      [
+        createCategory({ id: 'water', group: '飲食', sortOrder: 0 }),
+        createCategory({ id: 'food', group: '飲食', sortOrder: 4 }),
+        createCategory({ id: 'vomit', group: '健康', sortOrder: 9 }),
+      ],
+      {
+        name: '濕食',
+        group: '飲食',
+        statisticsMode: 'sum',
+      },
+      NOW,
+    )
+
+    expect(category).toMatchObject({
+      name: '濕食',
+      group: '飲食',
+      sortOrder: 5,
+      statisticsMode: 'sum',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('updates categories and moves them to the end of a new group', () => {
+    const category = createCategory({ id: 'water', group: '飲食', sortOrder: 0 })
+    const result = updateCategoryMutation(
+      [
+        category,
+        createCategory({ id: 'vomit', group: '健康', sortOrder: 3 }),
+      ],
+      'water',
+      {
+        group: '健康',
+        statisticsMode: 'measurement',
+        valueLabel: '體重',
+        valueUnit: 'kg',
+      },
+      '2026-06-25T00:00:00.000Z',
+    )
+
+    expect(result).toMatchObject({ status: 'updated', category })
+    expect(category).toMatchObject({
+      group: '健康',
+      sortOrder: 4,
+      statisticsMode: 'measurement',
+      valueLabel: '體重',
+      valueUnit: 'kg',
+      valueMax: undefined,
+      updatedAt: '2026-06-25T00:00:00.000Z',
+    })
+  })
+
+  it('returns missing when updating an unknown category', () => {
+    expect(updateCategoryMutation([], 'missing', { name: '找不到' }, NOW)).toEqual({
+      status: 'missing',
     })
   })
 
