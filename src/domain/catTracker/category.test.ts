@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyCategoryReorder,
   archiveCategory,
   createCategoryRecord,
   createCategoryUpdatePatch,
@@ -188,5 +189,43 @@ describe('category domain rules', () => {
     )
 
     expect(reordered.map((category) => category.id)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('applies category reorder sort order and updatedAt values', () => {
+    const categories = [
+      createCategory({ id: 'a', group: '健康', sortOrder: 0 }),
+      createCategory({ id: 'b', group: '健康', sortOrder: 1 }),
+      createCategory({ id: 'c', group: '健康', sortOrder: 2 }),
+    ]
+    const updatedCategories = applyCategoryReorder(
+      categories,
+      'c',
+      'a',
+      '2026-06-25T00:00:00.000Z',
+      'before',
+    )
+
+    expect(updatedCategories.map((category) => category.id)).toEqual(['c', 'a', 'b'])
+    expect(categories.map((category) => [category.id, category.sortOrder])).toEqual([
+      ['a', 1],
+      ['b', 2],
+      ['c', 0],
+    ])
+    expect(updatedCategories.every((category) => category.updatedAt === '2026-06-25T00:00:00.000Z')).toBe(true)
+  })
+
+  it('does not reorder categories across groups', () => {
+    const categories = [
+      createCategory({ id: 'a', group: '健康', sortOrder: 0 }),
+      createCategory({ id: 'b', group: '飲食', sortOrder: 1 }),
+    ]
+
+    expect(
+      applyCategoryReorder(categories, 'a', 'b', '2026-06-25T00:00:00.000Z'),
+    ).toEqual([])
+    expect(categories.map((category) => [category.id, category.sortOrder])).toEqual([
+      ['a', 0],
+      ['b', 1],
+    ])
   })
 })

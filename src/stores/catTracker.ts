@@ -10,11 +10,11 @@ import {
   restoreCatRecord,
 } from '@/domain/catTracker/cat'
 import {
+  applyCategoryReorder,
   createCategoryRecord,
   createCategoryUpdatePatch,
   deleteCategoryRecord,
   getNextCategorySortOrder,
-  getReorderedCategories,
   restoreCategoryRecord,
 } from '@/domain/catTracker/category'
 import {
@@ -716,29 +716,19 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    if (categoryId === targetCategoryId) {
-      return
-    }
-
-    const groupCategories = getReorderedCategories(
+    const updatedCategories = applyCategoryReorder(
       categories.value,
       categoryId,
       targetCategoryId,
+      getIsoNow(),
       position,
     )
 
-    if (groupCategories.length === 0) {
+    if (updatedCategories.length === 0) {
       return
     }
 
-    const now = getIsoNow()
-    groupCategories.forEach((item, index) => {
-      Object.assign(item, {
-        sortOrder: index,
-        updatedAt: now,
-      })
-      syncUpdatedCategory(item.id)
-    })
+    updatedCategories.forEach((category) => syncUpdatedCategory(category.id))
   }
 
   function getRemoteNotebookId(): string {

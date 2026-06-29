@@ -170,3 +170,35 @@ export function getReorderedCategories(
 
   return groupCategories
 }
+
+export function applyCategoryReorder(
+  categories: EventCategory[],
+  categoryId: string,
+  targetCategoryId: string,
+  now: string,
+  position: 'before' | 'after' = 'before',
+): EventCategory[] {
+  if (categoryId === targetCategoryId) {
+    return []
+  }
+
+  const reorderedCategories = getReorderedCategories(
+    categories,
+    categoryId,
+    targetCategoryId,
+    position,
+  )
+
+  return reorderedCategories.filter((category, index) => {
+    if (category.sortOrder === index && category.updatedAt === now) {
+      return false
+    }
+
+    Object.assign(category, {
+      sortOrder: index,
+      updatedAt: now,
+    })
+
+    return true
+  })
+}
