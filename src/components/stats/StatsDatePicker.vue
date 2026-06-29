@@ -10,6 +10,7 @@ const props = defineProps<{
   title: string
   modelValue: string
   maxDate: string
+  align?: 'start' | 'center' | 'end'
 }>()
 
 const emit = defineEmits<{
@@ -139,6 +140,7 @@ function isFutureDate(date: Date): boolean {
     <div
       v-if="isOpen"
       class="stats-date-picker__menu"
+      :class="`stats-date-picker__menu--${props.align ?? 'center'}`"
       role="dialog"
       aria-label="選擇區間結束日期"
     >
@@ -227,6 +229,17 @@ function isFutureDate(date: Date): boolean {
   background: var(--color-surface);
   box-shadow: 0 18px 44px var(--shadow-color);
   transform: translateX(-50%);
+}
+
+.stats-date-picker__menu--start {
+  left: 0;
+  transform: none;
+}
+
+.stats-date-picker__menu--end {
+  right: 0;
+  left: auto;
+  transform: none;
 }
 
 .stats-date-picker__month-nav {

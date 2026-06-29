@@ -949,6 +949,10 @@ function selectCustomEndDate(value: string): void {
   statsReferenceDate.value = selectedDate
 }
 
+function formatCustomDateTitle(date: Date): string {
+  return formatStatsOverviewRangeTitle('day', { start: date, end: date })
+}
+
 function selectReferenceDate(value: string): void {
   const selectedDate = parseStatsOverviewDateInput(value)
 
@@ -1114,20 +1118,22 @@ function formatDateInputValue(date: Date): string {
         <div v-if="rangeMode === 'custom'" class="stats-custom-range">
           <label>
             <span>開始</span>
-            <input
-              type="date"
-              :value="formatStatsOverviewDateInput(currentRange.start)"
-              :max="formatStatsOverviewDateInput(new Date())"
-              @change="selectCustomStartDate(($event.target as HTMLInputElement).value)"
+            <StatsDatePicker
+              :title="formatCustomDateTitle(currentRange.start)"
+              :model-value="formatStatsOverviewDateInput(currentRange.start)"
+              :max-date="formatStatsOverviewDateInput(new Date())"
+              align="start"
+              @update:model-value="selectCustomStartDate"
             />
           </label>
           <label>
             <span>結束</span>
-            <input
-              type="date"
-              :value="formatStatsOverviewDateInput(currentRange.end)"
-              :max="formatStatsOverviewDateInput(new Date())"
-              @change="selectCustomEndDate(($event.target as HTMLInputElement).value)"
+            <StatsDatePicker
+              :title="formatCustomDateTitle(currentRange.end)"
+              :model-value="formatStatsOverviewDateInput(currentRange.end)"
+              :max-date="formatStatsOverviewDateInput(new Date())"
+              align="end"
+              @update:model-value="selectCustomEndDate"
             />
           </label>
         </div>
@@ -1877,18 +1883,9 @@ function formatDateInputValue(date: Date): string {
   text-align: left;
 }
 
-.stats-custom-range input {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
+.stats-custom-range :deep(.stats-date-picker__trigger) {
   min-height: 40px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0 10px;
   background: var(--color-background);
-  color: var(--color-text);
-  font: inherit;
-  font-weight: 800;
 }
 
 .range-controls > strong {
