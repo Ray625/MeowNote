@@ -8,6 +8,11 @@ import type {
 import { createId } from '@/utils/id'
 import { sortCategories } from './selectors'
 
+export type DeleteCategoryRecordResult =
+  | { status: 'missing' }
+  | { status: 'archived'; category: EventCategory }
+  | { status: 'deleted'; categories: EventCategory[] }
+
 export function getNextCategorySortOrder(
   categories: EventCategory[],
   group: EventCategoryGroup,
@@ -95,6 +100,29 @@ export function restoreCategoryRecord(category: EventCategory, now: string): voi
     isQuickAction: true,
     updatedAt: now,
   })
+}
+
+export function deleteCategoryRecord(
+  categories: EventCategory[],
+  categoryId: string,
+  usageCount: number,
+  now: string,
+): DeleteCategoryRecordResult {
+  const category = categories.find((item) => item.id === categoryId)
+
+  if (!category) {
+    return { status: 'missing' }
+  }
+
+  if (usageCount > 0) {
+    archiveCategory(category, now)
+    return { status: 'archived', category }
+  }
+
+  return {
+    status: 'deleted',
+    categories: categories.filter((item) => item.id !== categoryId),
+  }
 }
 
 export function getReorderedCategories(

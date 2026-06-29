@@ -3,6 +3,7 @@ import {
   archiveCategory,
   createCategoryRecord,
   createCategoryUpdatePatch,
+  deleteCategoryRecord,
   getNextCategorySortOrder,
   getReorderedCategories,
   restoreCategoryRecord,
@@ -129,6 +130,39 @@ describe('category domain rules', () => {
     expect(category.isArchived).toBe(true)
     expect(category.isQuickAction).toBe(false)
     expect(category.updatedAt).toBe('2026-06-25T00:00:00.000Z')
+  })
+
+  it('archives categories with usage instead of deleting them', () => {
+    const category = createCategory({ id: 'vomit', isQuickAction: true })
+    const result = deleteCategoryRecord(
+      [category],
+      'vomit',
+      2,
+      '2026-06-25T00:00:00.000Z',
+    )
+
+    expect(result).toMatchObject({ status: 'archived', category })
+    expect(category.isArchived).toBe(true)
+    expect(category.isQuickAction).toBe(false)
+    expect(category.updatedAt).toBe('2026-06-25T00:00:00.000Z')
+  })
+
+  it('deletes categories without usage', () => {
+    const result = deleteCategoryRecord(
+      [
+        createCategory({ id: 'water' }),
+        createCategory({ id: 'vomit' }),
+      ],
+      'vomit',
+      0,
+      NOW,
+    )
+
+    expect(result).toMatchObject({ status: 'deleted' })
+
+    if (result.status === 'deleted') {
+      expect(result.categories.map((category) => category.id)).toEqual(['water'])
+    }
   })
 
   it('restores categories as active quick actions', () => {

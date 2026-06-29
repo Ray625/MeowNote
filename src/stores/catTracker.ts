@@ -10,9 +10,9 @@ import {
   restoreCatRecord,
 } from '@/domain/catTracker/cat'
 import {
-  archiveCategory,
   createCategoryRecord,
   createCategoryUpdatePatch,
+  deleteCategoryRecord,
   getNextCategorySortOrder,
   getReorderedCategories,
   restoreCategoryRecord,
@@ -665,22 +665,25 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return
     }
 
-    const category = categoriesById.value.get(categoryId)
+    const result = deleteCategoryRecord(
+      categories.value,
+      categoryId,
+      getCategoryUsageCount(categoryId),
+      getIsoNow(),
+    )
 
-    if (!category) {
+    if (result.status === 'missing') {
       return
     }
 
-    if (getCategoryUsageCount(categoryId) > 0) {
-      archiveCategory(category, getIsoNow())
-
+    if (result.status === 'archived') {
       markLocalChangeIfSignedOut()
-      syncUpdatedCategory(category.id)
+      syncUpdatedCategory(result.category.id)
 
       return
     }
 
-    categories.value = categories.value.filter((item) => item.id !== categoryId)
+    categories.value = result.categories
     markLocalChangeIfSignedOut()
     syncDeletedCategory(categoryId)
   }
