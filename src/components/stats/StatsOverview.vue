@@ -680,7 +680,6 @@ function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
 
         <div v-if="rangeMode === 'custom'" class="stats-custom-range">
           <label>
-            <span>開始</span>
             <StatsDatePicker
               :title="formatCustomDateTitle(currentRange.start)"
               :model-value="formatStatsOverviewDateInput(currentRange.start)"
@@ -690,7 +689,6 @@ function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
             />
           </label>
           <label>
-            <span>結束</span>
             <StatsDatePicker
               :title="formatCustomDateTitle(currentRange.end)"
               :model-value="formatStatsOverviewDateInput(currentRange.end)"
@@ -1087,11 +1085,7 @@ function openCategoryFromClick(categoryId: string, event: MouseEvent): void {
 
 .stats-custom-range label {
   display: grid;
-  gap: 4px;
   min-width: 0;
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-weight: 800;
 }
 
 .stats-custom-range :deep(.stats-date-picker__trigger) {

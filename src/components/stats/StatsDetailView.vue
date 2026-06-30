@@ -1117,7 +1117,6 @@ function formatDateInputValue(date: Date): string {
         </button>
         <div v-if="rangeMode === 'custom'" class="stats-custom-range">
           <label>
-            <span>開始</span>
             <StatsDatePicker
               :title="formatCustomDateTitle(currentRange.start)"
               :model-value="formatStatsOverviewDateInput(currentRange.start)"
@@ -1127,7 +1126,6 @@ function formatDateInputValue(date: Date): string {
             />
           </label>
           <label>
-            <span>結束</span>
             <StatsDatePicker
               :title="formatCustomDateTitle(currentRange.end)"
               :model-value="formatStatsOverviewDateInput(currentRange.end)"
@@ -1875,12 +1873,7 @@ function formatDateInputValue(date: Date): string {
 
 .stats-custom-range label {
   display: grid;
-  gap: 4px;
   min-width: 0;
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-weight: 800;
-  text-align: left;
 }
 
 .stats-custom-range :deep(.stats-date-picker__trigger) {
