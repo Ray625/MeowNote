@@ -479,7 +479,7 @@ declare
   notebook_used_bytes bigint;
   recent_upload_count integer;
   original_object_name text;
-  notebook_quota_bytes bigint := 200 * 1024 * 1024;
+  notebook_quota_bytes bigint := 1024 * 1024 * 1024;
   recent_upload_limit integer := 15;
 begin
   if target_notebook_id is null then
