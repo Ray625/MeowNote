@@ -9,6 +9,8 @@ import {
 } from '@/repositories/supabaseCatTrackerMapper'
 import type { Cat, CatEvent, EventCategory } from '@/types'
 
+const REMOTE_PAGE_SIZE = 1000
+
 export interface RemoteCatTrackerState {
   cats: Cat[]
   categories: EventCategory[]
@@ -44,18 +46,9 @@ async function loadCats(notebookId: string): Promise<Cat[]> {
     throw new Error('Supabase 尚未設定')
   }
 
-  const { data, error } = await supabase
-    .from('cats')
-    .select('*')
-    .eq('notebook_id', notebookId)
-    .order('created_at', { ascending: true })
-    .returns<SupabaseCatRow[]>()
+  const rows = await loadNotebookRows<SupabaseCatRow>('cats', notebookId, 'created_at')
 
-  if (error) {
-    throw error
-  }
-
-  return data.map(fromCatRow)
+  return rows.map(fromCatRow)
 }
 
 async function loadCategories(notebookId: string): Promise<EventCategory[]> {
@@ -63,18 +56,13 @@ async function loadCategories(notebookId: string): Promise<EventCategory[]> {
     throw new Error('Supabase 尚未設定')
   }
 
-  const { data, error } = await supabase
-    .from('event_categories')
-    .select('*')
-    .eq('notebook_id', notebookId)
-    .order('sort_order', { ascending: true })
-    .returns<SupabaseEventCategoryRow[]>()
+  const rows = await loadNotebookRows<SupabaseEventCategoryRow>(
+    'event_categories',
+    notebookId,
+    'sort_order',
+  )
 
-  if (error) {
-    throw error
-  }
-
-  return data.map(fromEventCategoryRow)
+  return rows.map(fromEventCategoryRow)
 }
 
 async function loadEvents(notebookId: string): Promise<CatEvent[]> {
@@ -82,16 +70,41 @@ async function loadEvents(notebookId: string): Promise<CatEvent[]> {
     throw new Error('Supabase 尚未設定')
   }
 
-  const { data, error } = await supabase
-    .from('cat_events')
-    .select('*')
-    .eq('notebook_id', notebookId)
-    .order('occurred_at', { ascending: true })
-    .returns<SupabaseCatEventRow[]>()
+  const rows = await loadNotebookRows<SupabaseCatEventRow>('cat_events', notebookId, 'occurred_at')
 
-  if (error) {
-    throw error
+  return rows.map(fromCatEventRow)
+}
+
+async function loadNotebookRows<Row>(
+  tableName: 'cat_events' | 'cats' | 'event_categories',
+  notebookId: string,
+  orderColumn: string,
+): Promise<Row[]> {
+  if (!supabase) {
+    throw new Error('Supabase 尚未設定')
   }
 
-  return data.map(fromCatEventRow)
+  const rows: Row[] = []
+
+  for (let page = 0; ; page += 1) {
+    const from = page * REMOTE_PAGE_SIZE
+    const to = from + REMOTE_PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('*')
+      .eq('notebook_id', notebookId)
+      .order(orderColumn, { ascending: true })
+      .range(from, to)
+      .returns<Row[]>()
+
+    if (error) {
+      throw error
+    }
+
+    rows.push(...data)
+
+    if (data.length < REMOTE_PAGE_SIZE) {
+      return rows
+    }
+  }
 }
