@@ -379,7 +379,7 @@ function isLegacyDefaultCategory(category: EventCategory): boolean {
   )
 }
 
-export function ensureDefaultCategories(categories: EventCategory[], now: string): EventCategory[] {
+export function ensureDefaultCategories(categories: EventCategory[]): EventCategory[] {
   const normalizedCategories = categories.map((category) => normalizeDefaultCategory(category))
 
   return normalizeCategorySortOrders(normalizedCategories)

@@ -7,7 +7,9 @@ import {
   type SignedOutNotebookCacheMeta,
 } from '@/services/localUnsyncedChanges'
 import { mergeUnsyncedLocalCatTracker } from '@/services/mergeUnsyncedLocalCatTracker'
+import { recordSyncDiagnostic } from '@/services/syncDiagnostics'
 import type { useCatTrackerStore } from '@/stores/catTracker'
+import type { CatEvent } from '@/types'
 import { readJson, writeJson } from '@/utils/storage'
 
 const DEFAULT_MIN_REFRESH_INTERVAL_MS = 60_000
@@ -173,8 +175,107 @@ export function useRemoteCatTrackerRefresh() {
     isRefreshingRemoteData.value = true
 
     try {
+      await catTrackerStore.retryPendingRemoteEventCreates()
+      await catTrackerStore.retryPendingRemoteEventUpdates()
+      await catTrackerStore.retryPendingRemoteEventDeletes()
       const remoteState = await loadRemoteCatTracker(notebookId)
-      catTrackerStore.replacePersistedState(remoteState)
+      const remoteEventIds = new Set(remoteState.events.map((event) => event.id))
+      const pendingRemoteEventCreateIds = catTrackerStore.getPendingRemoteEventCreateIds()
+      const pendingRemoteEventUpdateIds = catTrackerStore.getPendingRemoteEventUpdateIds()
+      const pendingRemoteEventDeleteIds = catTrackerStore.getPendingRemoteEventDeleteIds()
+      const localEventsMissingFromRemote = catTrackerStore.events.filter(
+        (event) => !remoteEventIds.has(event.id),
+      )
+      const protectedLocalUpdatedEvents = catTrackerStore.events.filter(
+        (event) => remoteEventIds.has(event.id) && pendingRemoteEventUpdateIds.has(event.id),
+      )
+      const protectedLocalEvents = localEventsMissingFromRemote.filter((event) =>
+        pendingRemoteEventCreateIds.has(event.id) || shouldPreserveLocalEvent(event, lastRefreshAt),
+      )
+      const remoteEventsHiddenByLocalDeletes = remoteState.events.filter((event) =>
+        pendingRemoteEventDeleteIds.has(event.id),
+      )
+
+      if (localEventsMissingFromRemote.length > 0) {
+        recordSyncDiagnostic('remote-refresh-overwrite-risk', {
+          notebookId,
+          reason: options.reason,
+          localEventCount: catTrackerStore.events.length,
+          remoteEventCount: remoteState.events.length,
+          missingLocalEventCount: localEventsMissingFromRemote.length,
+          missingLocalEvents: localEventsMissingFromRemote.slice(0, 10).map((event) => ({
+            id: event.id,
+            catId: event.catId,
+            categoryId: event.categoryId,
+            createdBy: event.createdBy,
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+            occurredAt: event.occurredAt,
+          })),
+        })
+      }
+
+      if (protectedLocalEvents.length > 0) {
+        recordSyncDiagnostic('remote-refresh-local-events-preserved', {
+          notebookId,
+          reason: options.reason,
+          lastRefreshAt: new Date(lastRefreshAt).toISOString(),
+          preservedLocalEventCount: protectedLocalEvents.length,
+          preservedLocalEvents: protectedLocalEvents.slice(0, 10).map((event) => ({
+            id: event.id,
+            catId: event.catId,
+            categoryId: event.categoryId,
+            createdBy: event.createdBy,
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+            occurredAt: event.occurredAt,
+          })),
+        })
+      }
+
+      if (protectedLocalUpdatedEvents.length > 0) {
+        recordSyncDiagnostic('remote-refresh-local-updates-preserved', {
+          notebookId,
+          reason: options.reason,
+          preservedLocalUpdateCount: protectedLocalUpdatedEvents.length,
+          preservedLocalUpdates: protectedLocalUpdatedEvents.slice(0, 10).map((event) => ({
+            id: event.id,
+            catId: event.catId,
+            categoryId: event.categoryId,
+            createdBy: event.createdBy,
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+            occurredAt: event.occurredAt,
+          })),
+        })
+      }
+
+      if (remoteEventsHiddenByLocalDeletes.length > 0) {
+        recordSyncDiagnostic('remote-refresh-local-deletes-preserved', {
+          notebookId,
+          reason: options.reason,
+          preservedLocalDeleteCount: remoteEventsHiddenByLocalDeletes.length,
+          preservedLocalDeletes: remoteEventsHiddenByLocalDeletes.slice(0, 10).map((event) => ({
+            id: event.id,
+            catId: event.catId,
+            categoryId: event.categoryId,
+            createdBy: event.createdBy,
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+            occurredAt: event.occurredAt,
+          })),
+        })
+      }
+
+      catTrackerStore.replacePersistedState({
+        ...remoteState,
+        events: mergeRemoteEventsWithProtectedLocalEvents({
+          remoteEvents: remoteState.events,
+          protectedLocalCreatedEvents: protectedLocalEvents,
+          protectedLocalUpdatedEvents,
+          pendingRemoteEventDeleteIds,
+        }),
+      })
       lastRefreshAtByNotebookId.set(notebookId, Date.now())
       remoteRefreshError.value = ''
     } catch (error) {
@@ -246,4 +347,54 @@ export function useRemoteCatTrackerRefresh() {
     replacePendingLocalChangesWithRemote,
     refreshRemoteCatTracker,
   }
+}
+
+function mergeRemoteEventsWithProtectedLocalEvents(input: {
+  remoteEvents: CatEvent[]
+  protectedLocalCreatedEvents: CatEvent[]
+  protectedLocalUpdatedEvents: CatEvent[]
+  pendingRemoteEventDeleteIds: Set<string>
+}): CatEvent[] {
+  if (
+    input.protectedLocalCreatedEvents.length === 0 &&
+    input.protectedLocalUpdatedEvents.length === 0 &&
+    input.pendingRemoteEventDeleteIds.size === 0
+  ) {
+    return input.remoteEvents
+  }
+
+  const protectedUpdatedEventsById = new Map(
+    input.protectedLocalUpdatedEvents.map((event) => [event.id, event]),
+  )
+  const remoteEvents = input.remoteEvents
+    .filter((event) => !input.pendingRemoteEventDeleteIds.has(event.id))
+    .map((event) => protectedUpdatedEventsById.get(event.id) ?? event)
+
+  if (input.protectedLocalCreatedEvents.length === 0) {
+    return remoteEvents
+  }
+
+  return [...remoteEvents, ...input.protectedLocalCreatedEvents].sort((a, b) => {
+    const occurredAtOrder = a.occurredAt.localeCompare(b.occurredAt)
+
+    if (occurredAtOrder !== 0) {
+      return occurredAtOrder
+    }
+
+    return a.createdAt.localeCompare(b.createdAt)
+  })
+}
+
+function shouldPreserveLocalEvent(event: CatEvent, lastRefreshAt: number): boolean {
+  if (lastRefreshAt <= 0) {
+    return false
+  }
+
+  return getTimestamp(event.createdAt) > lastRefreshAt
+}
+
+function getTimestamp(value: string): number {
+  const timestamp = Date.parse(value)
+
+  return Number.isFinite(timestamp) ? timestamp : 0
 }

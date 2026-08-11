@@ -1,6 +1,5 @@
 import { ensureDefaultCategories } from '@/constants/defaultData'
 import type { Cat, CatEvent, EventCategory } from '@/types'
-import { getIsoNow } from '@/utils/datetime'
 import { createId, isUuid } from '@/utils/id'
 import { readJson, writeJson } from '@/utils/storage'
 
@@ -33,7 +32,7 @@ function normalizeState(state: CatTrackerState): CatTrackerState {
   const cats = state.cats.map(normalizeCat)
   const categories =
     state.categories.length > 0
-      ? ensureDefaultCategories(state.categories, getIsoNow())
+      ? ensureDefaultCategories(state.categories)
       : fallbackState.categories
   const selectedCatId = cats.some((cat) => cat.id === state.selectedCatId)
     ? state.selectedCatId

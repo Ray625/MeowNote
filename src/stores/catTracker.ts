@@ -6,7 +6,6 @@ import {
   applyCatUpdate,
   createCatRecord,
   deleteCatRecord,
-  getFallbackSelectedCatId,
   restoreCatRecord,
 } from '@/domain/catTracker/cat'
 import {
@@ -22,10 +21,8 @@ import {
 } from '@/domain/catTracker/eventDraft'
 import {
   applyEventUpdate,
-  cloneEventRecord,
   createEventRecord,
   removeEventById,
-  restoreDeletedEvent,
 } from '@/domain/catTracker/event'
 import {
   canManageNotebookData as canManageNotebookDataForContext,
@@ -48,6 +45,31 @@ import {
 } from '@/domain/catTracker/selectors'
 import { catTrackerRepository, type CatTrackerState } from '@/repositories/catTrackerRepository'
 import { markSignedOutNotebookCacheDirty } from '@/services/localUnsyncedChanges'
+import {
+  getSyncDiagnosticErrorInfo,
+  recordSyncDiagnostic,
+} from '@/services/syncDiagnostics'
+import {
+  enqueueRemoteEventCreate,
+  enqueueRemoteEventDelete,
+  enqueueRemoteEventUpdate,
+  getPendingRemoteEventCreateIds as getQueuedPendingRemoteEventCreateIds,
+  getPendingRemoteEventCreates,
+  getPendingRemoteEventDeleteIds as getQueuedPendingRemoteEventDeleteIds,
+  getPendingRemoteEventDeletes,
+  getPendingRemoteEventUpdate,
+  getPendingRemoteEventUpdateIds as getQueuedPendingRemoteEventUpdateIds,
+  getPendingRemoteEventUpdates,
+  markRemoteEventCreateAttempt,
+  markRemoteEventCreateFailure,
+  markRemoteEventDeleteAttempt,
+  markRemoteEventDeleteFailure,
+  markRemoteEventUpdateAttempt,
+  markRemoteEventUpdateFailure,
+  removeRemoteEventCreate,
+  removeRemoteEventDelete,
+  removeRemoteEventUpdate,
+} from '@/services/remoteEventSyncQueue'
 import {
   canSyncRemoteEvent,
   createRemoteCatEvent,
@@ -107,6 +129,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const remoteEventSyncErrorKey = ref(0)
   const remoteCatSyncError = ref('')
   const remoteCategorySyncError = ref('')
+  const syncingCreatedEventIds = new Set<string>()
+  const syncingUpdatedEventIds = new Set<string>()
+  const syncingDeletedEventIds = new Set<string>()
 
   const needsFirstTimeSetup = computed(() => cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
@@ -588,23 +613,25 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       return undefined
     }
 
-    const previousEvent = cloneEventRecord(event)
     const expectedUpdatedAt = event.updatedAt
 
     applyEventUpdate(event, input, getIsoNow())
     markLocalChangeIfSignedOut()
 
-    try {
-      return (await syncUpdatedEvent(event.id, expectedUpdatedAt)) ?? event
-    } catch (error) {
-      const eventIndex = events.value.findIndex((item) => item.id === eventId)
+    if (shouldSyncRemoteEvent(event) && remoteAuth.user.value?.id) {
+      if (!getPendingRemoteEventCreateIds().has(event.id)) {
+        enqueueRemoteEventUpdate({
+          eventId: event.id,
+          notebookId: getRemoteNotebookId(),
+          userId: remoteAuth.user.value.id,
+          expectedUpdatedAt,
+        })
 
-      if (eventIndex >= 0) {
-        events.value[eventIndex] = previousEvent
+        void syncPendingUpdatedEvent(event.id)
       }
-
-      throw error
     }
+
+    return event
   }
 
   async function deleteEvent(eventId: string): Promise<void> {
@@ -616,8 +643,9 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     const shouldDeleteRemote = shouldSyncRemoteEventId(eventId)
     const expectedUpdatedAt = event?.updatedAt
-    const deletedEventIndex = events.value.findIndex((item) => item.id === eventId)
-    const deletedEvent = event ? cloneEventRecord(event) : undefined
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id ?? ''
+    const photoPaths = getEventPhotoStoragePaths(event?.photos ?? [])
 
     events.value = removeEventById(events.value, eventId)
     markLocalChangeIfSignedOut({
@@ -627,21 +655,37 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       },
     })
 
-    if (shouldDeleteRemote) {
-      try {
-        await syncDeletedEvent(
-          eventId,
-          expectedUpdatedAt,
-          getEventPhotoStoragePaths(event?.photos ?? []),
-        )
-      } catch (error) {
-        if (deletedEvent) {
-          events.value = restoreDeletedEvent(events.value, deletedEvent, deletedEventIndex)
-        }
-
-        throw error
-      }
+    if (!shouldDeleteRemote || !userId) {
+      return
     }
+
+    if (getPendingRemoteEventCreateIds().has(eventId)) {
+      removeRemoteEventCreate({
+        eventId,
+        notebookId,
+        userId,
+      })
+      removeRemoteEventUpdate({
+        eventId,
+        notebookId,
+        userId,
+      })
+      return
+    }
+
+    removeRemoteEventUpdate({
+      eventId,
+      notebookId,
+      userId,
+    })
+    enqueueRemoteEventDelete({
+      eventId,
+      notebookId,
+      userId,
+      expectedUpdatedAt,
+      photoPaths,
+    })
+    void syncPendingDeletedEvent(eventId)
   }
 
   function deleteCategory(categoryId: string): void {
@@ -906,28 +950,385 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   function syncCreatedEvent(localEventId: string): void {
     const event = eventsById.value.get(localEventId)
     const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id ?? ''
 
     if (!event || !shouldSyncRemoteEvent(event)) {
       return
     }
 
-    void createRemoteCatEvent(event, notebookId, remoteAuth.user.value?.id ?? null)
-      .then((remoteEvent) => {
-        const eventIndex = events.value.findIndex((item) => item.id === localEventId)
+    enqueueRemoteEventCreate({
+      eventId: event.id,
+      notebookId,
+      userId,
+    })
 
-        if (eventIndex < 0) {
-          return
-        }
+    void syncPendingCreatedEvent(event.id)
+  }
 
-        events.value[eventIndex] = remoteEvent
+  async function retryPendingRemoteEventCreates(): Promise<void> {
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id
 
-        eventEditorStore.replaceEventId(localEventId, remoteEvent.id)
+    if (!notebookId || !userId) {
+      return
+    }
 
+    const pendingCreates = getPendingRemoteEventCreates({
+      notebookId,
+      userId,
+    })
+
+    for (const pendingCreate of pendingCreates) {
+      if (!eventsById.value.has(pendingCreate.eventId)) {
+        recordSyncDiagnostic('event-create-retry-missing-local-event', {
+          eventId: pendingCreate.eventId,
+          notebookId,
+          userId,
+        })
+        continue
+      }
+
+      await syncPendingCreatedEvent(pendingCreate.eventId)
+    }
+  }
+
+  function getPendingRemoteEventCreateIds(): Set<string> {
+    return getQueuedPendingRemoteEventCreateIds({
+      notebookId: getRemoteNotebookId(),
+      userId: remoteAuth.user.value?.id,
+    })
+  }
+
+  async function retryPendingRemoteEventUpdates(): Promise<void> {
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id
+
+    if (!notebookId || !userId) {
+      return
+    }
+
+    const pendingUpdates = getPendingRemoteEventUpdates({
+      notebookId,
+      userId,
+    })
+
+    for (const pendingUpdate of pendingUpdates) {
+      if (!eventsById.value.has(pendingUpdate.eventId)) {
+        recordSyncDiagnostic('event-update-retry-missing-local-event', {
+          eventId: pendingUpdate.eventId,
+          notebookId,
+          userId,
+        })
+        continue
+      }
+
+      await syncPendingUpdatedEvent(pendingUpdate.eventId)
+    }
+  }
+
+  function getPendingRemoteEventUpdateIds(): Set<string> {
+    return getQueuedPendingRemoteEventUpdateIds({
+      notebookId: getRemoteNotebookId(),
+      userId: remoteAuth.user.value?.id,
+    })
+  }
+
+  async function retryPendingRemoteEventDeletes(): Promise<void> {
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id
+
+    if (!notebookId || !userId) {
+      return
+    }
+
+    const pendingDeletes = getPendingRemoteEventDeletes({
+      notebookId,
+      userId,
+    })
+
+    for (const pendingDelete of pendingDeletes) {
+      await syncPendingDeletedEvent(pendingDelete.eventId)
+    }
+  }
+
+  function getPendingRemoteEventDeleteIds(): Set<string> {
+    return getQueuedPendingRemoteEventDeleteIds({
+      notebookId: getRemoteNotebookId(),
+      userId: remoteAuth.user.value?.id,
+    })
+  }
+
+  async function syncPendingCreatedEvent(localEventId: string): Promise<void> {
+    const event = eventsById.value.get(localEventId)
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id ?? ''
+
+    if (!event || !shouldSyncRemoteEvent(event) || !userId) {
+      return
+    }
+
+    if (syncingCreatedEventIds.has(event.id)) {
+      return
+    }
+
+    syncingCreatedEventIds.add(event.id)
+    markRemoteEventCreateAttempt({
+      eventId: event.id,
+      notebookId,
+      userId,
+    })
+
+    recordSyncDiagnostic('event-create-start', {
+      eventId: event.id,
+      catId: event.catId,
+      categoryId: event.categoryId,
+      notebookId,
+      userId: remoteAuth.user.value?.id,
+      notebookRole: remoteAuth.activeNotebookRole.value,
+      createdAt: event.createdAt,
+      occurredAt: event.occurredAt,
+    })
+
+    try {
+      const remoteEvent = await createRemoteCatEvent(event, notebookId, userId)
+      const eventIndex = events.value.findIndex((item) => item.id === localEventId)
+
+      if (eventIndex < 0) {
+        return
+      }
+
+      events.value[eventIndex] = remoteEvent
+
+      eventEditorStore.replaceEventId(localEventId, remoteEvent.id)
+
+      removeRemoteEventCreate({
+        eventId: localEventId,
+        notebookId,
+        userId,
+      })
+      recordSyncDiagnostic('event-create-success', {
+        eventId: remoteEvent.id,
+        localEventId,
+        notebookId,
+        userId,
+        notebookRole: remoteAuth.activeNotebookRole.value,
+        createdAt: remoteEvent.createdAt,
+        updatedAt: remoteEvent.updatedAt,
+      })
+      remoteEventSyncError.value = ''
+    } catch (error: unknown) {
+      const errorInfo = getSyncDiagnosticErrorInfo(error)
+
+      markRemoteEventCreateFailure({
+        eventId: event.id,
+        notebookId,
+        userId,
+        error: {
+          code: errorInfo.code,
+          message: errorInfo.message,
+        },
+      })
+      recordSyncDiagnostic('event-create-failure', {
+        eventId: event.id,
+        catId: event.catId,
+        categoryId: event.categoryId,
+        notebookId,
+        userId,
+        notebookRole: remoteAuth.activeNotebookRole.value,
+        createdAt: event.createdAt,
+        occurredAt: event.occurredAt,
+        error: errorInfo,
+      })
+      setRemoteEventSyncError(getSyncErrorMessage(error, '事件同步失敗'))
+    } finally {
+      syncingCreatedEventIds.delete(event.id)
+    }
+  }
+
+  async function syncPendingUpdatedEvent(eventId: string): Promise<void> {
+    const event = eventsById.value.get(eventId)
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id ?? ''
+    const pendingUpdate = getPendingRemoteEventUpdate({
+      eventId,
+      notebookId,
+      userId,
+    })
+
+    if (!event || !isRemoteUuid(event.id) || !shouldSyncRemoteEvent(event) || !userId) {
+      return
+    }
+
+    if (!pendingUpdate || syncingUpdatedEventIds.has(event.id)) {
+      return
+    }
+
+    syncingUpdatedEventIds.add(event.id)
+    markRemoteEventUpdateAttempt({
+      eventId: event.id,
+      notebookId,
+      userId,
+    })
+
+    recordSyncDiagnostic('event-update-start', {
+      eventId: event.id,
+      catId: event.catId,
+      categoryId: event.categoryId,
+      notebookId,
+      userId,
+      notebookRole: remoteAuth.activeNotebookRole.value,
+      expectedUpdatedAt: pendingUpdate.expectedUpdatedAt,
+      updatedAt: event.updatedAt,
+      occurredAt: event.occurredAt,
+    })
+
+    try {
+      const remoteEvent = await updateRemoteCatEvent(event, notebookId, pendingUpdate.expectedUpdatedAt)
+      const eventIndex = events.value.findIndex((item) => item.id === eventId)
+
+      if (eventIndex < 0) {
+        return
+      }
+
+      events.value[eventIndex] = remoteEvent
+
+      removeRemoteEventUpdate({
+        eventId,
+        notebookId,
+        userId,
+      })
+      recordSyncDiagnostic('event-update-success', {
+        eventId: remoteEvent.id,
+        notebookId,
+        userId,
+        notebookRole: remoteAuth.activeNotebookRole.value,
+        updatedAt: remoteEvent.updatedAt,
+      })
+      remoteEventSyncError.value = ''
+    } catch (error: unknown) {
+      const errorInfo = getSyncDiagnosticErrorInfo(error)
+
+      markRemoteEventUpdateFailure({
+        eventId: event.id,
+        notebookId,
+        userId,
+        error: {
+          code: errorInfo.code,
+          message: errorInfo.message,
+        },
+      })
+      recordSyncDiagnostic('event-update-failure', {
+        eventId: event.id,
+        catId: event.catId,
+        categoryId: event.categoryId,
+        notebookId,
+        userId,
+        notebookRole: remoteAuth.activeNotebookRole.value,
+        expectedUpdatedAt: pendingUpdate.expectedUpdatedAt,
+        updatedAt: event.updatedAt,
+        occurredAt: event.occurredAt,
+        error: errorInfo,
+      })
+      setRemoteEventSyncError(
+        error instanceof RemoteCatEventConflictError
+          ? error.message
+          : getSyncErrorMessage(error, '事件同步失敗'),
+      )
+    } finally {
+      syncingUpdatedEventIds.delete(event.id)
+    }
+  }
+
+  async function syncPendingDeletedEvent(eventId: string): Promise<void> {
+    const notebookId = getRemoteNotebookId()
+    const userId = remoteAuth.user.value?.id ?? ''
+    const pendingDelete = getPendingRemoteEventDeletes({
+      notebookId,
+      userId,
+    }).find((item) => item.eventId === eventId)
+
+    if (!notebookId || !userId || !pendingDelete) {
+      return
+    }
+
+    if (syncingDeletedEventIds.has(eventId)) {
+      return
+    }
+
+    syncingDeletedEventIds.add(eventId)
+    markRemoteEventDeleteAttempt({
+      eventId,
+      notebookId,
+      userId,
+    })
+
+    recordSyncDiagnostic('event-delete-start', {
+      eventId,
+      notebookId,
+      userId,
+      notebookRole: remoteAuth.activeNotebookRole.value,
+      expectedUpdatedAt: pendingDelete.expectedUpdatedAt,
+    })
+
+    try {
+      await deleteRemoteCatEvent(eventId, notebookId, pendingDelete.expectedUpdatedAt)
+      if (pendingDelete.photoPaths.length) {
+        await deleteEventPhotoPaths(pendingDelete.photoPaths)
+      }
+
+      removeRemoteEventDelete({
+        eventId,
+        notebookId,
+        userId,
+      })
+      recordSyncDiagnostic('event-delete-success', {
+        eventId,
+        notebookId,
+        userId,
+        notebookRole: remoteAuth.activeNotebookRole.value,
+      })
+      remoteEventSyncError.value = ''
+    } catch (error: unknown) {
+      if (error instanceof RemoteCatEventConflictError) {
+        removeRemoteEventDelete({
+          eventId,
+          notebookId,
+          userId,
+        })
+        recordSyncDiagnostic('event-delete-success', {
+          eventId,
+          notebookId,
+          userId,
+          notebookRole: remoteAuth.activeNotebookRole.value,
+          resolvedConflict: true,
+        })
         remoteEventSyncError.value = ''
+        return
+      }
+
+      const errorInfo = getSyncDiagnosticErrorInfo(error)
+
+      markRemoteEventDeleteFailure({
+        eventId,
+        notebookId,
+        userId,
+        error: {
+          code: errorInfo.code,
+          message: errorInfo.message,
+        },
       })
-      .catch((error: unknown) => {
-        setRemoteEventSyncError(getSyncErrorMessage(error, '事件同步失敗'))
+      recordSyncDiagnostic('event-delete-failure', {
+        eventId,
+        notebookId,
+        userId,
+        notebookRole: remoteAuth.activeNotebookRole.value,
+        expectedUpdatedAt: pendingDelete.expectedUpdatedAt,
+        error: errorInfo,
       })
+      setRemoteEventSyncError(getSyncErrorMessage(error, '事件同步失敗'))
+    } finally {
+      syncingDeletedEventIds.delete(eventId)
+    }
   }
 
   async function syncUpdatedEvent(
@@ -1091,6 +1492,12 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     deleteCategory,
     restoreCategory,
     reorderCategory,
+    retryPendingRemoteEventCreates,
+    retryPendingRemoteEventUpdates,
+    retryPendingRemoteEventDeletes,
+    getPendingRemoteEventCreateIds,
+    getPendingRemoteEventUpdateIds,
+    getPendingRemoteEventDeleteIds,
     canModifyEvent,
     openEditEvent,
     closeEditEvent,

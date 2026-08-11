@@ -45,6 +45,29 @@ export async function createRemoteCatEvent(
     .single<SupabaseCatEventRow>()
 
   if (error) {
+    if (error.code === '23505') {
+      return loadRemoteCatEvent(event.id, notebookId)
+    }
+
+    throw error
+  }
+
+  return fromCatEventRow(data)
+}
+
+async function loadRemoteCatEvent(eventId: string, notebookId: string): Promise<CatEvent> {
+  if (!supabase) {
+    throw new Error('Supabase 尚未設定')
+  }
+
+  const { data, error } = await supabase
+    .from('cat_events')
+    .select('*')
+    .eq('id', eventId)
+    .eq('notebook_id', notebookId)
+    .single<SupabaseCatEventRow>()
+
+  if (error) {
     throw error
   }
 
