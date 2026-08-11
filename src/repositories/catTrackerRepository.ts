@@ -5,6 +5,9 @@ import { readJson, writeJson } from '@/utils/storage'
 
 const STORAGE_KEY = 'meownote:v1'
 const LEGACY_STORAGE_KEY = 'cat-log:v1'
+const INDEXED_DB_NAME = 'meownote'
+const INDEXED_DB_VERSION = 1
+const INDEXED_DB_STORE_NAME = 'key-value'
 
 export interface CatTrackerState {
   cats: Cat[]
@@ -15,6 +18,7 @@ export interface CatTrackerState {
 
 export interface CatTrackerRepository {
   loadState(): CatTrackerState
+  loadStateAsync(): Promise<CatTrackerState>
   saveState(state: CatTrackerState): void
 }
 
@@ -89,17 +93,104 @@ function createLegacyIdMap(ids: string[]): Map<string, string> {
 
 class LocalStorageCatTrackerRepository implements CatTrackerRepository {
   loadState(): CatTrackerState {
-    return normalizeState(
-      readJson<CatTrackerState>(
-        STORAGE_KEY,
-        readJson<CatTrackerState>(LEGACY_STORAGE_KEY, createInitialState()),
-      ),
+    return loadLocalStorageState()
+  }
+
+  async loadStateAsync(): Promise<CatTrackerState> {
+    const localStorageState = loadLocalStorageState()
+    const indexedDbState = await readIndexedDbJson<CatTrackerState>(STORAGE_KEY).catch(
+      () => undefined,
     )
+
+    if (indexedDbState) {
+      return normalizeState(indexedDbState)
+    }
+
+    await writeIndexedDbJson(STORAGE_KEY, localStorageState).catch(() => undefined)
+
+    return localStorageState
   }
 
   saveState(state: CatTrackerState): void {
-    writeJson<CatTrackerState>(STORAGE_KEY, state)
+    const snapshot = cloneJson(state)
+
+    void writeIndexedDbJson(STORAGE_KEY, snapshot).catch(() => {
+      writeJson<CatTrackerState>(STORAGE_KEY, snapshot)
+    })
   }
+}
+
+function loadLocalStorageState(): CatTrackerState {
+  return normalizeState(
+    readJson<CatTrackerState>(
+      STORAGE_KEY,
+      readJson<CatTrackerState>(LEGACY_STORAGE_KEY, createInitialState()),
+    ),
+  )
+}
+
+function readIndexedDbJson<T>(key: string): Promise<T | undefined> {
+  return withIndexedDbStore('readonly', (store) => {
+    const request = store.get(key)
+
+    return requestToPromise<T | undefined>(request)
+  })
+}
+
+function writeIndexedDbJson<T>(key: string, value: T): Promise<void> {
+  return withIndexedDbStore('readwrite', (store) => {
+    const request = store.put(value, key)
+
+    return requestToPromise(request).then(() => undefined)
+  })
+}
+
+async function withIndexedDbStore<T>(
+  mode: IDBTransactionMode,
+  callback: (store: IDBObjectStore) => Promise<T>,
+): Promise<T> {
+  const database = await openIndexedDb()
+
+  return new Promise<T>((resolve, reject) => {
+    const transaction = database.transaction(INDEXED_DB_STORE_NAME, mode)
+    const store = transaction.objectStore(INDEXED_DB_STORE_NAME)
+
+    callback(store).then(resolve, reject)
+    transaction.addEventListener('error', () => reject(transaction.error))
+  }).finally(() => {
+    database.close()
+  })
+}
+
+function openIndexedDb(): Promise<IDBDatabase> {
+  if (typeof indexedDB === 'undefined') {
+    return Promise.reject(new Error('IndexedDB is not available'))
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(INDEXED_DB_NAME, INDEXED_DB_VERSION)
+
+    request.addEventListener('upgradeneeded', () => {
+      const database = request.result
+
+      if (!database.objectStoreNames.contains(INDEXED_DB_STORE_NAME)) {
+        database.createObjectStore(INDEXED_DB_STORE_NAME)
+      }
+    })
+    request.addEventListener('success', () => resolve(request.result))
+    request.addEventListener('error', () => reject(request.error))
+  })
+}
+
+function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.addEventListener('success', () => resolve(request.result))
+    request.addEventListener('error', () => reject(request.error))
+  })
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
 export const catTrackerRepository: CatTrackerRepository = new LocalStorageCatTrackerRepository()

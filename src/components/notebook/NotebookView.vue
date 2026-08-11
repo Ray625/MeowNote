@@ -13,12 +13,12 @@ const REMEMBERED_EMAIL_STORAGE_KEY = 'meownote:remembered-email'
 
 const catTrackerStore = useCatTrackerStore()
 const {
-  categories,
   cats,
   events,
   remoteCategorySyncError,
   remoteCatSyncError,
   remoteEventSyncError,
+  remoteEventSyncQueueSummary,
 } = storeToRefs(catTrackerStore)
 const {
   activeNotebookId,
@@ -69,6 +69,31 @@ let toastTimer: ReturnType<typeof window.setTimeout> | undefined
 
 const localImportSummary = computed(
   () => `${cats.value.length} 隻寵物、${events.value.length} 筆紀錄`,
+)
+const pendingSyncCount = computed(() => remoteEventSyncQueueSummary.value.total)
+const syncStatusLabel = computed(() => {
+  if (isBootstrappingRemoteData.value) {
+    return '同步中'
+  }
+
+  if (pendingSyncCount.value > 0) {
+    return `${pendingSyncCount.value} 筆待同步`
+  }
+
+  return '已同步'
+})
+const syncQueueDetail = computed(() => {
+  const summary = remoteEventSyncQueueSummary.value
+  const parts = [
+    summary.creates ? `新增 ${summary.creates}` : '',
+    summary.updates ? `編輯 ${summary.updates}` : '',
+    summary.deletes ? `刪除 ${summary.deletes}` : '',
+  ].filter(Boolean)
+
+  return parts.join('、')
+})
+const syncQueueLastError = computed(
+  () => remoteEventSyncQueueSummary.value.lastError?.message ?? '',
 )
 const activeNotebookIdValue = computed(() => activeNotebookId.value)
 const activeRoleLabel = computed(() => getNotebookRoleLabel(activeNotebookRole.value))
@@ -219,6 +244,12 @@ async function submitCreateNotebook(): Promise<void> {
   if (await createPersonalNotebook(newNotebookName.value)) {
     closeNotebookForm()
   }
+}
+
+async function retryPendingSync(): Promise<void> {
+  await catTrackerStore.retryPendingRemoteEventCreates()
+  await catTrackerStore.retryPendingRemoteEventUpdates()
+  await catTrackerStore.retryPendingRemoteEventDeletes()
 }
 
 function startChangePassword(): void {
@@ -464,7 +495,24 @@ function getNotebookRoleLabel(role: string): string {
           <span>本機資料</span>
           <strong>{{ localImportSummary }}</strong>
           <span>同步狀態</span>
-          <strong>{{ isBootstrappingRemoteData ? '同步中' : '已連線' }}</strong>
+          <strong>
+            <span>{{ syncStatusLabel }}</span>
+            <small v-if="syncQueueDetail">{{ syncQueueDetail }}</small>
+          </strong>
+        </div>
+
+        <div v-if="pendingSyncCount > 0" class="account-sync-panel">
+          <p v-if="syncQueueLastError" class="account-message account-message--error">
+            上次同步錯誤：{{ syncQueueLastError }}
+          </p>
+          <button
+            class="ui-button ui-button--secondary account-button"
+            type="button"
+            :disabled="isBootstrappingRemoteData"
+            @click="retryPendingSync"
+          >
+            立即重試同步
+          </button>
         </div>
 
         <p v-if="remoteRefreshError" class="account-message account-message--error">
@@ -1132,6 +1180,22 @@ function getNotebookRoleLabel(role: string): string {
   color: var(--color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.account-details strong small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-sync-panel {
+  display: grid;
+  gap: 8px;
 }
 
 .account-message {

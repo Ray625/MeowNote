@@ -60,6 +60,7 @@ import {
   getPendingRemoteEventUpdate,
   getPendingRemoteEventUpdateIds as getQueuedPendingRemoteEventUpdateIds,
   getPendingRemoteEventUpdates,
+  getRemoteEventSyncQueueSummary,
   markRemoteEventCreateAttempt,
   markRemoteEventCreateFailure,
   markRemoteEventDeleteAttempt,
@@ -129,11 +130,14 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const remoteEventSyncErrorKey = ref(0)
   const remoteCatSyncError = ref('')
   const remoteCategorySyncError = ref('')
+  const isPersistenceHydrated = ref(false)
+  const remoteEventSyncQueueRevision = ref(0)
   const syncingCreatedEventIds = new Set<string>()
   const syncingUpdatedEventIds = new Set<string>()
   const syncingDeletedEventIds = new Set<string>()
+  let hasLocalChangesBeforeHydration = false
 
-  const needsFirstTimeSetup = computed(() => cats.value.length === 0)
+  const needsFirstTimeSetup = computed(() => isPersistenceHydrated.value && cats.value.length === 0)
   const selectedCat = computed(() => cats.value.find((cat) => cat.id === selectedCatId.value))
   const canCreateEventForSelectedCat = computed(() =>
     Boolean(selectedCat.value && !selectedCat.value.isArchived),
@@ -250,10 +254,23 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
   const deleteConfirmEvent = computed(() =>
     deleteConfirmEventId.value ? eventsById.value.get(deleteConfirmEventId.value) : undefined,
   )
+  const remoteEventSyncQueueSummary = computed(() => {
+    remoteEventSyncQueueRevision.value
+
+    return getRemoteEventSyncQueueSummary({
+      notebookId: getRemoteNotebookId(),
+      userId: remoteAuth.user.value?.id,
+    })
+  })
 
   watch(
     [cats, categories, events, selectedCatId],
     () => {
+      if (!isPersistenceHydrated.value) {
+        hasLocalChangesBeforeHydration = true
+        return
+      }
+
       catTrackerRepository.saveState({
         cats: cats.value,
         categories: categories.value,
@@ -261,8 +278,28 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         selectedCatId: selectedCatId.value,
       })
     },
-    { deep: true, immediate: true },
+    { deep: true },
   )
+
+  void hydratePersistedState()
+
+  async function hydratePersistedState(): Promise<void> {
+    try {
+      const state = await catTrackerRepository.loadStateAsync()
+
+      if (!hasLocalChangesBeforeHydration) {
+        replacePersistedState(state)
+      }
+    } finally {
+      isPersistenceHydrated.value = true
+      catTrackerRepository.saveState({
+        cats: cats.value,
+        categories: categories.value,
+        events: events.value,
+        selectedCatId: selectedCatId.value,
+      })
+    }
+  }
 
   function selectCat(catId: string): void {
     const cat = catsById.value.get(catId)
@@ -620,12 +657,13 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
 
     if (shouldSyncRemoteEvent(event) && remoteAuth.user.value?.id) {
       if (!getPendingRemoteEventCreateIds().has(event.id)) {
-        enqueueRemoteEventUpdate({
+    enqueueRemoteEventUpdate({
           eventId: event.id,
           notebookId: getRemoteNotebookId(),
           userId: remoteAuth.user.value.id,
           expectedUpdatedAt,
         })
+        touchRemoteEventSyncQueue()
 
         void syncPendingUpdatedEvent(event.id)
       }
@@ -670,6 +708,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         notebookId,
         userId,
       })
+      touchRemoteEventSyncQueue()
       return
     }
 
@@ -685,6 +724,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       expectedUpdatedAt,
       photoPaths,
     })
+    touchRemoteEventSyncQueue()
     void syncPendingDeletedEvent(eventId)
   }
 
@@ -961,6 +1001,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
       notebookId,
       userId,
     })
+    touchRemoteEventSyncQueue()
 
     void syncPendingCreatedEvent(event.id)
   }
@@ -1106,6 +1147,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         notebookId,
         userId,
       })
+      touchRemoteEventSyncQueue()
       recordSyncDiagnostic('event-create-success', {
         eventId: remoteEvent.id,
         localEventId,
@@ -1128,6 +1170,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
           message: errorInfo.message,
         },
       })
+      touchRemoteEventSyncQueue()
       recordSyncDiagnostic('event-create-failure', {
         eventId: event.id,
         catId: event.catId,
@@ -1197,6 +1240,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         notebookId,
         userId,
       })
+      touchRemoteEventSyncQueue()
       recordSyncDiagnostic('event-update-success', {
         eventId: remoteEvent.id,
         notebookId,
@@ -1217,6 +1261,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
           message: errorInfo.message,
         },
       })
+      touchRemoteEventSyncQueue()
       recordSyncDiagnostic('event-update-failure', {
         eventId: event.id,
         catId: event.catId,
@@ -1281,6 +1326,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
         notebookId,
         userId,
       })
+      touchRemoteEventSyncQueue()
       recordSyncDiagnostic('event-delete-success', {
         eventId,
         notebookId,
@@ -1295,6 +1341,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
           notebookId,
           userId,
         })
+        touchRemoteEventSyncQueue()
         recordSyncDiagnostic('event-delete-success', {
           eventId,
           notebookId,
@@ -1317,6 +1364,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
           message: errorInfo.message,
         },
       })
+      touchRemoteEventSyncQueue()
       recordSyncDiagnostic('event-delete-failure', {
         eventId,
         notebookId,
@@ -1394,6 +1442,10 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     remoteEventSyncErrorKey.value += 1
   }
 
+  function touchRemoteEventSyncQueue(): void {
+    remoteEventSyncQueueRevision.value += 1
+  }
+
   function getSyncErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof Error) {
       return error.message
@@ -1430,6 +1482,7 @@ export const useCatTrackerStore = defineStore('catTracker', () => {
     remoteEventSyncErrorKey,
     remoteCatSyncError,
     remoteCategorySyncError,
+    remoteEventSyncQueueSummary,
     needsFirstTimeSetup,
     selectedCat,
     canCreateEventForSelectedCat,

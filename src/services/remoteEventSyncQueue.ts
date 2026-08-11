@@ -37,6 +37,17 @@ export type PendingRemoteEventSync =
   | PendingRemoteEventUpdate
   | PendingRemoteEventDelete
 
+export interface RemoteEventSyncQueueSummary {
+  total: number
+  creates: number
+  updates: number
+  deletes: number
+  lastError?: {
+    code?: string
+    message?: string
+  }
+}
+
 export function enqueueRemoteEventCreate(input: {
   eventId: string
   notebookId: string
@@ -448,6 +459,35 @@ export function getPendingRemoteEventDeleteIds(input: {
       )
       .map((item) => item.eventId),
   )
+}
+
+export function getRemoteEventSyncQueueSummary(input: {
+  notebookId: string
+  userId?: string
+}): RemoteEventSyncQueueSummary {
+  if (!input.notebookId || !input.userId) {
+    return {
+      total: 0,
+      creates: 0,
+      updates: 0,
+      deletes: 0,
+    }
+  }
+
+  const queue = getRemoteEventSyncQueue().filter(
+    (item) => item.notebookId === input.notebookId && item.userId === input.userId,
+  )
+  const lastError = queue
+    .filter((item) => item.lastError?.message || item.lastError?.code)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.lastError
+
+  return {
+    total: queue.length,
+    creates: queue.filter((item) => item.operation === 'create').length,
+    updates: queue.filter((item) => item.operation === 'update').length,
+    deletes: queue.filter((item) => item.operation === 'delete').length,
+    lastError,
+  }
 }
 
 function updateRemoteEventCreate(
